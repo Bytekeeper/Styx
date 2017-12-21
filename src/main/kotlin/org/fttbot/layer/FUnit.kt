@@ -3,7 +3,7 @@ package org.fttbot.layer
 import bwapi.*
 import bwapi.Unit
 import org.fttbot.FTTBot
-import org.fttbot.translated
+import org.fttbot.behavior.BBUnit
 
 
 class FUnit private constructor(val unit: Unit) {
@@ -14,28 +14,32 @@ class FUnit private constructor(val unit: Unit) {
         fun destroy(unit: Unit) = units.remove(unit.id)
 
         fun allUnits() = FTTBot.game.allUnits.map { FUnit.of(it) }
-        fun unitsInRadius(position: Position, radius: Int) = FTTBot.game.getUnitsInRadius(position,radius ).map { FUnit.of(it) }
+        fun unitsInRadius(position: Position, radius: Int) = FTTBot.game.getUnitsInRadius(position, radius).map { FUnit.of(it) }
         fun minerals() = FTTBot.game.minerals.map { FUnit.of(it) }
         fun neutrals() = FTTBot.game.neutralUnits.map { FUnit.of(it) }
-        fun myUnits() = FTTBot.game.allUnits.filter { it.player == FTTBot.self }.map { FUnit.of(it) }
+        fun myUnits() = FTTBot.self.units.filter { it.player == FTTBot.self }.map { FUnit.of(it) }
+        fun enemyUnits() = FTTBot.enemy.units.filter { it.player == FTTBot.enemy }.map { FUnit.of(it) }
         fun myBases() = myUnits().filter { it.isBase }
-        fun myWorkers() = FTTBot.game.allUnits.filter { it.type.isWorker && it.player == FTTBot.self}.map { FUnit.of(it) }
+        fun myWorkers() = FTTBot.game.allUnits.filter { it.type.isWorker && it.player == FTTBot.self && it.isCompleted }.map { FUnit.of(it) }
     }
 
-    fun closest(others: Iterable<FUnit>) : FUnit? {
+    fun closest(others: Iterable<FUnit>): FUnit? {
         return others.minBy { it.distanceTo(this) }
     }
 
+    val board get() = BBUnit.of(this)
     val isWorker: Boolean get() = type.isWorker
     val isGatheringMinerals: Boolean get() = unit.isGatheringMinerals
+    val isGatheringGas get() = unit.isGatheringGas
     val isConstructing get() = unit.isConstructing
-    val buildUnit get() = unit.buildUnit
+    val buildUnit get() = FUnit.of(unit.buildUnit)
     val buildType get() = FUnitType.of(unit.buildType)
     val isIdle get() = unit.isIdle
     val position: Position get() = unit.position
     val isMineralField: Boolean get() = unit.type.isMineralField
     val isRefinery get() = unit.type.isRefinery
     val isPlayerOwned: Boolean get() = unit.player == FTTBot.self
+    val isEnemy get() = unit.player == FTTBot.game.enemy()
     val type: FUnitType get() = FUnitType.of(unit.type)
     val isCarryingGas get() = unit.isCarryingGas
     val isCarryingMinerals get() = unit.isCarryingMinerals
@@ -52,21 +56,50 @@ class FUnit private constructor(val unit: Unit) {
     val isTraining: Boolean get() = unit.buildUnit != null || !unit.trainingQueue.isEmpty()
     val isBuilding get() = unit.type.isBuilding
     val isMoving: Boolean get() = unit.isMoving
+    val isCompleted get() = unit.isCompleted
     val initialTilePosition get() = unit.initialTilePosition
     val tilePosition get() = unit.tilePosition
     val targetPosition get() = unit.targetPosition
+    val canAttack get() = unit.type.canAttack()
+    val isAttacking get() = unit.isAttacking
 
+    val target get() = FUnit.of(unit.target)
+
+    val isDead get() = !unit.exists() && unit.isVisible
+    val hitPoints get() = unit.hitPoints
     fun lastCommand() = unit.lastCommand
 
+    fun canMake(type: FUnitType) = FTTBot.game.canMake(type.type, unit)
     fun distanceTo(other: FUnit) = position.getDistance(other.position)
-    fun distanceTo(position: TilePosition) = position.getDistance(tilePosition)
-
+    fun distanceInTilesTo(position: TilePosition) = position.getDistance(tilePosition)
+    fun distanceTo(position: Position) = position.getDistance(this.position)
     fun gather(target: FUnit) = unit.gather(target.unit)
     fun returnCargo() = if (unit.lastCommand.unitCommandType != UnitCommandType.Return_Cargo) unit.returnCargo() else true
     fun attack(targetUnit: FUnit) = if (unit.lastCommand.unitCommandType != UnitCommandType.Attack_Unit || unit.lastCommand.target != targetUnit.unit) unit.attack(targetUnit.unit) else true
+    fun attack(targetPosition: Position) = unit.attack(targetPosition)
+
     fun construct(type: FUnitType, position: TilePosition) = unit.build(type.type, position)
+
     fun move(position: TilePosition) = unit.move(position.toPosition())
+    fun move(position: Position) = unit.move(position)
+
     fun train(type: FUnitType) = unit.train(type.type)
 
     override fun toString(): String = "${unit.type.toString().substringAfter('_')} at ${unit.position}"
+    private val groundWeaponCooldown get() = unit.groundWeaponCooldown
+
+    private val airWeaponCooldown get() = unit.airWeaponCooldown
+
+    fun canAttack(unit: FUnit, safety: Int = 0, considerCooldown: Boolean = false): Boolean {
+        val distance = unit.distanceTo(this)
+        return (unit.type.isAir && type.airWeapon != WeaponType.None && type.airWeapon.inRange(distance, safety)
+                && (!considerCooldown || unit.groundWeaponCooldown == 0))
+                || (!unit.type.isAir && type.groundWeapon != WeaponType.None && type.groundWeapon.inRange(distance, safety)
+                && (!considerCooldown || unit.airWeaponCooldown == 0))
+    }
+
+    private fun WeaponType.inRange(distance: Double, safety: Int): Boolean =
+            this.minRange() <= distance && this.maxRange() >= distance - safety;
+
+
 }

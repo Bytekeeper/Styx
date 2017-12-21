@@ -2,17 +2,24 @@ package org.fttbot
 
 import bwapi.*
 import bwapi.Unit
+import bwta.BWTA
 import com.badlogic.gdx.ai.btree.BehaviorTree
 import org.fttbot.behavior.*
 import org.fttbot.layer.FUnit
 import org.fttbot.layer.FUnitType
+import java.util.logging.Logger
 
 object FTTBot : DefaultBWListener() {
+    private val LOG = Logger.getLogger(this::class.java.simpleName)
     private val mirror = Mirror()
     lateinit var game: Game
-    lateinit var self: Player;
-    val workerManager = BehaviorTree(AssignWorkersToResources())
-    val buildManager = BehaviorTree(BuildNextItemFromProductionQueue(), Production)
+    lateinit var self: Player
+    lateinit var enemy: Player
+    private val workerManager = BehaviorTree(AssignWorkersToResources())
+    private val buildManager = BehaviorTree(BuildNextItemFromProductionQueue(), ProductionBoard)
+    private val scoutManager = BehaviorTree(ScoutEnemyBase(), ScoutingBoard)
+
+    private val combatManager = BehaviorTree(AttackEnemyBase())
 
     fun start() {
         mirror.module.setEventListener(this)
@@ -20,76 +27,86 @@ object FTTBot : DefaultBWListener() {
     }
 
     override fun onStart() {
+        BWTA.readMap()
+        BWTA.analyze()
         game = mirror.game
         self = game.self()
+        enemy = game.enemy()
 
-        Thread.sleep(100);
-        mirror.game.setLocalSpeed(1);
+        Thread.sleep(100)
+        mirror.game.setLocalSpeed(1)
 
         val racePlayed = game.self().race
-        if (racePlayed == Race.Protoss) {
-            FTTConfig.useConfigForProtoss()
-        } else if (racePlayed == Race.Terran) {
-            FTTConfig.useConfigForTerran()
-        } else if (racePlayed == Race.Zerg) {
-            FTTConfig.useConfigForZerg()
+        when (racePlayed) {
+            Race.Protoss -> FTTConfig.useConfigForProtoss()
+            Race.Terran -> FTTConfig.useConfigForTerran()
+            Race.Zerg -> FTTConfig.useConfigForZerg()
         }
 
-        Production.queue.addAll(listOf(
-                Production.Item(FUnitType.Terran_SCV),
-                Production.Item(FUnitType.Terran_SCV),
-                Production.Item(FUnitType.Terran_SCV),
-                Production.Item(FUnitType.Terran_Supply_Depot),
-                Production.Item(FUnitType.Terran_SCV),
-                Production.Item(FUnitType.Terran_Barracks),
-                Production.Item(FUnitType.Terran_SCV),
-                Production.Item(FUnitType.Terran_SCV),
-                Production.Item(FUnitType.Terran_SCV),
-                Production.Item(FUnitType.Terran_SCV),
-                Production.Item(FUnitType.Terran_Barracks),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Supply_Depot),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Supply_Depot),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Supply_Depot),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Supply_Depot),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Marine),
-                Production.Item(FUnitType.Terran_Supply_Depot)
+        ProductionBoard.queue.addAll(listOf(
+                ProductionBoard.Item(FUnitType.Terran_SCV),
+                ProductionBoard.Item(FUnitType.Terran_SCV),
+                ProductionBoard.Item(FUnitType.Terran_SCV),
+                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
+                ProductionBoard.Item(FUnitType.Terran_SCV),
+                ProductionBoard.Item(FUnitType.Terran_Barracks),
+                ProductionBoard.Item(FUnitType.Terran_SCV),
+                ProductionBoard.Item(FUnitType.Terran_SCV),
+                ProductionBoard.Item(FUnitType.Terran_SCV),
+                ProductionBoard.Item(FUnitType.Terran_SCV),
+                ProductionBoard.Item(FUnitType.Terran_Barracks),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine)
         ))
     }
 
@@ -104,28 +121,52 @@ object FTTBot : DefaultBWListener() {
 
         workerManager.step()
         buildManager.step()
+        scoutManager.step()
+        combatManager.step()
         UnitBehaviors.step()
+
+        for (board in BBUnit.all()) {
+            game.drawTextMap(board.unit.position, board.status)
+        }
+
+        BWTA.getRegions().forEachIndexed { index, region ->
+            val poly = region.polygon.points
+            for (i in 0 until poly.size) {
+                val a = poly[i] //.toVector().scl(0.9f).mulAdd(region.polygon.center.toVector(), 0.1f).toPosition()
+                val b = poly[(i + 1) % poly.size] //.toVector().scl(0.9f).mulAdd(region.polygon.center.toVector(), 0.1f).toPosition()
+                game.drawLineMap(a, b,
+                        when (index % 5) {
+                            0 -> Color.Green
+                            1 -> Color.Blue
+                            2 -> Color.Brown
+                            3 -> Color.Yellow
+                            else -> Color.Grey
+                        })
+            }
+            region.chokepoints.forEach { chokepoint ->
+                game.drawLineMap(chokepoint.sides.first, chokepoint.sides.second, Color.Red)
+            }
+        }
     }
 
     override fun onUnitDestroy(unit: Unit) {
+        BBUnit.destroy(FUnit.of(unit))
         FUnit.destroy(unit)
     }
 
     override fun onUnitCreate(unit: Unit) {
         val funit = FUnit.of(unit)
-        Production.queueNeedsRebuild = true
-        if (funit.isBuilding) {
-            FUnit.myWorkers()
-                    .any { worker ->
-                        val construction = BBUnit.of(worker).order as? Construction ?: return@any false
-                        val position = construction.position ?: return@any false
-                        if (position.equals(unit.tilePosition)) {
-                            construction.started = true
-                            true
-                        } else {
-                            false
-                        }
-                    }
+        ProductionBoard.queueNeedsRebuild = true
+        if (funit.isBuilding && funit.isPlayerOwned) {
+            val workerWhoStartedIt = FUnit.myWorkers().firstOrNull {
+                val construction = it.board.construction ?: return@firstOrNull false
+                construction.commissioned && construction.position == unit.tilePosition && construction.type == funit.type
+            }
+            if (workerWhoStartedIt != null) {
+                workerWhoStartedIt.board.construction?.started = true
+            } else {
+                LOG.severe("Can't find worker associated with building ${funit}!")
+            }
         }
     }
 

@@ -1,47 +1,41 @@
 package org.fttbot.behavior
 
-import bwapi.UnitCommand.train
 import com.badlogic.gdx.ai.btree.LeafTask
 import com.badlogic.gdx.ai.btree.Task
+import org.fttbot.ConstructionPosition
 import org.fttbot.FTTBot
+import org.fttbot.board
 import org.fttbot.layer.FUnit
 import org.fttbot.layer.FUnitType
 
-class Train : LeafTask<BBUnit>() {
-    init {
-        guard = Guard()
-    }
-
+class Train : UnitLT() {
     override fun execute(): Status {
-        val order = `object`.order as Training
-        val unit = `object`.unit
-        if (FTTBot.game.canMake(order.type.type)
-                && !unit.isTraining && unit.train(order.type)) {
-            `object`.order = Order.NONE
-            return Status.SUCCEEDED
-        }
+        val unit = board().unit
+        if (unit.isTraining) return Status.RUNNING
+        if (ProductionBoard.queue.isEmpty()) return Status.SUCCEEDED
+        val item = ProductionBoard.queue.peek()
+        if (!unit.canMake(item.type) || !canAfford(item.type)) return Status.FAILED
+        if (!unit.train(item.type)) return Status.FAILED
+        ProductionBoard.queue.pop()
         return Status.RUNNING
     }
 
-    override fun copyTo(task: Task<BBUnit>?): Task<BBUnit> = Train()
+    override fun cpy(): Task<BBUnit> = Train()
 
-    class Guard : LeafTask<BBUnit>() {
-        override fun execute(): Status = if (`object`.order is Training) Status.SUCCEEDED else Status.FAILED
-
-        override fun copyTo(task: Task<BBUnit>?): Task<BBUnit> = Guard()
-
-    }
+    private fun canAfford(type: FUnitType) =
+            ProductionBoard.reservedGas + type.gasPrice <= FTTBot.self.gas()
+                    && ProductionBoard.reservedMinerals + type.mineralPrice <= FTTBot.self.minerals()
 }
 
-class BuildNextItemFromProductionQueue : LeafTask<Production>() {
+class BuildNextItemFromProductionQueue : LeafTask<ProductionBoard>() {
     override fun execute(): Status {
         with(`object`) {
             if (queueNeedsRebuild) {
                 reservedMinerals = 0;
                 reservedGas = 0;
-                FUnit.myUnits().filter { (BBUnit.of(it).order as? Construction)?.started == false }
+                FUnit.myUnits().filter { it.board.construction?.started == false }
                         .forEach {
-                            val construction = BBUnit.of(it).order as Construction
+                            val construction = it.board.construction!!
                             reservedMinerals += construction.type.mineralPrice
                             reservedGas += construction.type.gasPrice
                         }
@@ -55,7 +49,7 @@ class BuildNextItemFromProductionQueue : LeafTask<Production>() {
             val builderType = toBuild.type.whatBuilds.first
             if (builderType.type.isWorker) {
                 if (!construct(toBuild)) break
-            } else if (!train(builderType, toBuild)) break
+            } else break
             with(`object`) {
                 reservedGas += toBuild.type.gasPrice
                 reservedMinerals += toBuild.type.mineralPrice
@@ -66,20 +60,10 @@ class BuildNextItemFromProductionQueue : LeafTask<Production>() {
         return if (queue.isEmpty()) Status.SUCCEEDED else Status.RUNNING
     }
 
-    private fun construct(toBuild: Production.Item): Boolean {
-        val worker = FUnit.myWorkers().firstOrNull { BBUnit.of(it).order is Gathering }
-                ?: FUnit.myWorkers().firstOrNull { !it.isCarryingMinerals && !it.isCarryingGas && !it.isConstructing}
-                ?: FUnit.myWorkers().firstOrNull { !it.isConstructing}
-                ?: return false
-        BBUnit.of(worker).order = Construction(toBuild.type)
-        return true
-    }
-
-    private fun train(builderType: FUnitType, toBuild: Production.Item): Boolean {
-        val builder = FUnit.myUnits().filter { it.type == builderType && BBUnit.of(it).order == Order.NONE && !it.isTraining }
-                .firstOrNull()
-                ?: return false
-        BBUnit.of(builder).order = Training(toBuild.type)
+    private fun construct(toBuild: ProductionBoard.Item): Boolean {
+        val position = ConstructionPosition.findPositionFor(toBuild.type) ?: return false
+        val worker = findWorker(position.toPosition()) ?: return false
+        worker.board.construction = Construction(toBuild.type, position)
         return true
     }
 
@@ -87,5 +71,5 @@ class BuildNextItemFromProductionQueue : LeafTask<Production>() {
             `object`.reservedGas + type.gasPrice <= FTTBot.self.gas() && `object`.reservedMinerals + type.mineralPrice <= FTTBot.self.minerals()
 
 
-    override fun copyTo(task: Task<Production>?): Task<Production> = BuildNextItemFromProductionQueue()
+    override fun copyTo(task: Task<ProductionBoard>?): Task<ProductionBoard> = BuildNextItemFromProductionQueue()
 }

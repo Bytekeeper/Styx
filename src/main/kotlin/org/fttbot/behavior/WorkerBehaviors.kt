@@ -1,105 +1,145 @@
 package org.fttbot.behavior
 
+import bwapi.Position
+import bwapi.TilePosition
 import com.badlogic.gdx.ai.btree.LeafTask
 import com.badlogic.gdx.ai.btree.Task
-import org.fttbot.ConstructionPosition
+import org.fttbot.board
 import org.fttbot.layer.FUnit
+import org.fttbot.translated
 
-class GatherMinerals : LeafTask<BBUnit>() {
-    override fun execute(): Status {
-        val unit = `object`.unit
-        val order = `object`.order as? Gathering
-        if (unit.isCarryingGas) {
-            unit.returnCargo()
-        } else if (!unit.isGatheringMinerals || order?.target != null) {
-            val target = order?.target ?: FUnit.minerals()
-                    .filter { it.distanceTo(unit) < 300 }
-                    .minBy { it.distanceTo(unit) }
-            order?.target = null
-            if (target != null) {
-                unit.gather(target)
-            } else {
-                return Status.FAILED
-            }
-        }
-        return Status.RUNNING
+fun findWorker(forPosition: Position? = null, maxRange: Double = 400.0): FUnit? {
+    var candidates = FUnit.myWorkers()
+    if (forPosition != null) {
+        candidates = candidates.filter { forPosition.getDistance(it.position) <= maxRange }
     }
-
-    override fun copyTo(task: Task<BBUnit>): Task<BBUnit> = GatherMinerals()
+    return candidates.minWith(Comparator { a, b ->
+        if (a.isIdle != b.isIdle) {
+            if (a.isIdle) -1 else 1
+        } else if (a.isGatheringMinerals != b.isGatheringMinerals) {
+            if (a.isGatheringMinerals) -1 else 1
+        } else if ((a.isGatheringMinerals && !a.isCarryingMinerals) != (b.isGatheringMinerals && !b.isCarryingMinerals)) {
+            if (a.isGatheringMinerals && !a.isCarryingMinerals) -1 else 1
+        } else if (a.isGatheringGas != b.isGatheringGas) {
+            if (a.isGatheringGas) -1 else 1
+        } else if ((a.isGatheringGas && !a.isCarryingGas) != (b.isGatheringGas && !b.isCarryingGas)) {
+            if (a.isGatheringGas && !a.isCarryingGas) -1 else 1
+        } else if (a.isConstructing != b.isConstructing) {
+            if (a.isConstructing) -1 else 1
+        } else if (forPosition != null) {
+            a.position.getDistance(forPosition).compareTo(b.position.getDistance(forPosition))
+        } else 0
+    })
 }
 
-class GatherGas : LeafTask<BBUnit>() {
+class ReturnResource : UnitLT() {
     override fun execute(): Status {
-        val unit = `object`.unit
-        val order = `object`.order as? Gathering
-        if (unit.isCarryingMinerals) {
-            unit.returnCargo()
-        } else if (!unit.isGatheringMinerals || order?.target != null) {
-            val target = order?.target ?: FUnit.allUnits()
-                    .filter { it.isRefinery && it.isPlayerOwned && it.distanceTo(unit) < 300 }
-                    .minBy { it.distanceTo(unit) }
-            order?.target = null
-            if (target != null) {
-                unit.gather(target)
-            } else {
-                return Status.FAILED
-            }
-        }
-        return Status.RUNNING
-    }
-
-    override fun copyTo(task: Task<BBUnit>?): Task<BBUnit> = GatherGas()
-}
-
-class Construct : LeafTask<BBUnit>() {
-    var moveOrdered = false
-
-    init {
-        guard = Guard()
-    }
-
-    override fun start() {
-        val unit = `object`.unit
-        moveOrdered = false
-        val construct = `object`.order as Construction
-        if (construct.position == null) {
-            construct.position = ConstructionPosition.findPositionFor(construct.type)
-        }
-    }
-
-    override fun execute(): Status {
-        val unit = `object`.unit
-        val construct = `object`.order as Construction
-        val position = construct.position ?: return Status.FAILED
-
-        if (!unit.isConstructing && construct.started) {
-            `object`.order = Order.NONE
-            return Status.SUCCEEDED
-        }
-        if ((unit.isCarryingGas || unit.isCarryingMinerals) && unit.returnCargo()) {
+        val unit = board().unit
+        if (!unit.isCarryingGas && !unit.isCarryingMinerals) return Status.SUCCEEDED
+        if (!unit.isGatheringMinerals && !unit.isGatheringGas) {
+            if (!unit.returnCargo()) return Status.FAILED
             return Status.RUNNING
         }
-        if (!moveOrdered) {
-            if (!unit.move(position)) {
-                return Status.RUNNING
-            }
-            moveOrdered = true
-        }
-        if (!unit.isConstructing || unit.isConstructing && unit.buildType != construct.type) {
-            if (unit.distanceTo(position) <= 8) {
-                unit.construct(construct.type, position)
+        return Status.SUCCEEDED
+    }
+
+    override fun cpy(): Task<BBUnit> = ReturnResource()
+}
+
+class GatherMinerals : UnitLT() {
+    override fun execute(): Status {
+        val unit = board().unit
+        val targetResource = board().targetResource
+
+        if (!unit.isGatheringMinerals || targetResource != null) {
+            val target = targetResource ?: FUnit.minerals()
+                    .filter { it.distanceTo(unit) < 300 }
+                    .minBy { it.distanceTo(unit) }
+            board().targetResource = null
+            if (target == null || !unit.gather(target)) {
+                return Status.FAILED
             }
         }
         return Status.RUNNING
     }
 
-    override fun copyTo(task: Task<BBUnit>?): Task<BBUnit> = Construct()
+    override fun cpy(): Task<BBUnit> = GatherMinerals()
+}
 
-    class Guard : LeafTask<BBUnit>() {
-        override fun execute(): Status = if (`object`.order is Construction) Status.SUCCEEDED else Status.FAILED
+class GatherGas : UnitLT() {
+    override fun execute(): Status {
+        val unit = board().unit
+        val targetResource = board().targetResource
 
-        override fun copyTo(task: Task<BBUnit>?): Task<BBUnit> = Guard()
+        if (!unit.isGatheringMinerals || targetResource != null) {
+            val target = targetResource ?: FUnit.allUnits()
+                    .filter { it.isRefinery && it.isPlayerOwned && it.distanceTo(unit) < 300 }
+                    .minBy { it.distanceTo(unit) }
+            board().targetResource = null
+            if (target == null || !unit.gather(target)) {
+                return Status.FAILED
+            }
+        }
+        return Status.RUNNING
     }
+
+    override fun cpy(): Task<BBUnit> = GatherGas()
+}
+
+class ShouldConstruct : UnitLT() {
+    override fun start() {
+    }
+
+    override fun execute(): Status = if (board().construction != null) Status.SUCCEEDED else Status.FAILED
+
+    override fun cpy(): Task<BBUnit> = ShouldConstruct()
+}
+
+class SelectConstructionSiteAsTarget : UnitLT() {
+    override fun execute(): Status {
+        val construction = board().construction!!
+        board().moveTarget = construction.position.toPosition().translated(TilePosition.SIZE_IN_PIXELS / 2, TilePosition.SIZE_IN_PIXELS / 2)
+        return Status.SUCCEEDED
+    }
+
+    override fun cpy(): Task<BBUnit> = SelectConstructionSiteAsTarget()
+}
+
+class Construct : UnitLT() {
+    override fun execute(): Status {
+        val unit = board().unit
+        val construct = board().construction ?: throw IllegalStateException()
+        val position = construct.position
+
+        if (construct.started && !construct.commissioned) {
+            throw IllegalStateException("Building ${construct.type}was started but not yet 'started' by this worker")
+        }
+
+        if (!unit.isConstructing && construct.started) {
+            board().construction = null
+            return Status.SUCCEEDED
+        }
+        if (!unit.isConstructing || unit.isConstructing && unit.buildType != construct.type) {
+            if (unit.construct(construct.type, position)) {
+                construct.commissioned = true
+            } else {
+                return Status.FAILED
+            }
+        }
+        return Status.RUNNING
+    }
+
+    override fun cpy(): Task<BBUnit> = Construct()
+}
+
+class ShouldDefendWithWorker : UnitLT() {
+    override fun start() {}
+
+    override fun execute(): Status {
+        return Status.FAILED
+    }
+
+    override fun cpy(): Task<BBUnit> = ShouldDefendWithWorker()
 }
 
 const val RESOURCE_RANGE = 300
@@ -109,7 +149,7 @@ class AssignWorkersToResources : LeafTask<Unit>() {
         val myBases = FUnit.allUnits().filter { it.isPlayerOwned && it.isBase }
 
         val baseToWorker = FUnit.myWorkers()
-                .filter { it.isIdle && BBUnit.of(it).order == Order.NONE }
+                .filter { it.isIdle }
                 .groupByTo(HashMap(), { it.closest(myBases) })
         baseToWorker.forEach { base, workers ->
             if (base != null) {
@@ -135,7 +175,7 @@ class AssignWorkersToResources : LeafTask<Unit>() {
                         .forEach { ref ->
                             for (i in 1..3) {
                                 if (!workers.isEmpty())
-                                    BBUnit.of(workers.removeAt(0)).order = Gathering(ref)
+                                    workers.removeAt(0).board.targetResource = ref
                             }
                         }
             }
@@ -146,7 +186,7 @@ class AssignWorkersToResources : LeafTask<Unit>() {
                 minerals.filter { it.distanceTo(base) < RESOURCE_RANGE }
                         .forEach { mineral ->
                             if (!workers.isEmpty()) {
-                                BBUnit.of(workers.removeAt(0)).order = Gathering(mineral)
+                                workers.removeAt(0).board.targetResource = mineral
                             }
                         }
             }

@@ -231,10 +231,14 @@ class FUnitType private constructor(internal val type: UnitType) {
     val isWorker get() = type.isWorker
     val gasPrice get() = type.gasPrice()
     val mineralPrice get() = type.mineralPrice()
+    val isAir get() = type.isFlyer
+    val groundWeapon get() = type.groundWeapon()
+    val airWeapon get() = type.airWeapon()
     val whatBuilds : Pair<FUnitType, Int> get() {
         val wb = type.whatBuilds()
         return Pair(FUnitType.of(wb.first), wb.second)
     }
+    val armor get() = type.armor()
     val canProduce get() = type.canProduce()
 }
 

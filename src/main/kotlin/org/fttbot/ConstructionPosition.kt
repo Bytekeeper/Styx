@@ -20,8 +20,8 @@ object ConstructionPosition {
         val center = base.position.toTilePosition()
         var bestBuildPosition: TilePosition? = null
         var bestDistance: Int = Int.MAX_VALUE
-        for (i in -10..10) {
-            for (j in -10..10) {
+        for (i in -15..15) {
+            for (j in -15..15) {
                 val dist = i * i + j * j
                 val pos = center.translated(i, j);
                 if (dist < bestDistance
@@ -36,7 +36,7 @@ object ConstructionPosition {
     }
 
     private fun outsideOfResourceLines(pos: TilePosition): Boolean {
-        val base = FUnit.myBases().minBy { it.distanceTo(pos) } ?: return true
+        val base = FUnit.myBases().minBy { it.distanceInTilesTo(pos) } ?: return true
         val poly = resourcePolygons.computeIfAbsent(base) {
             val relevantUnits = FUnit.unitsInRadius(base.position, RESOURCE_RANGE)
                     .filter { it.isMineralField || it.type == FUnitType.Resource_Vespene_Geyser }
