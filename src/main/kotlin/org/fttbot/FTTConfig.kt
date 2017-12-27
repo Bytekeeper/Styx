@@ -1,7 +1,7 @@
 package org.fttbot
 
 import bwapi.Race
-import org.fttbot.layer.FUnitType
+import org.fttbot.import.FUnitType
 
 object FTTConfig {
     lateinit var MY_RACE: Race

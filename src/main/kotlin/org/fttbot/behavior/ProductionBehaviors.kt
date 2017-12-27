@@ -1,12 +1,15 @@
 package org.fttbot.behavior
 
+import bwapi.Race
 import com.badlogic.gdx.ai.btree.LeafTask
 import com.badlogic.gdx.ai.btree.Task
 import org.fttbot.ConstructionPosition
 import org.fttbot.FTTBot
+import org.fttbot.FTTConfig
 import org.fttbot.board
+import org.fttbot.import.FUnitType
 import org.fttbot.layer.FUnit
-import org.fttbot.layer.FUnitType
+import java.util.*
 
 class Train : UnitLT() {
     override fun execute(): Status {
@@ -16,11 +19,10 @@ class Train : UnitLT() {
         val item = ProductionBoard.queue.peek()
         if (!unit.canMake(item.type) || !canAfford(item.type)) return Status.FAILED
         if (!unit.train(item.type)) return Status.FAILED
+        LOG.info("${unit} started training ${item.type}")
         ProductionBoard.queue.pop()
         return Status.RUNNING
     }
-
-    override fun cpy(): Task<BBUnit> = Train()
 
     private fun canAfford(type: FUnitType) =
             ProductionBoard.reservedGas + type.gasPrice <= FTTBot.self.gas()
@@ -28,26 +30,31 @@ class Train : UnitLT() {
 }
 
 class BuildNextItemFromProductionQueue : LeafTask<ProductionBoard>() {
+    val orderedConstructions = ArrayDeque<Construction>()
+
     override fun execute(): Status {
-        with(`object`) {
+        with(board()) {
             if (queueNeedsRebuild) {
-                reservedMinerals = 0;
-                reservedGas = 0;
-                FUnit.myUnits().filter { it.board.construction?.started == false }
+                reservedMinerals = 0
+                reservedGas = 0
+                orderedConstructions.filter { !it.started }
                         .forEach {
-                            val construction = it.board.construction!!
-                            reservedMinerals += construction.type.mineralPrice
-                            reservedGas += construction.type.gasPrice
+                            reservedMinerals += it.type.mineralPrice
+                            reservedGas += it.type.gasPrice
                         }
             }
         }
         val queue = `object`.queue
 
-        while (!queue.isEmpty() && canAfford(queue.peek().type) && FTTBot.game.canMake(queue.peek().type.type)) {
+        orderedConstructions.removeIf { it.building?.isCompleted ?: false || it.started && FTTConfig.MY_RACE != Race.Terran}
+        val abortedConstructions = orderedConstructions.minus(FUnit.myWorkers().filter { it.board.construction != null }.map { it.board.construction!! })
+        abortedConstructions.forEach { continueConstruction(it) }
+
+        while (!queue.isEmpty() && canAfford(queue.peek().type) && FTTBot.game.canMake(queue.peek().type.source)) {
             val toBuild = queue.peek()
 
             val builderType = toBuild.type.whatBuilds.first
-            if (builderType.type.isWorker) {
+            if (builderType.isWorker) {
                 if (!construct(toBuild)) break
             } else break
             with(`object`) {
@@ -60,10 +67,19 @@ class BuildNextItemFromProductionQueue : LeafTask<ProductionBoard>() {
         return if (queue.isEmpty()) Status.SUCCEEDED else Status.RUNNING
     }
 
+    private fun continueConstruction(construction: Construction) {
+        if (!construction.started) {
+            construction.position = ConstructionPosition.findPositionFor(construction.type) ?: return
+        }
+        val worker = findWorker(construction.position.toPosition()) ?: return
+        worker.board.construction = construction
+    }
+
     private fun construct(toBuild: ProductionBoard.Item): Boolean {
         val position = ConstructionPosition.findPositionFor(toBuild.type) ?: return false
         val worker = findWorker(position.toPosition()) ?: return false
         worker.board.construction = Construction(toBuild.type, position)
+        orderedConstructions.offer(worker.board.construction)
         return true
     }
 

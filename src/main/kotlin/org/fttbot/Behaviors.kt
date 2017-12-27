@@ -1,9 +1,9 @@
 package org.fttbot
 
 import com.badlogic.gdx.ai.btree.BehaviorTree
-import com.badlogic.gdx.ai.btree.LeafTask
 import com.badlogic.gdx.ai.btree.Task
 import com.badlogic.gdx.ai.btree.branch.DynamicGuardSelector
+import com.badlogic.gdx.ai.btree.branch.Selector
 import com.badlogic.gdx.ai.btree.branch.Sequence
 import com.badlogic.gdx.ai.btree.leaf.Success
 import com.badlogic.gdx.ai.btree.utils.BehaviorTreeLibrary
@@ -22,16 +22,27 @@ object UnitBehaviors {
     private val btlib = BehaviorTreeLibrary()
     private val unitBehavior = HashMap<FUnit, BehaviorTree<*>>()
 
-    private val gatherMinerals get() = Sequence(ReturnResource(), GatherMinerals())
-    private val construct: Sequence<BBUnit>
-        get() = Sequence(ReturnResource(), SelectConstructionSiteAsTarget(), MoveToPosition(30.0), Construct())
-                .guardedBy(ShouldConstruct())
+    private val gatherMinerals
+        get() = DynamicGuardSelector(ReturnResource().guardedBy(ShouldReturnResource()),
+                Selector(GatherMinerals(), GatherGas()))
+    private val construct: Task<BBUnit>
+        get() = Selector(Sequence(ReturnResource(), SelectConstructionSiteAsTarget(), MoveToPosition(120.0), Construct())
+                , AbortConstruct()).guardedBy(ShouldConstruct())
+    private val defendWithWorker: Task<BBUnit>
+        get() = Sequence(SelectBestAttackTarget(), Attack()).guardedBy(EmergencySituation().guardedBy(ShouldDefendWithWorker()))
 
     init {
-        btlib.registerArchetypeTree(Behavior.WORKER.name, BehaviorTree(DynamicGuardSelector(construct, Scout(), gatherMinerals)))
+        btlib.registerArchetypeTree(Behavior.WORKER.name, BehaviorTree(DynamicGuardSelector(defendWithWorker, construct, Scout(), gatherMinerals)))
         btlib.registerArchetypeTree(Behavior.TRAINER.name, BehaviorTree(Train()))
-        btlib.registerArchetypeTree(Behavior.COMBAT_UNIT.name, BehaviorTree(DynamicGuardSelector(Retreat(), Attack())))
+        btlib.registerArchetypeTree(Behavior.COMBAT_UNIT.name, BehaviorTree(
+                DynamicGuardSelector(
+                        Selector(Attack().guardedBy(SelectRetreatAttackTarget()), Retreat()).guardedBy(UnfavorableSituation()),
+                        FallBack().guardedBy(ShouldFallBack()),
+                        Attack().guardedBy(SelectBestAttackTarget()),
+                        MoveToEnemyBase())))
     }
+
+    fun hasBehaviorFor(unit: FUnit) = unitBehavior.containsKey(unit)
 
     fun createTreeFor(unit: FUnit): BehaviorTree<*> {
         val behavior = when {
@@ -42,6 +53,10 @@ object UnitBehaviors {
         }
         unitBehavior[unit] = behavior
         return behavior
+    }
+
+    fun removeBehavior(unit: FUnit) {
+        unitBehavior.remove(unit)
     }
 
     fun step() {
@@ -55,14 +70,4 @@ object UnitBehaviors {
         TRAINER,
         COMBAT_UNIT
     }
-}
-
-abstract class LT<T> : LeafTask<T>() {
-    override fun cloneTask(): Task<T> {
-        return cpy()
-    }
-
-    abstract fun cpy(): Task<T>
-
-    final override fun copyTo(task: Task<T>?): Task<T> = throw IllegalStateException()
 }

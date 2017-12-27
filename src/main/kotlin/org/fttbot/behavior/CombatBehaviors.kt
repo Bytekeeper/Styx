@@ -1,85 +1,193 @@
 package org.fttbot.behavior
 
-import bwapi.Order
-import bwta.BWTA
-import com.badlogic.gdx.ai.btree.LeafTask
-import com.badlogic.gdx.ai.btree.Task
-import org.fttbot.FTTBot
-import org.fttbot.board
+import bwapi.Color
+import bwapi.Position
+import bwapi.UnitType
+import org.fttbot.*
+import org.fttbot.estimation.CombatEval
+import org.fttbot.estimation.EnemyModel
+import org.fttbot.estimation.MAX_FRAMES_TO_ATTACK
+import org.fttbot.estimation.SimUnit
+import org.fttbot.import.FUnitType
 import org.fttbot.layer.FUnit
+import org.fttbot.layer.getWeaponAgainst
+import org.fttbot.layer.isMelee
 
-class Attack : LeafTask<BBUnit>() {
+
+class SelectRetreatAttackTarget : UnitLT() {
+    override fun start() {
+    }
+
     override fun execute(): Status {
-        val unit = `object`.unit
-        val order = board().attacking as Attacking
-        if (!unit.isAttackFrame) {
-            val target = order.target ?: findTargetFor(unit)
-            if (target != null) {
-                unit.attack(target)
-            } else if (ScoutingBoard.enemyBase != null) {
-                unit.attack(ScoutingBoard.enemyBase!!)
+        val unit = board().unit
+        if (unit.groundWeaponCooldown > 0 || unit.airWeaponCooldown > 0) return Status.FAILED
+        if (unit.canBeAttacked()) return Status.FAILED
+        val safety = (unit.type.topSpeed * MAX_FRAMES_TO_ATTACK / 6).toInt()
+        val enemiesInArea = FUnit.unitsInRadius(unit.position, 300)
+                .filter { it.isEnemy && unit.canAttack(it, safety) }
+        val simUnit = SimUnit.of(unit)
+        val bestEnemy = enemiesInArea.minWith(Comparator { a, b ->
+            val damageCmp = simUnit.directDamage(SimUnit.of(b)).compareTo(simUnit.directDamage(SimUnit.of(a)))
+            if (damageCmp != 0) damageCmp
+            else a.hitPoints - b.hitPoints
+        }) ?: return Status.FAILED
+        board().attacking = Attacking(bestEnemy)
+        return Status.SUCCEEDED
+    }
+
+}
+
+class SelectBestAttackTarget : UnitLT() {
+    override fun start() {
+    }
+
+    override fun execute(): Status {
+        val unit = board().unit
+        val simUnit = SimUnit.of(unit)
+        val enemiesInArea = FUnit.unitsInRadius(unit.position, 300).filter { it.isEnemy }
+        val safety = if (unit.canMove) (unit.type.topSpeed * MAX_FRAMES_TO_ATTACK / 2).toInt() else 0
+        val bestEnemy = enemiesInArea.minWith(Comparator { a, b ->
+            if (disregard(a.type) != disregard(b.type)) {
+                if (disregard(b.type)) -1 else 1
+            } else if (a.canAttack(unit) != b.canAttack(unit)) {
+                if (a.canAttack(unit)) -1 else 1
+            } else if (unit.canAttack(a, safety) != unit.canAttack(b, safety)) {
+                if (unit.canAttack(a, safety)) -1 else 1
             } else {
-                val nearestChokepoint = BWTA.getNearestChokepoint(unit.position)
-                if (nearestChokepoint != null) {
-                    unit.attack(nearestChokepoint.point)
-                }
+                val damageA = simUnit.damagePerFrameTo(SimUnit.of(a))
+                if (damageA == 0.0) return@Comparator 1
+                val damageB = simUnit.damagePerFrameTo(SimUnit.of(b))
+                if (damageB == 0.0) return@Comparator -1
+                (a.hitPoints / damageA).compareTo(b.hitPoints / damageB)
             }
+        }) ?: return Status.FAILED
+        board().attacking = Attacking(bestEnemy)
+        return Status.SUCCEEDED
+    }
+
+    private fun disregard(unitType: FUnitType) = when (unitType){
+        FUnitType.Zerg_Larva -> true
+        FUnitType.Zerg_Egg -> true
+        else -> false
+    }
+}
+
+class Attack : UnitLT() {
+    override fun execute(): Status {
+        val unit = board().unit
+        val attacking = board().attacking ?: throw IllegalStateException()
+        if (unit.isAttackFrame) return Status.RUNNING
+        val target = attacking.target
+        if (target != unit.target) {
+            unit.attack(target)
         }
         return Status.RUNNING
     }
+}
 
-    private fun findTargetFor(unit: FUnit): FUnit? {
-        return FUnit.unitsInRadius(unit.position, 300)
-                .filter { it.isEnemy && unit.canAttack(it, 0, true) }
-                .minBy { it.hitPoints + it.type.armor * 10}
-    }
-
-    override fun copyTo(task: Task<BBUnit>?): Task<BBUnit> = Attack()
-
-    class Guard : LeafTask<BBUnit>() {
-        override fun execute(): Status = if (board().attacking != null) Status.SUCCEEDED else Status.FAILED
-
-        override fun copyTo(task: Task<BBUnit>?): Task<BBUnit> = Guard()
-
+class UnfavorableSituation : SituationEvaluator() {
+    override fun execute(): Status {
+        val probability = evaluate()
+        val unit = board().unit
+        if (probability < 0.55 && unit.canBeAttacked()) return Status.SUCCEEDED
+        return Status.FAILED
     }
 }
 
-class Retreat : LeafTask<BBUnit>() {
-    init {
-        guard = Guard()
+class EmergencySituation : SituationEvaluator() {
+    override fun execute(): Status {
+        val probability = evaluate()
+        if (probability < 0.33) return Status.SUCCEEDED
+        if (probability < 0.7 && board().attacking != null) return Status.SUCCEEDED
+        board().attacking = null
+        return Status.FAILED
+    }
+}
+
+abstract class SituationEvaluator : UnitLT() {
+    override fun start() {
+    }
+
+    protected fun evaluate(): Double {
+        val unit = board().unit
+        if (unit.isInRefinery) return 0.5
+        val unitsInArea = FUnit.unitsInRadius(unit.position, 600)
+                .filter { it.isCompleted && it.canAttack}
+        val center = unitsInArea.fold(Position(0, 0)) { a, u -> a + u.position } / unitsInArea.size
+        val relevantUnits = unitsInArea.filter { it.distanceTo(center) < 300 }.toMutableSet()
+        relevantUnits.add(unit)
+        val enemyUnits = relevantUnits.filter { it.isEnemy }.map { SimUnit.of(it) }.toMutableList()
+        EnemyModel.seenUnits.filter {
+            (it.position?.getDistance(center) ?: Double.MAX_VALUE) < 300
+                    && !FTTBot.game.isVisible(it.tilePosition)
+        }.map { SimUnit.of(it) }
+                .forEach { enemyUnits += it }
+        FTTBot.game.drawCircleMap(center, 300, Color.Yellow)
+        val probability = CombatEval.probabilityToWin(
+                relevantUnits.filter { it.isPlayerOwned && (!it.isWorker || it.board.attacking != null) }.map { SimUnit.of(it) },
+                enemyUnits)
+        board().combatSuccessProbability = probability
+        return probability
+    }
+}
+
+class Retreat : UnitLT() {
+    override fun start() {
     }
 
     override fun execute(): Status {
-        val unit = `object`.unit
+        val unit = board().unit
 
-        unit.move(FTTBot.self.startLocation)
-        return Status.RUNNING
-    }
-
-    override fun copyTo(task: Task<BBUnit>?): Task<BBUnit> = Retreat()
-
-    class Guard : LeafTask<BBUnit>() {
-        override fun execute(): Status {
-            val score = FUnit.unitsInRadius(`object`.unit.position, 400)
-                    .filter { it.isCompleted }
-                    .sumBy { if (it.isEnemy && it.canAttack(`object`.unit, 100)) -it.hitPoints
-                    else if (it.isPlayerOwned && it.canAttack) it.hitPoints else 0
-                    }
-            return if (score < 20) Status.SUCCEEDED else Status.FAILED
+        if (unit.targetPosition.toTilePosition().getDistance(FTTBot.self.startLocation) > 2) {
+            unit.move(FTTBot.self.startLocation)
         }
-
-        override fun copyTo(task: Task<BBUnit>?): Task<BBUnit> = Guard()
+        return Status.RUNNING
     }
 }
 
-
-class AttackEnemyBase : LeafTask<Unit>() {
+class MoveToEnemyBase : UnitLT() {
     override fun execute(): Status {
-        FUnit.myUnits().filter { it.board.attacking == null && !it.isBuilding && !it.isWorker && it.canAttack }
-                .forEach { it.board.attacking = Attacking() }
+        val target = EnemyModel.enemyBase ?: return Status.FAILED
+        val unit = board().unit
+        if (!unit.isMoving || unit.targetPosition != target) {
+            unit.move(target)
+        }
+        return Status.RUNNING
+    }
+}
+
+// When attacking: Should this unit fall back a little?
+class ShouldFallBack : UnitLT() {
+
+    override fun start() {
+    }
+
+    override fun execute(): Status {
+        val unit = board().unit
+        // Not engaged or shooting in this very moment? Don't fall back
+        if (unit.isStartingAttack || unit.groundWeaponCooldown == 0 && unit.airWeaponCooldown == 0) return Status.FAILED
+        // Melee? Don't fall back, but maybe retreat
+        if (unit.groundWeaponCooldown > 0 && unit.groundWeapon.isMelee()) return Status.FAILED
+        unit.potentialAttackers().firstOrNull { it.canAttack(unit)
+                && it.type.getWeaponAgainst(unit).maxRange < unit.type.getWeaponAgainst(it).maxRange} ?: return Status.FAILED
+        return Status.SUCCEEDED
+    }
+}
+
+class FallBack : UnitLT() {
+    override fun execute(): Status {
+        val unit = board().unit
+        val relevantEnemyPositions = unit.potentialAttackers().map { it.position!! }
+        val enemyCenter = relevantEnemyPositions.fold(Position(0, 0)) { a, b -> a + b } / relevantEnemyPositions.size
+        val targetPosition = unit.position.toVector()
+                .sub(enemyCenter.toVector())
+                .setLength((unit.type.topSpeed * unit.groundWeaponCooldown).toFloat())
+                .toPosition() + unit.position
+        if (FTTBot.game.isWalkable(targetPosition.toWalkable()) && unit.targetPosition.getDistance(targetPosition) > 16) {
+            if (!unit.move(targetPosition)) return Status.FAILED
+        }
+        if (unit.position.getDistance(targetPosition) < 16) return Status.SUCCEEDED
         return Status.RUNNING
     }
 
-    override fun copyTo(task: Task<Unit>?): Task<Unit> = AttackEnemyBase()
 }
-

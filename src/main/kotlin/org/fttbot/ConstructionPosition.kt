@@ -4,12 +4,12 @@ import bwapi.TilePosition
 import com.badlogic.gdx.math.ConvexHull
 import com.badlogic.gdx.math.Polygon
 import org.fttbot.behavior.RESOURCE_RANGE
+import org.fttbot.import.FUnitType
 import org.fttbot.layer.FUnit
-import org.fttbot.layer.FUnitType
 
 object ConstructionPosition {
     private val convexHull = ConvexHull()
-    private var resourcePolygons = HashMap<FUnit, Polygon>()
+    var resourcePolygons = HashMap<FUnit, Polygon>()
 
     fun findPositionFor(unitType: FUnitType): TilePosition? {
         if (unitType.isRefinery) {
@@ -25,7 +25,7 @@ object ConstructionPosition {
                 val dist = i * i + j * j
                 val pos = center.translated(i, j);
                 if (dist < bestDistance
-                        && FTTBot.game.canBuildHere(pos, unitType.type)
+                        && FTTBot.game.canBuildHere(pos, unitType.source)
                         && outsideOfResourceLines(pos)) {
                     bestDistance = dist
                     bestBuildPosition = pos
@@ -42,14 +42,22 @@ object ConstructionPosition {
                     .filter { it.isMineralField || it.type == FUnitType.Resource_Vespene_Geyser }
                     .toMutableList()
             relevantUnits.add(base)
-            val points = FloatArray(relevantUnits.size * 2)
+            val points = FloatArray(relevantUnits.size * 8)
             relevantUnits.forEachIndexed() { index, fUnit ->
-                points[index * 2] = fUnit.tilePosition.x.toFloat()
-                points[index * 2 + 1] = fUnit.tilePosition.y.toFloat()
+                val base = index * 8
+                points[base] = fUnit.tilePosition.x.toFloat()
+                points[base + 1] = fUnit.tilePosition.y.toFloat()
+                points[base + 2] = fUnit.tilePosition.x.toFloat() + fUnit.type.tileWidth
+                points[base + 3] = fUnit.tilePosition.y.toFloat()
+                points[base + 4] = fUnit.tilePosition.x.toFloat() + fUnit.type.tileWidth
+                points[base + 5] = fUnit.tilePosition.y.toFloat() + fUnit.type.tileHeight
+                points[base + 6] = fUnit.tilePosition.x.toFloat()
+                points[base + 7] = fUnit.tilePosition.y.toFloat() + fUnit.type.tileHeight
             }
             return@computeIfAbsent Polygon(convexHull.computePolygon(points, false).toArray())
         }
-        return !poly.contains(pos.toVector())
+        val v = pos.toVector()
+        return !poly.contains(v)
     }
 
     private fun findPositionForGas(unitType: FUnitType): TilePosition? {

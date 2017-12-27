@@ -5,8 +5,11 @@ import bwapi.Unit
 import bwta.BWTA
 import com.badlogic.gdx.ai.btree.BehaviorTree
 import org.fttbot.behavior.*
+import org.fttbot.estimation.EnemyModel
+import org.fttbot.import.FUnitType
 import org.fttbot.layer.FUnit
-import org.fttbot.layer.FUnitType
+import java.util.logging.ConsoleHandler
+import java.util.logging.Level
 import java.util.logging.Logger
 
 object FTTBot : DefaultBWListener() {
@@ -19,7 +22,7 @@ object FTTBot : DefaultBWListener() {
     private val buildManager = BehaviorTree(BuildNextItemFromProductionQueue(), ProductionBoard)
     private val scoutManager = BehaviorTree(ScoutEnemyBase(), ScoutingBoard)
 
-    private val combatManager = BehaviorTree(AttackEnemyBase())
+//    private val combatManager = BehaviorTree(AttackEnemyBase())
 
     fun start() {
         mirror.module.setEventListener(this)
@@ -36,6 +39,11 @@ object FTTBot : DefaultBWListener() {
         Thread.sleep(100)
         mirror.game.setLocalSpeed(1)
 
+        val consoleHandler = ConsoleHandler()
+        consoleHandler.level = Level.INFO
+        Logger.getLogger("").addHandler(consoleHandler)
+        Logger.getLogger("").level = Level.INFO
+
         val racePlayed = game.self().race
         when (racePlayed) {
             Race.Protoss -> FTTConfig.useConfigForProtoss()
@@ -47,66 +55,47 @@ object FTTBot : DefaultBWListener() {
                 ProductionBoard.Item(FUnitType.Terran_SCV),
                 ProductionBoard.Item(FUnitType.Terran_SCV),
                 ProductionBoard.Item(FUnitType.Terran_SCV),
-                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
                 ProductionBoard.Item(FUnitType.Terran_SCV),
                 ProductionBoard.Item(FUnitType.Terran_Barracks),
                 ProductionBoard.Item(FUnitType.Terran_SCV),
+                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
                 ProductionBoard.Item(FUnitType.Terran_SCV),
+                ProductionBoard.Item(FUnitType.Terran_Refinery),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
                 ProductionBoard.Item(FUnitType.Terran_SCV),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Factory),
                 ProductionBoard.Item(FUnitType.Terran_SCV),
-                ProductionBoard.Item(FUnitType.Terran_Barracks),
                 ProductionBoard.Item(FUnitType.Terran_Marine),
                 ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_SCV),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
                 ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Factory),
                 ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
                 ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
                 ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
                 ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine)
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Vulture),
+                ProductionBoard.Item(FUnitType.Terran_Vulture)
         ))
     }
 
@@ -119,10 +108,12 @@ object FTTBot : DefaultBWListener() {
             }
         }
 
+//        Exporter.export()
+
+        EnemyModel.step()
         workerManager.step()
         buildManager.step()
         scoutManager.step()
-        combatManager.step()
         UnitBehaviors.step()
 
         for (board in BBUnit.all()) {
@@ -147,37 +138,73 @@ object FTTBot : DefaultBWListener() {
                 game.drawLineMap(chokepoint.sides.first, chokepoint.sides.second, Color.Red)
             }
         }
+        ConstructionPosition.resourcePolygons.values.forEach { poly ->
+            val v = poly.vertices
+            for (i in 0 until v.size / 2) {
+                var j = i * 2
+                val a = Position(v[j].toInt() * 32, v[j + 1].toInt() * 32)
+                val b = Position(v[(j + 2) % v.size].toInt() * 32, v[(j + 3) % v.size].toInt() * 32)
+                game.drawLineMap(a, b, Color.Cyan)
+            }
+        }
+        for (unit in EnemyModel.seenUnits) {
+            if (unit.position == null) continue
+            game.drawCircleMap(unit.position, unit.type.width, Color.Red)
+            game.drawTextMap(unit.position, unit.type.toString())
+        }
+        for (unit in FUnit.myUnits().filter { it.canAttack }) {
+            game.drawTextMap(unit.position.translated(0, -10), "%.2f".format(unit.board.combatSuccessProbability))
+        }
     }
 
     override fun onUnitDestroy(unit: Unit) {
-        BBUnit.destroy(FUnit.of(unit))
+        val fUnit = FUnit.of(unit)
+        BBUnit.destroy(fUnit)
+        UnitBehaviors.removeBehavior(fUnit)
         FUnit.destroy(unit)
+        EnemyModel.remove(fUnit)
     }
 
     override fun onUnitCreate(unit: Unit) {
+        if (unit.type.isNeutral) return
         val funit = FUnit.of(unit)
         ProductionBoard.queueNeedsRebuild = true
+        checkForStartedConstruction(funit)
+    }
+
+    private fun checkForStartedConstruction(funit: FUnit) {
         if (funit.isBuilding && funit.isPlayerOwned) {
             val workerWhoStartedIt = FUnit.myWorkers().firstOrNull {
                 val construction = it.board.construction ?: return@firstOrNull false
-                construction.commissioned && construction.position == unit.tilePosition && construction.type == funit.type
+                construction.commissioned && construction.position == funit.tilePosition && construction.type == funit.type
             }
             if (workerWhoStartedIt != null) {
-                workerWhoStartedIt.board.construction?.started = true
+                val construction = workerWhoStartedIt.board.construction!!
+                construction.building = funit
+                construction.started = true
             } else {
                 LOG.severe("Can't find worker associated with building ${funit}!")
             }
         }
     }
 
-    override fun onUnitComplete(unit: Unit) {
+    override fun onUnitMorph(unit: Unit) {
+        if (unit.type.isNeutral) return
         val funit = FUnit.of(unit)
-        if (funit.isPlayerOwned) {
+        checkForStartedConstruction(funit)
+    }
+
+    override fun onUnitComplete(unit: Unit) {
+        if (unit.type.isNeutral) return
+        val funit = FUnit.of(unit)
+        LOG.info("Completed: ${funit}")
+        if (funit.isPlayerOwned && !UnitBehaviors.hasBehaviorFor(funit)) {
             UnitBehaviors.createTreeFor(funit)
         }
     }
 
     override fun onUnitShow(unit: Unit) {
-        FUnit.of(unit)
+        val fUnit = FUnit.of(unit)
+        if (fUnit.isEnemy) EnemyModel.updateUnit(fUnit)
     }
 }

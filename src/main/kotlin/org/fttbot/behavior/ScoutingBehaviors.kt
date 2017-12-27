@@ -1,21 +1,15 @@
 package org.fttbot.behavior
 
-import bwapi.WalkPosition
 import bwta.BWTA
 import com.badlogic.gdx.ai.btree.LeafTask
 import com.badlogic.gdx.ai.btree.Task
-import com.badlogic.gdx.math.ConvexHull
-import org.fttbot.FTTBot
-import org.fttbot.board
+import org.fttbot.*
+import org.fttbot.estimation.EnemyModel
 import org.fttbot.layer.FUnit
-import org.fttbot.toPosition
-import org.fttbot.toVector
 import java.util.*
 
 
 class Scout : UnitLT() {
-    val convexHull = ConvexHull()
-
     init {
         guard = Guard()
     }
@@ -32,7 +26,7 @@ class Scout : UnitLT() {
         }
 
         if (order.points == null && FUnit.unitsInRadius(currentTargetLocation, 300).any { it.isBuilding && it.isEnemy }) {
-            ScoutingBoard.enemyBase = currentTargetLocation
+            EnemyModel.enemyBase = currentTargetLocation
             val regionPoly = BWTA.getRegion(currentTargetLocation).polygon
             order.points = regionPoly.points
             val closest = order.points!!.minBy { it.getDistance(unit.position) }
@@ -45,7 +39,7 @@ class Scout : UnitLT() {
                 // TODO run
             }
             val nextPoint = points[order.index].toVector().scl(0.9f).mulAdd(currentTargetLocation.toVector(), 0.1f).toPosition()
-            if (unit.position.getDistance(nextPoint) > 80 && (unit.type.isAir || FTTBot.game.isWalkable(WalkPosition(nextPoint.x / 8, nextPoint.y / 8)))) {
+            if (unit.position.getDistance(nextPoint) > 80 && (unit.type.isFlyer || FTTBot.game.isWalkable(nextPoint.toWalkable()))) {
                 if (unit.targetPosition.getDistance(nextPoint) > 20) {
                     unit.move(nextPoint)
                 }
@@ -62,12 +56,9 @@ class Scout : UnitLT() {
         return Status.RUNNING
     }
 
-    override fun cpy(): Task<BBUnit> = Scout()
-
-    class Guard : LeafTask<BBUnit>() {
+    class Guard : UnitLT() {
+        override fun start() {}
         override fun execute(): Status = if (board().scouting != null) Status.SUCCEEDED else Status.FAILED
-
-        override fun copyTo(task: Task<BBUnit>?): Task<BBUnit> = Guard()
 
     }
 }
@@ -76,7 +67,7 @@ class Scout : UnitLT() {
 class ScoutEnemyBase : LeafTask<ScoutingBoard>() {
     override fun execute(): Status {
         val time = FTTBot.game.elapsedTime()
-        if (time - `object`.lastScoutTime > 80) {
+        if (time - `object`.lastScoutTime > 120) {
             `object`.lastScoutTime = time
             if (FUnit.myUnits().any { it.board.scouting != null }) {
                 return Status.RUNNING

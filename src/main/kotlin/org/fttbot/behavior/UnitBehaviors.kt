@@ -1,24 +1,37 @@
 package org.fttbot.behavior
 
+import com.badlogic.gdx.ai.btree.LeafTask
 import com.badlogic.gdx.ai.btree.Task
 import org.fttbot.FTTBot
-import org.fttbot.LT
 import org.fttbot.board
+import java.util.logging.Logger
 
 
-abstract class UnitLT : LT<BBUnit>() {
+abstract class UnitLT : LeafTask<BBUnit>() {
+    protected val LOG = Logger.getLogger(this::class.java.simpleName)
+
     override fun start() {
         board().status = this::class.java.simpleName ?: "<Unknown>"
+        LOG.fine("${board().unit} started ${board().status}")
     }
+
+    override fun end() {
+        LOG.finest("${board().unit} stopped ${board().status} with ${status}")
+    }
+
+    override fun copyTo(task: Task<BBUnit>): Task<BBUnit> = task
 }
 
 const val MOVE_TIMEOUT = 60
 
 class MoveToPosition(var threshold: Double = 5.0) : UnitLT() {
     var bestDistance = Double.MAX_VALUE
-
     var bestDistanceTime = 0
-    var moveOrderWasIssued = false
+
+    override fun start() {
+        super.start()
+        bestDistance = Double.MAX_VALUE
+    }
 
     override fun execute(): Status {
         val unit = board().unit
@@ -35,27 +48,15 @@ class MoveToPosition(var threshold: Double = 5.0) : UnitLT() {
         if (elapsedTime - bestDistanceTime > MOVE_TIMEOUT) {
             return Status.FAILED
         }
-        if (!unit.isMoving || !moveOrderWasIssued) {
-            moveOrderWasIssued = true
+        if (!unit.isMoving || targetPosition.getDistance(unit.targetPosition) >= threshold) {
             unit.move(targetPosition)
         }
         return Status.RUNNING
     }
 
-    override fun cpy(): Task<BBUnit> = MoveToPosition(threshold)
-}
-
-class AttackTarget : LT<BBUnit>() {
-    override fun execute(): Status {
-        val unit = board().unit
-        val target = board().attacking?.target ?: return Status.FAILED
-        if (target.isDead) return Status.SUCCEEDED
-
-        if (!unit.isAttackFrame || !unit.isAttacking || unit.target == target) {
-            unit.attack(target)
-        }
-        return Status.RUNNING
+    override fun copyTo(task: Task<BBUnit>): Task<BBUnit> {
+        (task as MoveToPosition).threshold = threshold
+        return task
     }
-
-    override fun cpy(): Task<BBUnit> = AttackTarget()
 }
+

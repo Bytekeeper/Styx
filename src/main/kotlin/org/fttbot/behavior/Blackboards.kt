@@ -1,11 +1,9 @@
 package org.fttbot.behavior
 
-import bwapi.AbstractPoint
-import bwapi.Order
 import bwapi.Position
 import bwapi.TilePosition
+import org.fttbot.import.FUnitType
 import org.fttbot.layer.FUnit
-import org.fttbot.layer.FUnitType
 import java.util.*
 
 open class BBUnit(val unit: FUnit) {
@@ -21,24 +19,26 @@ open class BBUnit(val unit: FUnit) {
     var moveTarget: Position? = null
     var targetResource: FUnit? = null
     var status: String = "<Nothing>"
-    var construction : Construction? = null
+    var construction: Construction? = null
     var scouting: Scouting? = null
     var attacking: Attacking? = null
-
+    var combatSuccessProbability: Double = 0.5
 }
 
 class Construction(val type: FUnitType, var position: TilePosition) {
     // Confirmed by the engine to have started
-    var started : Boolean = false
+    var started: Boolean = false
     // Worker called "build"
     var commissioned: Boolean = false
+    var building: FUnit? = null
 }
 
-class Scouting(val locations: Deque<Position>)  {
+class Scouting(val locations: Deque<Position>) {
     var points: List<Position>? = null
     var index: Int = 0
 }
-class Attacking(val target: FUnit? = null)
+
+class Attacking(val target: FUnit)
 
 object ProductionBoard {
     val queue = ArrayDeque<Item>()
@@ -51,5 +51,4 @@ object ProductionBoard {
 
 object ScoutingBoard {
     var lastScoutTime: Int = 0
-    var enemyBase : Position? = null
 }

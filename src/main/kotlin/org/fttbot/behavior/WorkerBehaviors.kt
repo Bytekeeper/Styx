@@ -32,6 +32,18 @@ fun findWorker(forPosition: Position? = null, maxRange: Double = 400.0): FUnit? 
     })
 }
 
+class ShouldReturnResource : UnitLT() {
+    override fun execute(): Status {
+        val unit = board().unit
+        if (!unit.isGatheringMinerals && unit.isCarryingMinerals
+                || !unit.isGatheringGas && unit.isCarryingGas) return Status.SUCCEEDED
+        return Status.FAILED
+    }
+
+    override fun start() {
+    }
+}
+
 class ReturnResource : UnitLT() {
     override fun execute(): Status {
         val unit = board().unit
@@ -42,14 +54,14 @@ class ReturnResource : UnitLT() {
         }
         return Status.SUCCEEDED
     }
-
-    override fun cpy(): Task<BBUnit> = ReturnResource()
 }
 
 class GatherMinerals : UnitLT() {
     override fun execute(): Status {
         val unit = board().unit
         val targetResource = board().targetResource
+
+        if (targetResource?.isMineralField == false) return Status.FAILED
 
         if (!unit.isGatheringMinerals || targetResource != null) {
             val target = targetResource ?: FUnit.minerals()
@@ -62,8 +74,6 @@ class GatherMinerals : UnitLT() {
         }
         return Status.RUNNING
     }
-
-    override fun cpy(): Task<BBUnit> = GatherMinerals()
 }
 
 class GatherGas : UnitLT() {
@@ -71,7 +81,9 @@ class GatherGas : UnitLT() {
         val unit = board().unit
         val targetResource = board().targetResource
 
-        if (!unit.isGatheringMinerals || targetResource != null) {
+        if (targetResource?.isRefinery == false) return Status.FAILED
+
+        if (!unit.isGatheringGas || targetResource != null) {
             val target = targetResource ?: FUnit.allUnits()
                     .filter { it.isRefinery && it.isPlayerOwned && it.distanceTo(unit) < 300 }
                     .minBy { it.distanceTo(unit) }
@@ -82,8 +94,6 @@ class GatherGas : UnitLT() {
         }
         return Status.RUNNING
     }
-
-    override fun cpy(): Task<BBUnit> = GatherGas()
 }
 
 class ShouldConstruct : UnitLT() {
@@ -91,18 +101,22 @@ class ShouldConstruct : UnitLT() {
     }
 
     override fun execute(): Status = if (board().construction != null) Status.SUCCEEDED else Status.FAILED
-
-    override fun cpy(): Task<BBUnit> = ShouldConstruct()
 }
 
 class SelectConstructionSiteAsTarget : UnitLT() {
     override fun execute(): Status {
         val construction = board().construction!!
-        board().moveTarget = construction.position.toPosition().translated(TilePosition.SIZE_IN_PIXELS / 2, TilePosition.SIZE_IN_PIXELS / 2)
+        board().moveTarget = construction.position.toPosition().translated(TilePosition.SIZE_IN_PIXELS, TilePosition.SIZE_IN_PIXELS)
         return Status.SUCCEEDED
     }
+}
 
-    override fun cpy(): Task<BBUnit> = SelectConstructionSiteAsTarget()
+class AbortConstruct : UnitLT() {
+    override fun execute(): Status {
+        board().construction = null
+        if (board().unit.isConstructing) board().unit.stopConstruct()
+        return Status.SUCCEEDED
+    }
 }
 
 class Construct : UnitLT() {
@@ -115,12 +129,17 @@ class Construct : UnitLT() {
             throw IllegalStateException("Building ${construct.type}was started but not yet 'started' by this worker")
         }
 
-        if (!unit.isConstructing && construct.started) {
+        if (construct.building?.isCompleted ?: false) {
             board().construction = null
             return Status.SUCCEEDED
         }
         if (!unit.isConstructing || unit.isConstructing && unit.buildType != construct.type) {
-            if (unit.construct(construct.type, position)) {
+            if (construct.building != null) {
+                if (unit.rightClick(construct.building!!)) {
+                    LOG.info("${unit} will continue construction of ${construct.type} at ${construct.position}")
+                } else return Status.FAILED
+            } else if (unit.construct(construct.type, position)) {
+                LOG.info("${unit} sent to construct ${construct.type} at ${construct.position}")
                 construct.commissioned = true
             } else {
                 return Status.FAILED
@@ -128,18 +147,17 @@ class Construct : UnitLT() {
         }
         return Status.RUNNING
     }
-
-    override fun cpy(): Task<BBUnit> = Construct()
 }
 
 class ShouldDefendWithWorker : UnitLT() {
     override fun start() {}
 
     override fun execute(): Status {
+        val unit = board().unit
+        if (FUnit.unitsInRadius(unit.position, 300).filter { it.isPlayerOwned && it.isBase }.any()) return Status.SUCCEEDED
+        board().attacking = null
         return Status.FAILED
     }
-
-    override fun cpy(): Task<BBUnit> = ShouldDefendWithWorker()
 }
 
 const val RESOURCE_RANGE = 300
@@ -148,51 +166,47 @@ class AssignWorkersToResources : LeafTask<Unit>() {
     override fun execute(): Status {
         val myBases = FUnit.allUnits().filter { it.isPlayerOwned && it.isBase }
 
-        val baseToWorker = FUnit.myWorkers()
-                .filter { it.isIdle }
-                .groupByTo(HashMap(), { it.closest(myBases) })
-        baseToWorker.forEach { base, workers ->
-            if (base != null) {
-                workers.sortBy { it.distanceTo(base) }
-            }
-        }
-        val baseToMineralField = FUnit.minerals()
-                .groupByTo(HashMap(), { it.closest(myBases) })
-        baseToMineralField.forEach { base, minerals ->
-            if (base != null) {
-                minerals.removeAll { it.distanceTo(base) >= RESOURCE_RANGE }
-                minerals.sortBy { it.distanceTo(base) }
-            }
-        }
-        val baseToRefinery = FUnit.allUnits()
-                .filter { it.isRefinery && it.isPlayerOwned }
-                .groupBy { it.closest(myBases) }
+        myBases.forEach { base ->
+            val relevantUnits = FUnit.unitsInRadius(base.position, RESOURCE_RANGE)
+            val refineries = relevantUnits.filter { it.isRefinery && it.isPlayerOwned }
+            val workers = relevantUnits.filter { it.isWorker && it.isPlayerOwned }.toMutableList()
+            val minerals = relevantUnits.filter { it.isMineralField }.toMutableList()
 
-        baseToRefinery.forEach { base, refineries ->
-            val workers = baseToWorker[base]
-            if (workers != null && base != null) {
-                refineries.filter { it.distanceTo(base) < RESOURCE_RANGE }
-                        .forEach { ref ->
-                            for (i in 1..3) {
-                                if (!workers.isEmpty())
-                                    workers.removeAt(0).board.targetResource = ref
-                            }
-                        }
+            val gasMissing = refineries.size * 3 - workers.count { it.isGatheringGas }
+            if (gasMissing > 0) {
+                val refinery = refineries.first()
+                repeat(gasMissing) {
+                    val worker = workers.firstOrNull { it.isIdle || it.isGatheringMinerals && !it.isCarryingMinerals }
+                            ?: workers.firstOrNull { it.isGatheringMinerals } ?: return@repeat
+                    worker.board.targetResource = refinery
+                    workers.remove(worker)
+                }
+            } else if (gasMissing < 0) {
+                repeat(-gasMissing) {
+                    val worker = workers.firstOrNull { it.isGatheringGas && !it.isCarryingGas }
+                            ?: workers.firstOrNull { it.isGatheringGas } ?: return@repeat
+                    val targetMineral = (minerals.filter { !it.isBeingGathered }.minBy { it.distanceTo(worker) }
+                            ?: minerals.minBy { it.distanceTo(worker) })
+                    if (targetMineral != null) {
+                        worker.board.targetResource = targetMineral
+                        minerals.remove(targetMineral)
+                        workers.remove(worker)
+                    }
+                }
             }
-        }
-        baseToMineralField.forEach { base, minerals ->
-            val workers = baseToWorker[base]
-            if (workers != null && base != null) {
-                minerals.filter { it.distanceTo(base) < RESOURCE_RANGE }
-                        .forEach { mineral ->
-                            if (!workers.isEmpty()) {
-                                workers.removeAt(0).board.targetResource = mineral
-                            }
+            workers.filter { it.isIdle }
+                    .forEach { worker ->
+                        val targetMineral = (minerals.filter { !it.isBeingGathered }.minBy { it.distanceTo(worker) }
+                                ?: minerals.minBy { it.distanceTo(worker) })
+                        if (targetMineral != null) {
+                            worker.board.targetResource = targetMineral
+                            minerals.remove(targetMineral)
                         }
-            }
+                    }
         }
+
         return Status.SUCCEEDED
     }
 
-    override fun copyTo(task: Task<Unit>?): Task<Unit> = AssignWorkersToResources()
+    override fun copyTo(task: Task<Unit>): Task<Unit> = task
 }
