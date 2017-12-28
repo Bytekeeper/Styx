@@ -5,6 +5,7 @@ import bwapi.TilePosition
 import bwapi.WalkPosition
 import com.badlogic.gdx.math.Vector2
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 fun TilePosition.translated(x: Int, y: Int) = TilePosition(this.x + x, this.y + y)
 fun Position.translated(x: Int, y: Int) = Position(this.x + x, this.y + y)
@@ -15,6 +16,7 @@ fun Vector2.toPosition() = Position(this.x.toInt(), this.y.toInt())
 operator fun Position.plus(other: Position) = Position(other.x + this.x, other.y + this.y)
 operator fun Position.minus(other: Position) = Position(this.x - other.x, this.y - other.y)
 operator fun Position.div(value: Int): Position = Position(this.x / value, this.y / value)
+fun Position.len() : Double = sqrt((x * x + y * y).toDouble())
 
 fun approxDistance(dx: Int, dy: Int): Int {
     var min = abs(dx);

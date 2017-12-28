@@ -33,12 +33,12 @@ object UnitBehaviors {
 
     init {
         btlib.registerArchetypeTree(Behavior.WORKER.name, BehaviorTree(DynamicGuardSelector(defendWithWorker, construct, Scout(), gatherMinerals)))
-        btlib.registerArchetypeTree(Behavior.TRAINER.name, BehaviorTree(Train()))
+        btlib.registerArchetypeTree(Behavior.TRAINER.name, BehaviorTree(TrainOrAddon()))
         btlib.registerArchetypeTree(Behavior.COMBAT_UNIT.name, BehaviorTree(
                 DynamicGuardSelector(
                         Selector(Attack().guardedBy(SelectRetreatAttackTarget()), Retreat()).guardedBy(UnfavorableSituation()),
                         FallBack().guardedBy(ShouldFallBack()),
-                        Attack().guardedBy(SelectBestAttackTarget()),
+                        Sequence(Attack(), FindGoodAttackPosition(), MoveToPosition()).guardedBy(SelectBestAttackTarget()),
                         MoveToEnemyBase())))
     }
 

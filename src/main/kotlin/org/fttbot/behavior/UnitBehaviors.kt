@@ -24,9 +24,9 @@ abstract class UnitLT : LeafTask<BBUnit>() {
 
 const val MOVE_TIMEOUT = 60
 
-class MoveToPosition(var threshold: Double = 5.0) : UnitLT() {
+class MoveToPosition(var threshold: Double = 12.0) : UnitLT() {
     var bestDistance = Double.MAX_VALUE
-    var bestDistanceTime = 0
+    var bestDistanceFrame = 0
 
     override fun start() {
         super.start()
@@ -40,12 +40,12 @@ class MoveToPosition(var threshold: Double = 5.0) : UnitLT() {
         if (distance <= threshold) {
             return Status.SUCCEEDED
         }
-        val elapsedTime = FTTBot.game.elapsedTime()
+        val elapsedFrames = FTTBot.game.frameCount
         if (distance < bestDistance) {
-            bestDistanceTime = elapsedTime
+            bestDistanceFrame = elapsedFrames
             bestDistance = distance
         }
-        if (elapsedTime - bestDistanceTime > MOVE_TIMEOUT) {
+        if (elapsedFrames - bestDistanceFrame > distance * 5 / unit.type.topSpeed) {
             return Status.FAILED
         }
         if (!unit.isMoving || targetPosition.getDistance(unit.targetPosition) >= threshold) {

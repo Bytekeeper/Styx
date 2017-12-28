@@ -168,8 +168,9 @@ class AssignWorkersToResources : LeafTask<Unit>() {
 
         myBases.forEach { base ->
             val relevantUnits = FUnit.unitsInRadius(base.position, RESOURCE_RANGE)
-            val refineries = relevantUnits.filter { it.isRefinery && it.isPlayerOwned }
-            val workers = relevantUnits.filter { it.isWorker && it.isPlayerOwned }.toMutableList()
+            val refineries = relevantUnits.filter { it.isRefinery && it.isPlayerOwned && it.isCompleted }
+            val workers = (relevantUnits.filter { it.isWorker && it.isPlayerOwned } +
+                    FUnit.myWorkers().filter { it.isInRefinery && it.position.getDistance(base.position) < RESOURCE_RANGE }).toMutableList()
             val minerals = relevantUnits.filter { it.isMineralField }.toMutableList()
 
             val gasMissing = refineries.size * 3 - workers.count { it.isGatheringGas }
@@ -183,8 +184,8 @@ class AssignWorkersToResources : LeafTask<Unit>() {
                 }
             } else if (gasMissing < 0) {
                 repeat(-gasMissing) {
-                    val worker = workers.firstOrNull { it.isGatheringGas && !it.isCarryingGas }
-                            ?: workers.firstOrNull { it.isGatheringGas } ?: return@repeat
+                    val worker = workers.firstOrNull { it.isGatheringGas && !it.isCarryingGas && !it.isInRefinery }
+                            ?: workers.firstOrNull { it.isGatheringGas && !it.isInRefinery } ?: return@repeat
                     val targetMineral = (minerals.filter { !it.isBeingGathered }.minBy { it.distanceTo(worker) }
                             ?: minerals.minBy { it.distanceTo(worker) })
                     if (targetMineral != null) {

@@ -4,6 +4,8 @@ import bwapi.*
 import bwapi.Unit
 import bwta.BWTA
 import com.badlogic.gdx.ai.btree.BehaviorTree
+import com.badlogic.gdx.ai.btree.branch.Selector
+import com.badlogic.gdx.ai.btree.branch.Sequence
 import org.fttbot.behavior.*
 import org.fttbot.estimation.EnemyModel
 import org.fttbot.import.FUnitType
@@ -19,7 +21,13 @@ object FTTBot : DefaultBWListener() {
     lateinit var self: Player
     lateinit var enemy: Player
     private val workerManager = BehaviorTree(AssignWorkersToResources())
-    private val buildManager = BehaviorTree(BuildNextItemFromProductionQueue(), ProductionBoard)
+    private val buildManager = BehaviorTree(
+            Selector (
+                    SupplyProduction(),
+                    BuildNextItemFromProductionQueue(),
+                    ProduceAttacker(), WorkerProduction()
+            ),
+            ProductionBoard)
     private val scoutManager = BehaviorTree(ScoutEnemyBase(), ScoutingBoard)
 
 //    private val combatManager = BehaviorTree(AttackEnemyBase())
@@ -65,37 +73,8 @@ object FTTBot : DefaultBWListener() {
                 ProductionBoard.Item(FUnitType.Terran_SCV),
                 ProductionBoard.Item(FUnitType.Terran_Marine),
                 ProductionBoard.Item(FUnitType.Terran_Factory),
-                ProductionBoard.Item(FUnitType.Terran_SCV),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_SCV),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Factory),
-                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Vulture),
-                ProductionBoard.Item(FUnitType.Terran_Vulture)
+                ProductionBoard.Item(FUnitType.Terran_Machine_Shop),
+                ProductionBoard.Item(FUnitType.Terran_Siege_Tank_Tank_Mode)
         ))
     }
 
@@ -109,9 +88,9 @@ object FTTBot : DefaultBWListener() {
         }
 
 //        Exporter.export()
-
         EnemyModel.step()
         workerManager.step()
+        ProductionBoard.updateReserved()
         buildManager.step()
         scoutManager.step()
         UnitBehaviors.step()
@@ -155,6 +134,7 @@ object FTTBot : DefaultBWListener() {
         for (unit in FUnit.myUnits().filter { it.canAttack }) {
             game.drawTextMap(unit.position.translated(0, -10), "%.2f".format(unit.board.combatSuccessProbability))
         }
+        game.drawTextScreen(0, 0, "APM: ${game.apm}")
     }
 
     override fun onUnitDestroy(unit: Unit) {
@@ -168,7 +148,6 @@ object FTTBot : DefaultBWListener() {
     override fun onUnitCreate(unit: Unit) {
         if (unit.type.isNeutral) return
         val funit = FUnit.of(unit)
-        ProductionBoard.queueNeedsRebuild = true
         checkForStartedConstruction(funit)
     }
 

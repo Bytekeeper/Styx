@@ -2,7 +2,7 @@ package org.fttbot.behavior
 
 import bwapi.Color
 import bwapi.Position
-import bwapi.UnitType
+import com.badlogic.gdx.math.Intersector
 import org.fttbot.*
 import org.fttbot.estimation.CombatEval
 import org.fttbot.estimation.EnemyModel
@@ -20,9 +20,9 @@ class SelectRetreatAttackTarget : UnitLT() {
 
     override fun execute(): Status {
         val unit = board().unit
-        if (unit.groundWeaponCooldown > 0 || unit.airWeaponCooldown > 0) return Status.FAILED
+        if (unit.groundWeaponIsOnCooldown || unit.airWeaponIsOnCooldown) return Status.FAILED
         if (unit.canBeAttacked()) return Status.FAILED
-        val safety = (unit.type.topSpeed * MAX_FRAMES_TO_ATTACK / 6).toInt()
+        val safety = (unit.type.topSpeed * MAX_FRAMES_TO_ATTACK / 8).toInt()
         val enemiesInArea = FUnit.unitsInRadius(unit.position, 300)
                 .filter { it.isEnemy && unit.canAttack(it, safety) }
         val simUnit = SimUnit.of(unit)
@@ -65,7 +65,7 @@ class SelectBestAttackTarget : UnitLT() {
         return Status.SUCCEEDED
     }
 
-    private fun disregard(unitType: FUnitType) = when (unitType){
+    private fun disregard(unitType: FUnitType) = when (unitType) {
         FUnitType.Zerg_Larva -> true
         FUnitType.Zerg_Egg -> true
         else -> false
@@ -76,12 +76,35 @@ class Attack : UnitLT() {
     override fun execute(): Status {
         val unit = board().unit
         val attacking = board().attacking ?: throw IllegalStateException()
-        if (unit.isAttackFrame) return Status.RUNNING
+        if (unit.isStartingAttack) return Status.RUNNING
         val target = attacking.target
-        if (target != unit.target) {
-            unit.attack(target)
+        if (target.isAir && unit.airWeaponIsOnCooldown || !target.isAir && unit.groundWeaponIsOnCooldown) return Status.SUCCEEDED
+        if (target != unit.target || !unit.isAttacking) {
+            if (!unit.attack(target)) return Status.FAILED
         }
         return Status.RUNNING
+    }
+}
+
+class FindGoodAttackPosition : UnitLT() {
+    override fun execute(): Status {
+        val unit = board().unit
+        val simUnit = SimUnit.of(unit)
+        val relevantEnemyPositions = (FUnit.unitsInRadius(unit.position, 300)
+                .filter { it.canAttack(unit, 32) && it.isEnemy } + EnemyModel.seenUnits.filter { it.position != null && it.distanceTo(unit) <= 300 })
+                .map {
+                    val wpn = it.type.getWeaponAgainst(unit)
+                    val simEnemy = SimUnit.of(it)
+                    val dpf = simEnemy.damagePerFrameTo(simUnit)
+                    (unit.position - it.position!!).toVector().setLength(wpn.maxRange + 32f).add(it.position!!.toVector()).scl(dpf.toFloat()) to dpf
+                }
+        if (relevantEnemyPositions.isEmpty()) return Status.FAILED
+        val aggPosition = relevantEnemyPositions
+                .reduce { (pa, da), (pb, db) -> (pa.add(pb)) to (da + db) }
+        val maxAvoidPosition = aggPosition.first.scl(1 / aggPosition.second.toFloat())
+        val targetPos = board().attacking!!.target.position.toVector()
+        board().moveTarget = maxAvoidPosition.sub(targetPos).setLength(unit.type.getWeaponAgainst(board().attacking!!.target).maxRange.toFloat()).add(targetPos).toPosition()
+        return Status.SUCCEEDED
     }
 }
 
@@ -112,7 +135,7 @@ abstract class SituationEvaluator : UnitLT() {
         val unit = board().unit
         if (unit.isInRefinery) return 0.5
         val unitsInArea = FUnit.unitsInRadius(unit.position, 600)
-                .filter { it.isCompleted && it.canAttack}
+                .filter { it.isCompleted && it.canAttack }
         val center = unitsInArea.fold(Position(0, 0)) { a, u -> a + u.position } / unitsInArea.size
         val relevantUnits = unitsInArea.filter { it.distanceTo(center) < 300 }.toMutableSet()
         relevantUnits.add(unit)
@@ -132,13 +155,10 @@ abstract class SituationEvaluator : UnitLT() {
 }
 
 class Retreat : UnitLT() {
-    override fun start() {
-    }
-
     override fun execute(): Status {
         val unit = board().unit
 
-        if (unit.targetPosition.toTilePosition().getDistance(FTTBot.self.startLocation) > 2) {
+        if (!unit.isMoving || unit.targetPosition.toTilePosition().getDistance(FTTBot.self.startLocation) > 2) {
             unit.move(FTTBot.self.startLocation)
         }
         return Status.RUNNING
@@ -165,11 +185,13 @@ class ShouldFallBack : UnitLT() {
     override fun execute(): Status {
         val unit = board().unit
         // Not engaged or shooting in this very moment? Don't fall back
-        if (unit.isStartingAttack || unit.groundWeaponCooldown == 0 && unit.airWeaponCooldown == 0) return Status.FAILED
+        if (unit.isStartingAttack || !unit.groundWeaponIsOnCooldown && !unit.airWeaponIsOnCooldown) return Status.FAILED
         // Melee? Don't fall back, but maybe retreat
-        if (unit.groundWeaponCooldown > 0 && unit.groundWeapon.isMelee()) return Status.FAILED
-        unit.potentialAttackers().firstOrNull { it.canAttack(unit)
-                && it.type.getWeaponAgainst(unit).maxRange < unit.type.getWeaponAgainst(it).maxRange} ?: return Status.FAILED
+        if (unit.groundWeaponIsOnCooldown && unit.groundWeapon.isMelee()) return Status.FAILED
+        unit.potentialAttackers().firstOrNull {
+            it.canAttack(unit, 32)
+                    && it.type.getWeaponAgainst(unit).maxRange + 32 < unit.type.getWeaponAgainst(it).maxRange
+        } ?: return Status.FAILED
         return Status.SUCCEEDED
     }
 }

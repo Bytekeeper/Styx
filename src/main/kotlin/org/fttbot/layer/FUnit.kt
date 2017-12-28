@@ -9,6 +9,7 @@ import org.fttbot.estimation.EnemyModel
 import org.fttbot.estimation.MAX_FRAMES_TO_ATTACK
 import org.fttbot.import.FUnitType
 import org.fttbot.import.FWeaponType
+import kotlin.math.max
 
 fun Unit.toFUnit() = FUnit.of(this)
 
@@ -18,7 +19,7 @@ fun FWeaponType.isMelee() = this != FWeaponType.None &&  maxRange <= MAX_MELEE_R
 fun FWeaponType.inRange(distance: Int, safety: Int): Boolean =
         this.minRange <= distance && this.maxRange >= distance - safety
 fun FUnitType.getWeaponAgainst(other: UnitLike) = if (other.isAir) airWeapon else groundWeapon
-
+fun FUnitType.produces() = FUnitType.instances.values.filter { it.whatBuilds.first == this }
 
 interface UnitLike {
     val position: Position?
@@ -36,6 +37,9 @@ interface UnitLike {
     val groundHeight get() = FTTBot.game.getGroundHeight(tilePosition!!)
     val canMove get() = type.canMove
     val isAir get() = type.isFlyer
+    val isMelee get() = type.groundWeapon.isMelee()
+    val groundWeaponIsOnCooldown get () = groundWeaponCooldown > 1
+    val airWeaponIsOnCooldown get () = airWeaponCooldown > 1
 
     fun distanceTo(other: UnitLike): Int {
         val left = other.left - 1
@@ -86,9 +90,9 @@ interface UnitLike {
     fun canAttackConsideringCooldowns(unit: UnitLike, safety: Int = 0): Boolean {
         val distance = unit.distanceTo(this)
         return (unit.type.isFlyer && type.airWeapon != FWeaponType.None && type.airWeapon.inRange(distance, safety)
-                && (groundWeaponCooldown == 0))
+                && !groundWeaponIsOnCooldown)
                 || (!unit.type.isFlyer && type.groundWeapon != FWeaponType.None && type.groundWeapon.inRange(distance, safety)
-                && (airWeaponCooldown == 0))
+                && !airWeaponIsOnCooldown)
     }
 
 
@@ -161,7 +165,6 @@ class FUnit private constructor(val unit: Unit) : UnitLike {
     val isAttacking get() = unit.isAttacking
     override val isVisible get() = unit.isVisible
     val canHeal get() = type == FUnitType.Terran_Medic
-    val isMelee get() = type.groundWeapon.isMelee()
     val target get() = unit.orderTarget?.toFUnit()
 
     val isDead get() = !unit.exists() && unit.isVisible
@@ -171,7 +174,7 @@ class FUnit private constructor(val unit: Unit) : UnitLike {
     override val airWeaponCooldown get() = unit.airWeaponCooldown
     val groundWeapon get() = FWeaponType.of(unit.type.groundWeapon())
     val airWeapon get() = FWeaponType.of(unit.type.airWeapon())
-    val isInRefinery get() = unit.isGatheringGas && !unit.isInterruptible
+    val isInRefinery get() = unit.isGatheringGas && !FUnit.unitsInRadius(position, 3).contains(this)
     override val isUnderDarkSwarm get() = unit.isUnderDarkSwarm
 
     fun lastCommand() = unit.lastCommand
@@ -182,6 +185,7 @@ class FUnit private constructor(val unit: Unit) : UnitLike {
     fun returnCargo() = if (unit.lastCommand.unitCommandType != UnitCommandType.Return_Cargo) unit.returnCargo() else true
     fun attack(targetUnit: FUnit) = if (unit.lastCommand.unitCommandType != UnitCommandType.Attack_Unit || unit.orderTarget != targetUnit.unit) unit.attack(targetUnit.unit) else true
     fun attack(targetPosition: Position) = unit.attack(targetPosition)
+    fun buildAddon(type: FUnitType) = unit.buildAddon(type.source)
 
     fun construct(type: FUnitType, position: TilePosition) = unit.build(type.source, position)
     fun rightClick(target: FUnit) = unit.rightClick(target.unit)
@@ -203,5 +207,4 @@ class FUnit private constructor(val unit: Unit) : UnitLike {
                     EnemyModel.seenUnits.filter { !it.isVisible && it.position != null && it.canAttack(this, (it.type.topSpeed * MAX_FRAMES_TO_ATTACK).toInt()) })
 
     fun canBeAttacked() = !potentialAttackers().isEmpty()
-
 }

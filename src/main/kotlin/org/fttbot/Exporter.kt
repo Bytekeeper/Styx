@@ -12,6 +12,7 @@ object Exporter {
         internalExport(PrintWriter("out/UpgradeTypes.kt"), UpgradeType::class.java)
         internalExport(PrintWriter("out/TechTypes.kt"), TechType::class.java)
         internalExport(PrintWriter("out/Orders.kt"), Order::class.java)
+        internalExport(PrintWriter("out/BulletTyes.kt"), BulletType::class.java)
         println("done")
     }
 

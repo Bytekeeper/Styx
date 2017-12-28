@@ -41,12 +41,22 @@ class Scouting(val locations: Deque<Position>) {
 class Attacking(val target: FUnit)
 
 object ProductionBoard {
+    val orderedConstructions = ArrayDeque<Construction>()
     val queue = ArrayDeque<Item>()
     var reservedMinerals = 0
     var reservedGas = 0
-    var queueNeedsRebuild = true
 
-    class Item(val type: FUnitType)
+    fun updateReserved() {
+        reservedMinerals = 0
+        reservedGas = 0
+        orderedConstructions.filter { !it.started }
+                .forEach {
+                    reservedMinerals += it.type.mineralPrice
+                    reservedGas += it.type.gasPrice
+                }
+    }
+
+    class Item(val type: FUnitType, val favoriteBuilder: FUnit? = null)
 }
 
 object ScoutingBoard {

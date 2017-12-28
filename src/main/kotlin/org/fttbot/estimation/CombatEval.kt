@@ -4,7 +4,6 @@ import bwapi.DamageType
 import bwapi.Position
 import bwapi.TilePosition
 import bwapi.UnitSizeType
-import com.badlogic.gdx.math.MathUtils
 import org.fttbot.import.FUnitType
 import org.fttbot.import.FWeaponType
 import org.fttbot.layer.UnitLike
@@ -19,29 +18,24 @@ const val HEAL_PER_ENERGY = 2
 object CombatEval {
     fun probabilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>): Double {
         val damageA = unitsOfPlayerA.sumByDouble { a ->
-            if (unitsOfPlayerB.isEmpty()) 0.01
-            else unitsOfPlayerB.map { b -> threatScale(a, b) * a.damagePerFrameTo(b) }.max() ?: 0.0
+            if (a.type == FUnitType.Terran_Bunker) return FUnitType.Terran_Marine.groundWeapon.damageAmount * 4.0
+            else unitsOfPlayerB.map { b -> a.damagePerFrameTo(b) }.max() ?: 0.01
         }
         val damageB = unitsOfPlayerB.sumByDouble { b ->
-            if (unitsOfPlayerA.isEmpty()) 0.01
-            else unitsOfPlayerA.map { a -> threatScale(b, a) * b.damagePerFrameTo(a) }.max() ?: 0.0
+            if (b.type == FUnitType.Terran_Bunker) return FUnitType.Terran_Marine.groundWeapon.damageAmount * 4.0
+            else unitsOfPlayerA.map { a -> b.damagePerFrameTo(a) }.max() ?: 0.01
         }
         val hpA = unitsOfPlayerA.sumBy { it.hitPoints } + unitsOfPlayerA.count { it.canHeal } * HEAL_PER_ENERGY
         val hpB = unitsOfPlayerB.sumBy { it.hitPoints } + unitsOfPlayerB.count { it.canHeal } * HEAL_PER_ENERGY
 
-        val agg = 5000.0 * (damageA / (hpB.toFloat() + .1) - damageB / (hpA.toFloat() + .1))
-        return 1.0 / (exp(-agg) + 1)
-    }
+        val rangeA = unitsOfPlayerA.map { max(it.type.groundWeapon.maxRange, it.type.airWeapon.maxRange) }.sum() + 0.1
+        val rangeB = unitsOfPlayerB.map { max(it.type.groundWeapon.maxRange, it.type.airWeapon.maxRange) }.sum() + 0.1
+        val mobilityA = unitsOfPlayerA.map { it.type.topSpeed }.sum() + 0.1
+        val mobilityB = unitsOfPlayerB.map { it.type.topSpeed }.sum() + 0.1
 
-    private fun threatScale(unit: SimUnit, to: SimUnit) = when {
-        unit.canAttack(to) -> 1.0
-        !unit.canMove && unit.type != FUnitType.Terran_Bunker -> 0.0
-        unit.position == null || to.position == null -> 1.0
-        else -> {
-            val interpolationRange = unit.type.topSpeed * MAX_FRAMES_TO_ATTACK
-            val weaponRange = unit.determineWeaponAgainst(to).maxRange + if (unit.type == FUnitType.Terran_Bunker) 32 else 0
-            MathUtils.clamp((weaponRange - unit.distanceTo(to) + interpolationRange) / interpolationRange, 0.0, 1.0)
-        }
+        val agg = 5000.0 * (damageA / (hpB.toFloat() + .1) - damageB / (hpA.toFloat() + .1)) +
+                20 * (rangeA / mobilityB - rangeB / mobilityA)
+        return 1.0 / (exp(-agg) + 1)
     }
 }
 
@@ -59,7 +53,8 @@ class SimUnit(override val type: FUnitType,
               override var airWeaponCooldown: Int = 0,
               override var groundWeaponCooldown: Int = 0,
               override val groundHeight: Int = 0,
-              override val isAir: Boolean = type.isFlyer) : UnitLike {
+              override val isAir: Boolean = type.isFlyer,
+              var framesPaused: Int = 0) : UnitLike {
     override val isVisible = false
 
     companion object {
@@ -107,6 +102,8 @@ class SimUnit(override val type: FUnitType,
     fun determineWeaponAgainst(other: SimUnit) = if (type == FUnitType.Terran_Bunker) FUnitType.Terran_Marine.getWeaponAgainst(other)
     else type.getWeaponAgainst(other)
 
+    fun weaponCoolDownVs(other: SimUnit) = if (other.isAir) airWeaponCooldown else groundWeaponCooldown
+
     private fun damageTypeModifier(damageType: DamageType, unitSizeType: UnitSizeType): Double =
             when (damageType) {
                 DamageType.Concussive -> when (unitSizeType) {
@@ -126,5 +123,5 @@ class SimUnit(override val type: FUnitType,
                 else -> throw IllegalStateException("Can't compare with ${damageType}")
             }
 
-    override fun toString(): String = "{$type} at ${position}"
+    override fun toString(): String = "{$type} at ${position} with ${hitPoints} hp"
 }
