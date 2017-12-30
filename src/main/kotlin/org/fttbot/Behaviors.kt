@@ -8,7 +8,10 @@ import com.badlogic.gdx.ai.btree.branch.Sequence
 import com.badlogic.gdx.ai.btree.leaf.Success
 import com.badlogic.gdx.ai.btree.utils.BehaviorTreeLibrary
 import org.fttbot.behavior.*
-import org.fttbot.layer.FUnit
+import org.fttbot.behavior.Scout
+import org.fttbot.layer.isWorker
+import org.openbw.bwapi4j.unit.*
+import org.openbw.bwapi4j.unit.Unit
 
 fun <T> Task<T>.board(): T = this.`object`
 
@@ -20,7 +23,7 @@ fun <E, T : Task<E>> T.guardedBy(guard: Task<E>): T {
 
 object UnitBehaviors {
     private val btlib = BehaviorTreeLibrary()
-    private val unitBehavior = HashMap<FUnit, BehaviorTree<*>>()
+    private val unitBehavior = HashMap<PlayerUnit, BehaviorTree<*>>()
 
     private val gatherMinerals
         get() = DynamicGuardSelector(ReturnResource().guardedBy(ShouldReturnResource()),
@@ -42,20 +45,20 @@ object UnitBehaviors {
                         MoveToEnemyBase())))
     }
 
-    fun hasBehaviorFor(unit: FUnit) = unitBehavior.containsKey(unit)
+    fun hasBehaviorFor(unit: PlayerUnit) = unitBehavior.containsKey(unit)
 
-    fun createTreeFor(unit: FUnit): BehaviorTree<*> {
+    fun createTreeFor(unit: PlayerUnit): BehaviorTree<*> {
         val behavior = when {
-            unit.isWorker -> createTreeFor(Behavior.WORKER, BBUnit.of(unit))
-            unit.type.canProduce -> createTreeFor(Behavior.TRAINER, BBUnit.of(unit))
-            unit.canAttack -> createTreeFor(Behavior.COMBAT_UNIT, BBUnit.of(unit))
+            (unit is MobileUnit) && unit.isWorker -> createTreeFor(Behavior.WORKER, BBUnit.of(unit))
+            unit is TrainingFacility -> createTreeFor(Behavior.TRAINER, BBUnit.of(unit))
+            unit is Armed -> createTreeFor(Behavior.COMBAT_UNIT, BBUnit.of(unit))
             else -> BehaviorTree<Unit>(Success())
         }
         unitBehavior[unit] = behavior
         return behavior
     }
 
-    fun removeBehavior(unit: FUnit) {
+    fun removeBehavior(unit: PlayerUnit) {
         unitBehavior.remove(unit)
     }
 

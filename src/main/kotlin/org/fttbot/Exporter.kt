@@ -1,6 +1,7 @@
 package org.fttbot
 
-import bwapi.*
+import org.openbw.bwapi4j.TilePosition
+import org.openbw.bwapi4j.type.*
 import java.io.PrintWriter
 import java.lang.reflect.ParameterizedType
 import java.lang.reflect.Type
@@ -67,7 +68,7 @@ object Exporter {
                             is ExplosionType, is DamageType, is UnitSizeType, is Race -> "${it.returnType.simpleName}.${value}"
                             is TilePosition -> "TilePosition(${value.x}, ${value.y})"
                             is Order, is UnitType, is TechType, is UpgradeType, is WeaponType -> "lazy(LazyThreadSafetyMode.NONE) {F${it.returnType.simpleName}.${value}}"
-                            is Pair<*, *> -> "lazy(LazyThreadSafetyMode.NONE) {FUnitType.${value.first} to ${value.second}}"
+                            is Pair<*, *> -> "lazy(LazyThreadSafetyMode.NONE) {UnitType.${value.first} to ${value.second}}"
                             is List<*> -> when {
                                 value.isEmpty() -> {
                                     val actualType = (it.genericReturnType as ParameterizedType).actualTypeArguments[0]

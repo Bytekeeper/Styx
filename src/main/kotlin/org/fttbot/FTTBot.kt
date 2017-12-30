@@ -1,25 +1,33 @@
 package org.fttbot
 
-import bwapi.*
-import bwapi.Unit
 import bwta.BWTA
 import com.badlogic.gdx.ai.btree.BehaviorTree
 import com.badlogic.gdx.ai.btree.branch.Selector
-import com.badlogic.gdx.ai.btree.branch.Sequence
 import org.fttbot.behavior.*
 import org.fttbot.estimation.EnemyModel
-import org.fttbot.import.FUnitType
-import org.fttbot.layer.FUnit
+import org.fttbot.layer.UnitQuery
+import org.fttbot.layer.board
+import org.fttbot.layer.isEnemyUnit
+import org.fttbot.layer.isMyUnit
+import org.openbw.bwapi4j.*
+import org.openbw.bwapi4j.type.Color
+import org.openbw.bwapi4j.type.Race
+import org.openbw.bwapi4j.type.UnitType
+import org.openbw.bwapi4j.unit.Building
+import org.openbw.bwapi4j.unit.PlayerUnit
 import java.util.logging.ConsoleHandler
 import java.util.logging.Level
 import java.util.logging.Logger
+import org.openbw.bwapi4j.unit.Unit
 
-object FTTBot : DefaultBWListener() {
+object FTTBot : BWEventListener {
+
     private val LOG = Logger.getLogger(this::class.java.simpleName)
-    private val mirror = Mirror()
-    lateinit var game: Game
+    val game = BW(this)
     lateinit var self: Player
     lateinit var enemy: Player
+    lateinit var bwta : BWTA
+    lateinit var render: MapDrawer
     private val workerManager = BehaviorTree(AssignWorkersToResources())
     private val buildManager = BehaviorTree(
             Selector (
@@ -33,60 +41,55 @@ object FTTBot : DefaultBWListener() {
 //    private val combatManager = BehaviorTree(AttackEnemyBase())
 
     fun start() {
-        mirror.module.setEventListener(this)
-        mirror.startGame(true)
+        game.startGame()
     }
 
     override fun onStart() {
-        BWTA.readMap()
-        BWTA.analyze()
-        game = mirror.game
-        self = game.self()
-        enemy = game.enemy()
+        bwta = BWTA()
+        bwta.analyze()
+
+        self = game.interactionHandler.self()
+        enemy = game.interactionHandler.enemy()
+        render = game.mapDrawer
 
         Thread.sleep(100)
-        mirror.game.setLocalSpeed(1)
+        game.interactionHandler.setLocalSpeed(1)
 
         val consoleHandler = ConsoleHandler()
         consoleHandler.level = Level.INFO
         Logger.getLogger("").addHandler(consoleHandler)
         Logger.getLogger("").level = Level.INFO
 
-        val racePlayed = game.self().race
+        val racePlayed = self.race
         when (racePlayed) {
             Race.Protoss -> FTTConfig.useConfigForProtoss()
             Race.Terran -> FTTConfig.useConfigForTerran()
             Race.Zerg -> FTTConfig.useConfigForZerg()
+            else -> throw IllegalStateException("Can't handle race ${racePlayed}")
         }
 
         ProductionBoard.queue.addAll(listOf(
-                ProductionBoard.Item(FUnitType.Terran_SCV),
-                ProductionBoard.Item(FUnitType.Terran_SCV),
-                ProductionBoard.Item(FUnitType.Terran_SCV),
-                ProductionBoard.Item(FUnitType.Terran_SCV),
-                ProductionBoard.Item(FUnitType.Terran_Barracks),
-                ProductionBoard.Item(FUnitType.Terran_SCV),
-                ProductionBoard.Item(FUnitType.Terran_Supply_Depot),
-                ProductionBoard.Item(FUnitType.Terran_SCV),
-                ProductionBoard.Item(FUnitType.Terran_Refinery),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_SCV),
-                ProductionBoard.Item(FUnitType.Terran_Marine),
-                ProductionBoard.Item(FUnitType.Terran_Factory),
-                ProductionBoard.Item(FUnitType.Terran_Machine_Shop),
-                ProductionBoard.Item(FUnitType.Terran_Siege_Tank_Tank_Mode)
+                ProductionBoard.Item(UnitType.Terran_SCV),
+                ProductionBoard.Item(UnitType.Terran_SCV),
+                ProductionBoard.Item(UnitType.Terran_SCV),
+                ProductionBoard.Item(UnitType.Terran_SCV),
+                ProductionBoard.Item(UnitType.Terran_Barracks),
+                ProductionBoard.Item(UnitType.Terran_SCV),
+                ProductionBoard.Item(UnitType.Terran_Supply_Depot),
+                ProductionBoard.Item(UnitType.Terran_SCV),
+                ProductionBoard.Item(UnitType.Terran_Refinery),
+                ProductionBoard.Item(UnitType.Terran_Marine),
+                ProductionBoard.Item(UnitType.Terran_SCV),
+                ProductionBoard.Item(UnitType.Terran_Marine),
+                ProductionBoard.Item(UnitType.Terran_Factory),
+                ProductionBoard.Item(UnitType.Terran_Machine_Shop),
+                ProductionBoard.Item(UnitType.Terran_Factory),
+                ProductionBoard.Item(UnitType.Terran_Siege_Tank_Tank_Mode)
         ))
     }
 
     override fun onFrame() {
-        while (game.isPaused) {
-            try {
-                Thread.sleep(100)
-            } catch (e: InterruptedException) {
-                // No need to handle
-            }
-        }
-
+        UnitQuery.update(game.allUnits)
 //        Exporter.export()
         EnemyModel.step()
         workerManager.step()
@@ -96,25 +99,25 @@ object FTTBot : DefaultBWListener() {
         UnitBehaviors.step()
 
         for (board in BBUnit.all()) {
-            game.drawTextMap(board.unit.position, board.status)
+            render.drawTextMap(board.unit.position, board.status)
         }
 
-        BWTA.getRegions().forEachIndexed { index, region ->
+        bwta.getRegions().forEachIndexed { index, region ->
             val poly = region.polygon.points
             for (i in 0 until poly.size) {
                 val a = poly[i] //.toVector().scl(0.9f).mulAdd(region.polygon.center.toVector(), 0.1f).toPosition()
                 val b = poly[(i + 1) % poly.size] //.toVector().scl(0.9f).mulAdd(region.polygon.center.toVector(), 0.1f).toPosition()
-                game.drawLineMap(a, b,
+                render.drawLineMap(a, b,
                         when (index % 5) {
-                            0 -> Color.Green
-                            1 -> Color.Blue
-                            2 -> Color.Brown
-                            3 -> Color.Yellow
-                            else -> Color.Grey
+                            0 -> Color.GREEN
+                            1 -> Color.BLUE
+                            2 -> Color.BROWN
+                            3 -> Color.YELLOW
+                            else -> Color.GREY
                         })
             }
             region.chokepoints.forEach { chokepoint ->
-                game.drawLineMap(chokepoint.sides.first, chokepoint.sides.second, Color.Red)
+                render.drawLineMap(chokepoint.sides.first, chokepoint.sides.second, Color.RED)
             }
         }
         ConstructionPosition.resourcePolygons.values.forEach { poly ->
@@ -123,67 +126,97 @@ object FTTBot : DefaultBWListener() {
                 var j = i * 2
                 val a = Position(v[j].toInt() * 32, v[j + 1].toInt() * 32)
                 val b = Position(v[(j + 2) % v.size].toInt() * 32, v[(j + 3) % v.size].toInt() * 32)
-                game.drawLineMap(a, b, Color.Cyan)
+                render.drawLineMap(a, b, Color.CYAN)
             }
         }
-        for (unit in EnemyModel.seenUnits) {
+        for (unit in UnitQuery.enemyUnits.filter { !it.isVisible }) {
             if (unit.position == null) continue
-            game.drawCircleMap(unit.position, unit.type.width, Color.Red)
-            game.drawTextMap(unit.position, unit.type.toString())
+            render.drawCircleMap(unit.position, unit.width(), Color.RED)
+            render.drawTextMap(unit.position, unit.toString())
         }
-        for (unit in FUnit.myUnits().filter { it.canAttack }) {
-            game.drawTextMap(unit.position.translated(0, -10), "%.2f".format(unit.board.combatSuccessProbability))
-        }
-        game.drawTextScreen(0, 0, "APM: ${game.apm}")
     }
 
     override fun onUnitDestroy(unit: Unit) {
-        val fUnit = FUnit.of(unit)
-        BBUnit.destroy(fUnit)
-        UnitBehaviors.removeBehavior(fUnit)
-        FUnit.destroy(unit)
-        EnemyModel.remove(fUnit)
+        if (unit !is PlayerUnit) return
+        BBUnit.destroy(unit)
+        UnitBehaviors.removeBehavior(unit)
     }
 
     override fun onUnitCreate(unit: Unit) {
-        if (unit.type.isNeutral) return
-        val funit = FUnit.of(unit)
-        checkForStartedConstruction(funit)
+        if (unit !is PlayerUnit) return
+        checkForStartedConstruction(unit)
     }
 
-    private fun checkForStartedConstruction(funit: FUnit) {
-        if (funit.isBuilding && funit.isPlayerOwned) {
-            val workerWhoStartedIt = FUnit.myWorkers().firstOrNull {
+    private fun checkForStartedConstruction(unit: Unit) {
+        if (unit is Building && unit.isMyUnit) {
+            val workerWhoStartedIt = UnitQuery.myWorkers.firstOrNull {
                 val construction = it.board.construction ?: return@firstOrNull false
-                construction.commissioned && construction.position == funit.tilePosition && construction.type == funit.type
+                construction.commissioned && construction.position == unit.tilePosition && unit.isA(construction.type)
             }
             if (workerWhoStartedIt != null) {
                 val construction = workerWhoStartedIt.board.construction!!
-                construction.building = funit
+                construction.building = unit
                 construction.started = true
             } else {
-                LOG.severe("Can't find worker associated with building ${funit}!")
+                LOG.severe("Can't find worker associated with building ${unit}!")
             }
         }
     }
 
     override fun onUnitMorph(unit: Unit) {
-        if (unit.type.isNeutral) return
-        val funit = FUnit.of(unit)
-        checkForStartedConstruction(funit)
+        if (unit !is PlayerUnit) return
+        checkForStartedConstruction(unit)
     }
 
     override fun onUnitComplete(unit: Unit) {
-        if (unit.type.isNeutral) return
-        val funit = FUnit.of(unit)
-        LOG.info("Completed: ${funit}")
-        if (funit.isPlayerOwned && !UnitBehaviors.hasBehaviorFor(funit)) {
-            UnitBehaviors.createTreeFor(funit)
+        if (unit !is PlayerUnit) return
+        LOG.info("Completed: ${unit}")
+        if (unit.isMyUnit && !UnitBehaviors.hasBehaviorFor(unit)) {
+            UnitBehaviors.createTreeFor(unit)
         }
     }
 
     override fun onUnitShow(unit: Unit) {
-        val fUnit = FUnit.of(unit)
-        if (fUnit.isEnemy) EnemyModel.updateUnit(fUnit)
+        if (unit is PlayerUnit && unit.isEnemyUnit) EnemyModel.updateUnit(unit)
+    }
+
+    override fun onUnitHide(unit: Unit?) {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun onUnitRenegade(unit: Unit?) {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun onUnitDiscover(unit: Unit?) {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun onPlayerLeft(player: Player?) {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun onSendText(text: String?) {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun onReceiveText(player: Player?, text: String?) {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun onNukeDetect(target: Position?) {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun onSaveGame(gameName: String?) {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun onUnitEvade(unit: Unit?) {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    }
+
+    override fun onEnd(isWinner: Boolean) {
+        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 }

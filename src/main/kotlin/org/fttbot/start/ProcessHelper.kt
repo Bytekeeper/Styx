@@ -22,7 +22,8 @@ object ProcessHelper {
     fun startChaosLauncherProcess() {
         try {
             Thread.sleep(250)
-            executeInCommandLine("C:\\Program Files (x86)\\BWAPI\\Chaoslauncher\\Chaoslauncher.exe")
+            executeInCommandLine("c:\\Users\\dante\\BWAPI\\Chaoslauncher\\Chaoslauncher.exe")
+//            executeInCommandLine("C:\\Program Files (x86)\\BWAPI\\Chaoslauncher\\Chaoslauncher.exe")
         } catch (ex: InterruptedException) {
             // Don't do anything
         }

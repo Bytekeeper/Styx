@@ -5,7 +5,10 @@ import com.badlogic.gdx.ai.btree.LeafTask
 import com.badlogic.gdx.ai.btree.Task
 import org.fttbot.*
 import org.fttbot.estimation.EnemyModel
-import org.fttbot.layer.FUnit
+import org.fttbot.layer.*
+import org.openbw.bwapi4j.unit.Building
+import org.openbw.bwapi4j.unit.MobileUnit
+import org.openbw.bwapi4j.unit.PlayerUnit
 import java.util.*
 
 
@@ -15,7 +18,7 @@ class Scout : UnitLT() {
     }
 
     override fun execute(): Status {
-        val unit = board().unit
+        val unit = board().unit as MobileUnit
         val order = board().scouting ?: throw IllegalStateException()
 
         if (order.locations.isEmpty()) return Status.FAILED
@@ -25,21 +28,21 @@ class Scout : UnitLT() {
             unit.move(currentTargetLocation)
         }
 
-        if (order.points == null && FUnit.unitsInRadius(currentTargetLocation, 300).any { it.isBuilding && it.isEnemy }) {
+        if (order.points == null && UnitQuery.unitsInRadius(currentTargetLocation, 300).any { it is Building && it.isEnemyUnit }) {
             EnemyModel.enemyBase = currentTargetLocation
-            val regionPoly = BWTA.getRegion(currentTargetLocation).polygon
+            val regionPoly = FTTBot.bwta.getRegion(currentTargetLocation).polygon
             order.points = regionPoly.points
             val closest = order.points!!.minBy { it.getDistance(unit.position) }
             order.index = order.points!!.indexOf(closest)
         }
         if (order.points != null) {
             val points = order.points!!
-            val runFrom = FUnit.unitsInRadius(unit.position, 50).firstOrNull() { it.isEnemy && it.canAttack(unit, 30) }
+            val runFrom = UnitQuery.unitsInRadius(unit.position, 50).firstOrNull() { it is PlayerUnit && it.isEnemyUnit && it.canAttack(unit, 30) }
             if (runFrom != null) {
                 // TODO run
             }
             val nextPoint = points[order.index].toVector().scl(0.9f).mulAdd(currentTargetLocation.toVector(), 0.1f).toPosition()
-            if (unit.position.getDistance(nextPoint) > 80 && (unit.type.isFlyer || FTTBot.game.isWalkable(nextPoint.toWalkable()))) {
+            if (unit.position.getDistance(nextPoint) > 80 && (unit.isFlyer || FTTBot.game.bwMap.isWalkable(nextPoint.toWalkable()))) {
                 if (unit.targetPosition.getDistance(nextPoint) > 20) {
                     unit.move(nextPoint)
                 }
@@ -48,7 +51,7 @@ class Scout : UnitLT() {
                     order.index = (order.index + 1) % points.size
                 } while (points[order.index].getDistance(unit.position) < 120)
             }
-        } else if (unit.distanceTo(currentTargetLocation) < 200) {
+        } else if (unit.getDistance(currentTargetLocation) < 200) {
             // Nothing here, move on
             order.locations.pop()
         }
@@ -66,14 +69,14 @@ class Scout : UnitLT() {
 
 class ScoutEnemyBase : LeafTask<ScoutingBoard>() {
     override fun execute(): Status {
-        val time = FTTBot.game.elapsedTime()
-        if (time - `object`.lastScoutTime > 120) {
-            `object`.lastScoutTime = time
-            if (FUnit.myUnits().any { it.board.scouting != null }) {
+        val time = FTTBot.game.interactionHandler.frameCount
+        if (time - `object`.lastScoutFrameCount > 2800) {
+            `object`.lastScoutFrameCount = time
+            if (UnitQuery.myUnits.any { it.board.scouting != null }) {
                 return Status.RUNNING
             }
             val bbUnit = findWorker()?.board ?: return Status.FAILED
-            val locations = BWTA.getStartLocations().mapTo(ArrayDeque()) { it.tilePosition }
+            val locations = FTTBot.bwta.getStartLocations().mapTo(ArrayDeque()) { it.tilePosition }
             locations.remove(FTTBot.self.startLocation)
             bbUnit.scouting = Scouting(locations.mapTo(ArrayDeque()) { it.toPosition() })
         }

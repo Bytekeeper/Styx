@@ -1,36 +1,36 @@
 package org.fttbot
 
-import bwapi.Race
-import org.fttbot.import.FUnitType
+import org.openbw.bwapi4j.type.Race
+import org.openbw.bwapi4j.type.UnitType
 
 object FTTConfig {
     lateinit var MY_RACE: Race
-    lateinit var BASE: FUnitType
-    lateinit var WORKER: FUnitType
-    lateinit var SUPPLY: FUnitType
-    lateinit var GAS_BUILDING: FUnitType
+    lateinit var BASE: UnitType
+    lateinit var WORKER: UnitType
+    lateinit var SUPPLY: UnitType
+    lateinit var GAS_BUILDING: UnitType
 
     fun useConfigForTerran() {
         MY_RACE = Race.Terran
-        BASE = FUnitType.Terran_Command_Center
-        WORKER = FUnitType.Terran_SCV
-        SUPPLY = FUnitType.Terran_Supply_Depot
-        GAS_BUILDING = FUnitType.Terran_Refinery
+        BASE = UnitType.Terran_Command_Center
+        WORKER = UnitType.Terran_SCV
+        SUPPLY = UnitType.Terran_Supply_Depot
+        GAS_BUILDING = UnitType.Terran_Refinery
     }
 
     fun useConfigForProtoss() {
         MY_RACE = Race.Protoss
-        BASE = FUnitType.Protoss_Nexus
-        WORKER = FUnitType.Protoss_Probe
-        SUPPLY = FUnitType.Protoss_Pylon
-        GAS_BUILDING = FUnitType.Protoss_Assimilator
+        BASE = UnitType.Protoss_Nexus
+        WORKER = UnitType.Protoss_Probe
+        SUPPLY = UnitType.Protoss_Pylon
+        GAS_BUILDING = UnitType.Protoss_Assimilator
     }
 
     fun useConfigForZerg() {
         MY_RACE = Race.Zerg
-        BASE = FUnitType.Zerg_Hatchery
-        WORKER = FUnitType.Zerg_Drone
-        SUPPLY = FUnitType.Zerg_Overlord
-        GAS_BUILDING = FUnitType.Zerg_Extractor
+        BASE = UnitType.Zerg_Hatchery
+        WORKER = UnitType.Zerg_Drone
+        SUPPLY = UnitType.Zerg_Overlord
+        GAS_BUILDING = UnitType.Zerg_Extractor
     }
 }

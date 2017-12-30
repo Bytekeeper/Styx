@@ -1,9 +1,9 @@
 package org.fttbot
 
-import bwapi.Position
-import bwapi.TilePosition
-import bwapi.WalkPosition
 import com.badlogic.gdx.math.Vector2
+import org.openbw.bwapi4j.Position
+import org.openbw.bwapi4j.TilePosition
+import org.openbw.bwapi4j.WalkPosition
 import kotlin.math.abs
 import kotlin.math.sqrt
 
@@ -16,19 +16,3 @@ fun Vector2.toPosition() = Position(this.x.toInt(), this.y.toInt())
 operator fun Position.plus(other: Position) = Position(other.x + this.x, other.y + this.y)
 operator fun Position.minus(other: Position) = Position(this.x - other.x, this.y - other.y)
 operator fun Position.div(value: Int): Position = Position(this.x / value, this.y / value)
-fun Position.len() : Double = sqrt((x * x + y * y).toDouble())
-
-fun approxDistance(dx: Int, dy: Int): Int {
-    var min = abs(dx);
-    var max = abs(dy);
-    if (max < min) {
-        val t = max
-        max = min
-        min = t
-    }
-
-    if (min < (max shr 2)) return max
-
-    val minCalc = (3 * min) shr 3;
-    return (minCalc shr 5) + minCalc + max - (max shr 4) - (max shr 6);
-}

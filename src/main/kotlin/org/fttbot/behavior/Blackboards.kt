@@ -1,23 +1,25 @@
 package org.fttbot.behavior
 
-import bwapi.Position
-import bwapi.TilePosition
-import org.fttbot.import.FUnitType
-import org.fttbot.layer.FUnit
+import org.openbw.bwapi4j.Position
+import org.openbw.bwapi4j.TilePosition
+import org.openbw.bwapi4j.type.UnitType
+import org.openbw.bwapi4j.unit.Building
+import org.openbw.bwapi4j.unit.PlayerUnit
+import org.openbw.bwapi4j.unit.Unit
 import java.util.*
 
-open class BBUnit(val unit: FUnit) {
+open class BBUnit(val unit: PlayerUnit) {
 
     companion object {
-        private val boards = HashMap<FUnit, BBUnit>()
+        private val boards = HashMap<PlayerUnit, BBUnit>()
 
-        fun of(unit: FUnit) = boards.computeIfAbsent(unit) { BBUnit(unit) }
-        fun destroy(unit: FUnit) = boards.remove(unit)
+        fun of(unit: PlayerUnit) = boards.computeIfAbsent(unit) { BBUnit(unit) }
+        fun destroy(unit: PlayerUnit) = boards.remove(unit)
         fun all() = boards.values
     }
 
     var moveTarget: Position? = null
-    var targetResource: FUnit? = null
+    var targetResource: Unit? = null
     var status: String = "<Nothing>"
     var construction: Construction? = null
     var scouting: Scouting? = null
@@ -25,12 +27,12 @@ open class BBUnit(val unit: FUnit) {
     var combatSuccessProbability: Double = 0.5
 }
 
-class Construction(val type: FUnitType, var position: TilePosition) {
+class Construction(val type: UnitType, var position: TilePosition) {
     // Confirmed by the engine to have started
     var started: Boolean = false
     // Worker called "build"
     var commissioned: Boolean = false
-    var building: FUnit? = null
+    var building: Building? = null
 }
 
 class Scouting(val locations: Deque<Position>) {
@@ -38,7 +40,7 @@ class Scouting(val locations: Deque<Position>) {
     var index: Int = 0
 }
 
-class Attacking(val target: FUnit)
+class Attacking(val target: Unit)
 
 object ProductionBoard {
     val orderedConstructions = ArrayDeque<Construction>()
@@ -51,14 +53,14 @@ object ProductionBoard {
         reservedGas = 0
         orderedConstructions.filter { !it.started }
                 .forEach {
-                    reservedMinerals += it.type.mineralPrice
-                    reservedGas += it.type.gasPrice
+                    reservedMinerals += it.type.mineralPrice()
+                    reservedGas += it.type.gasPrice()
                 }
     }
 
-    class Item(val type: FUnitType, val favoriteBuilder: FUnit? = null)
+    class Item(val type: UnitType, val favoriteBuilder: Unit? = null)
 }
 
 object ScoutingBoard {
-    var lastScoutTime: Int = 0
+    var lastScoutFrameCount: Int = 0
 }
