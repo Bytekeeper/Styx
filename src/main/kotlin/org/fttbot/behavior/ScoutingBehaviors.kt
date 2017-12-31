@@ -72,7 +72,7 @@ class ScoutEnemyBase : LeafTask<ScoutingBoard>() {
         val time = FTTBot.game.interactionHandler.frameCount
         if (time - `object`.lastScoutFrameCount > 2800) {
             `object`.lastScoutFrameCount = time
-            if (UnitQuery.myUnits.any { it.board.scouting != null }) {
+            if (UnitQuery.myUnits.any { it.userData != null && it.board.scouting != null }) {
                 return Status.RUNNING
             }
             val bbUnit = findWorker()?.board ?: return Status.FAILED

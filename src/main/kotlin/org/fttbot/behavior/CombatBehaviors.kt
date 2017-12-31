@@ -9,9 +9,7 @@ import org.fttbot.layer.*
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.UnitType
-import org.openbw.bwapi4j.unit.Armed
-import org.openbw.bwapi4j.unit.MobileUnit
-import org.openbw.bwapi4j.unit.PlayerUnit
+import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 
 
@@ -62,7 +60,11 @@ class SelectBestAttackTarget : UnitLT() {
                 if (damageA == 0.0) return@Comparator 1
                 val damageB = simUnit.damagePerFrameTo(SimUnit.of(b))
                 if (damageB == 0.0) return@Comparator -1
-                (a.hitPoints / damageA).compareTo(b.hitPoints / damageB)
+                val valueCompare = (a.hitPoints / damageA).compareTo(b.hitPoints / damageB)
+                if (valueCompare != 0) valueCompare
+                else if (board().attacking?.target == a) -1
+                else if (board().attacking?.target == b) 1
+                else 0
             }
         }) ?: return Status.FAILED
         board().attacking = Attacking(bestEnemy)
@@ -78,23 +80,27 @@ class Attack : UnitLT() {
         val unit = board().unit
         if (unit !is Armed) return Status.FAILED
         val attacking = board().attacking ?: throw IllegalStateException()
-        if (unit.isStartingAttack) return Status.RUNNING
         val target = attacking.target
         if (target is PlayerUnit && (target.isFlyer && unit.airWeapon.onCooldown ||
                 !target.isFlyer && unit.groundWeapon.onCooldown)) return Status.SUCCEEDED
-        if (target != unit.targetUnit || !unit.isAttacking) {
-            if (!unit.attack(target)) return Status.FAILED
+        if (target != unit.targetUnit
+                || (!unit.isAttacking && (unit !is MobileUnit || !unit.isMoving))) {
+            if (!latencyGuarded { unit.attack(target) }) return Status.FAILED
         }
         return Status.RUNNING
     }
 }
 
 class FindGoodAttackPosition : UnitLT() {
+    override fun start() {
+    }
+
     override fun execute(): Status {
         val unit = board().unit
         if (unit !is Armed) return Status.FAILED
         val simUnit = SimUnit.of(unit)
-        val relevantEnemyPositions = UnitQuery.unitsInRadius(unit.position, 300)
+        val relevantEnemyPositions = (UnitQuery.unitsInRadius(unit.position, 300)
+                + unit.getUnitsInRadius(300, EnemyModel.seenUnits))
                 .filter { it is PlayerUnit && it.isEnemyUnit && it.canAttack(unit, 32) }
                 .map {
                     val wpn = (it as Armed).getWeaponAgainst(unit)
@@ -116,7 +122,7 @@ class UnfavorableSituation : SituationEvaluator() {
     override fun execute(): Status {
         val probability = evaluate()
         val unit = board().unit
-        if (probability < 0.55 && unit.canBeAttacked()) return Status.SUCCEEDED
+        if (probability < 0.55 && unit.canBeAttacked(128)) return Status.SUCCEEDED
         return Status.FAILED
     }
 }
@@ -137,13 +143,13 @@ abstract class SituationEvaluator : UnitLT() {
 
     protected fun evaluate(): Double {
         val unit = board().unit as MobileUnit
-        val unitsInArea = UnitQuery.unitsInRadius(unit.position, 600)
-                .filter { it is PlayerUnit && it is Armed && it.isCompleted }
+        val unitsInArea = (UnitQuery.unitsInRadius(unit.position, 600) +
+                EnemyModel.seenUnits.filter { it.getDistance(unit.position) < 600 })
+                .filter { it is PlayerUnit && (it is Armed || it is Bunker) && it.isCompleted }
                 .map { it as PlayerUnit }
         val center = unitsInArea.fold(Position(0, 0)) { a, u -> a + u.position } / unitsInArea.size
-        val relevantUnits = unitsInArea.filter { it.getDistance(center) < 300 }.toMutableSet()
-        relevantUnits.add(unit)
-        val enemyUnits = relevantUnits.filter { it.isEnemyUnit }.map { SimUnit.of(it) }.toMutableList()
+        val relevantUnits = unitsInArea.filter { it.getDistance(center) < 300 }
+        val enemyUnits = relevantUnits.filter { it.isEnemyUnit }.map { SimUnit.of(it) }
 
         FTTBot.render.drawCircleMap(center, 300, Color.YELLOW)
         val probability = CombatEval.probabilityToWin(
@@ -177,7 +183,7 @@ class MoveToEnemyBase : UnitLT() {
 }
 
 // When attacking: Should this unit fall back a little?
-class ShouldFallBack : UnitLT() {
+class OnCooldownWithBetterPosition : UnitLT() {
 
     override fun start() {
     }
@@ -185,7 +191,7 @@ class ShouldFallBack : UnitLT() {
     override fun execute(): Status {
         val unit = board().unit as MobileUnit
         // Not engaged or shooting in this very moment? Don't fall back
-        if (unit.isStartingAttack || !unit.groundWeapon.onCooldown && !unit.airWeapon.onCooldown) return Status.FAILED
+        if (!unit.groundWeapon.onCooldown || !unit.airWeapon.onCooldown) return Status.FAILED
         // Melee? Don't fall back, but maybe retreat
         if (unit.groundWeapon.onCooldown && unit.groundWeapon.isMelee()) return Status.FAILED
         unit.potentialAttackers().firstOrNull {

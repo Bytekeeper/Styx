@@ -9,15 +9,6 @@ import org.openbw.bwapi4j.unit.Unit
 import java.util.*
 
 open class BBUnit(val unit: PlayerUnit) {
-
-    companion object {
-        private val boards = HashMap<PlayerUnit, BBUnit>()
-
-        fun of(unit: PlayerUnit) = boards.computeIfAbsent(unit) { BBUnit(unit) }
-        fun destroy(unit: PlayerUnit) = boards.remove(unit)
-        fun all() = boards.values
-    }
-
     var moveTarget: Position? = null
     var targetResource: Unit? = null
     var status: String = "<Nothing>"

@@ -10,14 +10,27 @@ import java.util.logging.Logger
 
 abstract class UnitLT : LeafTask<BBUnit>() {
     protected val LOG = Logger.getLogger(this::class.java.simpleName)
+    private var lastOrderFrame = -24
+    protected val latencyAffected get() = FTTBot.frameCount - lastOrderFrame <= FTTBot.latency_frames
 
     override fun start() {
         board().status = this::class.java.simpleName ?: "<Unknown>"
         LOG.fine("${board().unit} started ${board().status}")
+        lastOrderFrame = -24
     }
 
     override fun end() {
         LOG.finest("${board().unit} stopped ${board().status} with ${status}")
+    }
+
+
+    protected fun latencyGuarded(op: () -> Boolean): Boolean {
+        if (latencyAffected) return true
+        if (op()) {
+            lastOrderFrame = FTTBot.frameCount
+            return true
+        }
+        return false
     }
 
     override fun copyTo(task: Task<BBUnit>): Task<BBUnit> = task
@@ -39,6 +52,7 @@ class MoveToPosition(var threshold: Double = 12.0) : UnitLT() {
         val targetPosition = board().moveTarget ?: return Status.FAILED
         val distance = unit.position.getDistance(targetPosition)
         if (distance <= threshold) {
+            board().moveTarget = null
             return Status.SUCCEEDED
         }
         val elapsedFrames = FTTBot.game.interactionHandler.frameCount
@@ -50,7 +64,7 @@ class MoveToPosition(var threshold: Double = 12.0) : UnitLT() {
             return Status.FAILED
         }
         if (!unit.isMoving || targetPosition.getDistance(unit.targetPosition) >= threshold) {
-            unit.move(targetPosition)
+            latencyGuarded { unit.move(targetPosition) }
         }
         return Status.RUNNING
     }

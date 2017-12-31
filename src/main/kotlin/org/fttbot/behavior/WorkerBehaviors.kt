@@ -53,7 +53,7 @@ class ReturnResource : UnitLT() {
         val unit = board().unit as Worker<*>
         if (!unit.isCarryingGas && !unit.isCarryingMinerals) return Status.SUCCEEDED
         if (!unit.isGatheringMinerals && !unit.isGatheringGas) {
-            if (!unit.returnCargo()) return Status.FAILED
+            if (!latencyGuarded { unit.returnCargo() }) return Status.FAILED
             return Status.RUNNING
         }
         return Status.SUCCEEDED
@@ -72,7 +72,7 @@ class GatherMinerals : UnitLT() {
                     .filter { it.getDistance(unit) < 300 }
                     .minBy { it.getDistance(unit) }) as? MineralPatch
             board().targetResource = null
-            if (target == null || !unit.gather(target)) {
+            if (target == null || !latencyGuarded { unit.gather(target) }) {
                 return Status.FAILED
             }
         }
@@ -92,7 +92,7 @@ class GatherGas : UnitLT() {
                     .filter { it is GasMiningFacility && it.isMyUnit && it.getDistance(unit) < 300 }
                     .minBy { it.getDistance(unit) }) as? GasMiningFacility
             board().targetResource = null
-            if (target == null || !unit.gather(target)) {
+            if (target == null || !latencyGuarded { unit.gather(target) }) {
                 return Status.FAILED
             }
         }
@@ -119,7 +119,7 @@ class AbortConstruct : UnitLT() {
     override fun execute(): Status {
         val unit = board().unit as SCV
         board().construction = null
-        if (unit.isConstructing) unit.cancelConstruction()
+        if (unit.isConstructing) unit.haltConstruction()
         return Status.SUCCEEDED
     }
 }
@@ -138,15 +138,18 @@ class Construct : UnitLT() {
             board().construction = null
             return Status.SUCCEEDED
         }
+
+        if (latencyAffected) return Status.RUNNING
+
         if (!unit.isConstructing || unit.isConstructing && unit.buildType != construct.type) {
             if (unit.isConstructing && unit.buildType != construct.type) {
-                (unit as SCV).cancelConstruction();
+                (unit as SCV).haltConstruction()
             }
             if (construct.building != null) {
-                if (unit.rightClick(construct.building!!, false)) {
+                if (latencyGuarded { unit.rightClick(construct.building!!, false) }) {
                     LOG.info("${unit} will continue construction of ${construct.type} at ${construct.position}")
                 } else return Status.FAILED
-            } else if (unit.build(position, construct.type)) {
+            } else if (latencyGuarded { unit.build(position, construct.type) }) {
                 LOG.info("${unit} at ${unit.position} sent to construct ${construct.type} at ${construct.position}")
                 construct.commissioned = true
             } else {
@@ -178,7 +181,7 @@ class AssignWorkersToResources : LeafTask<Unit>() {
         myBases.forEach { base ->
             val relevantUnits = UnitQuery.unitsInRadius(base.position, RESOURCE_RANGE)
             val refineries = relevantUnits.filter { it is GasMiningFacility && it.isMyUnit && it.isCompleted }.map { it as GasMiningFacility }
-            val workers = relevantUnits.filter { it is Worker<*> && it.isMyUnit }.map { it as Worker<*> }.toMutableList()
+            val workers = relevantUnits.filter { it is Worker<*> && it.isMyUnit && it.isCompleted }.map { it as Worker<*> }.toMutableList()
             val minerals = relevantUnits.filter { it is MineralPatch }.map { it as MineralPatch }.toMutableList()
 
             val gasMissing = refineries.size * 3 - workers.count { it.isGatheringGas }

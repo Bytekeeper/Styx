@@ -31,7 +31,8 @@ object ConstructionPosition {
                 if (dist < bestDistance
                         && FTTBot.game.canBuildHere(pos, unitType)
                         && outsideOfResourceLines(pos, unitType)
-                        && (hasNoAddonOrEnoughSpace(unitType, pos))) {
+                        && hasNoAddonOrEnoughSpace(unitType, pos)
+                        && willNotBlockOtherAddon(unitType, pos)) {
                     bestDistance = dist
                     bestBuildPosition = pos
                 }
@@ -40,10 +41,17 @@ object ConstructionPosition {
         return bestBuildPosition
     }
 
+    private fun willNotBlockOtherAddon(unitType: UnitType, pos: TilePosition): Boolean {
+        val building = Rectangle(pos.x.toFloat(), pos.y.toFloat(), unitType.tileWidth().toFloat(), unitType.tileHeight().toFloat())
+        return !UnitQuery.unitsInRadius(pos.toPosition() + Position(0, unitType.height()), 100)
+                .any { it is ExtendibleByAddon && building.overlaps(
+                        Rectangle(it.tilePosition.x.toFloat() + it.tileWidth().toFloat(), it.tilePosition.y.toFloat(), 2f, it.tileHeight().toFloat())) }
+    }
+
     private fun hasNoAddonOrEnoughSpace(unitType: UnitType, pos: TilePosition): Boolean {
-        if (unitType !is ExtendibleByAddon) return true
+        if (!unitType.canBuildAddon()) return true
         val addonRect = Rectangle((pos.x + unitType.tileWidth()).toFloat(), pos.y.toFloat(), 2f, unitType.tileHeight().toFloat())
-        return !UnitQuery.unitsInRadius(pos.toPosition() + Position(unitType.width(), unitType.height()), 150)
+        return !UnitQuery.unitsInRadius(pos.toPosition() + Position(unitType.width(), unitType.height()), 100)
                 .any { it is Building && addonRect.overlaps(Rectangle(it.tilePosition.x.toFloat(), it.tilePosition.y.toFloat(), it.tileWidth().toFloat(), it.tileHeight().toFloat())) }
     }
 

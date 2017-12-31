@@ -40,8 +40,8 @@ object UnitBehaviors {
         btlib.registerArchetypeTree(Behavior.COMBAT_UNIT.name, BehaviorTree(
                 DynamicGuardSelector(
                         Selector(Attack().guardedBy(SelectRetreatAttackTarget()), Retreat()).guardedBy(UnfavorableSituation()),
-                        FallBack().guardedBy(ShouldFallBack()),
-                        Sequence(Attack(), FindGoodAttackPosition(), MoveToPosition()).guardedBy(SelectBestAttackTarget()),
+                        FallBack().guardedBy(OnCooldownWithBetterPosition()),
+                        Sequence(Attack(), Sequence(FindGoodAttackPosition(), MoveToPosition()).guardedBy(OnCooldownWithBetterPosition())).guardedBy(SelectBestAttackTarget()),
                         MoveToEnemyBase())))
     }
 
@@ -49,9 +49,21 @@ object UnitBehaviors {
 
     fun createTreeFor(unit: PlayerUnit): BehaviorTree<*> {
         val behavior = when {
-            (unit is MobileUnit) && unit.isWorker -> createTreeFor(Behavior.WORKER, BBUnit.of(unit))
-            unit is TrainingFacility -> createTreeFor(Behavior.TRAINER, BBUnit.of(unit))
-            unit is Armed -> createTreeFor(Behavior.COMBAT_UNIT, BBUnit.of(unit))
+            (unit is MobileUnit) && unit.isWorker -> {
+                val b = BBUnit(unit)
+                unit.userData = b
+                createTreeFor(Behavior.WORKER, b)
+            }
+            unit is TrainingFacility -> {
+                val b = BBUnit(unit)
+                unit.userData = b
+                createTreeFor(Behavior.TRAINER, b)
+            }
+            unit is Armed -> {
+                val b = BBUnit(unit)
+                unit.userData = b
+                createTreeFor(Behavior.COMBAT_UNIT, b)
+            }
             else -> BehaviorTree<Unit>(Success())
         }
         unitBehavior[unit] = behavior

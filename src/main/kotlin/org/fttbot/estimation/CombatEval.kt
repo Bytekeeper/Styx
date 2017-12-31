@@ -1,15 +1,12 @@
 package org.fttbot.estimation
 
-import org.fttbot.layer.getWeaponAgainst
 import org.fttbot.layer.isMelee
+import org.fttbot.or
 import org.openbw.bwapi4j.Position
-import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.DamageType
 import org.openbw.bwapi4j.type.UnitSizeType
-import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
-import org.openbw.bwapi4j.unit.Unit
 import kotlin.math.exp
 import kotlin.math.max
 
@@ -18,27 +15,28 @@ const val HEAL_PER_ENERGY = 2
 
 object CombatEval {
     fun probabilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>): Double {
-        val damageA = unitsOfPlayerA.sumByDouble { a ->
+        val damageA = unitsOfPlayerA.map { a ->
             unitsOfPlayerB.map { b -> a.damagePerFrameTo(b) }.max() ?: 0.01
-        }
-        val damageB = unitsOfPlayerB.sumByDouble { b ->
+        }.average().or(0.01)
+        val damageB = unitsOfPlayerB.map { b ->
             unitsOfPlayerA.map { a -> b.damagePerFrameTo(a) }.max() ?: 0.01
-        }
-        val hpA = unitsOfPlayerA.sumBy { it.hitPoints } + unitsOfPlayerA.count { it.canHeal } * HEAL_PER_ENERGY
-        val hpB = unitsOfPlayerB.sumBy { it.hitPoints } + unitsOfPlayerB.count { it.canHeal } * HEAL_PER_ENERGY
+        }.average().or(0.01)
+        val hpA = unitsOfPlayerA.filter { it.isArmed }.map { it.hitPoints }.average().or(0.1) + unitsOfPlayerA.count { it.canHeal } * HEAL_PER_ENERGY
+        val hpB = unitsOfPlayerB.filter { it.isArmed }.map { it.hitPoints }.average().or(0.1) + unitsOfPlayerB.count { it.canHeal } * HEAL_PER_ENERGY
 
-        val rangeA = unitsOfPlayerA.map { max(it.groundWeapon.type().maxRange(), it.airWeapon.type().maxRange()) }.sum() + 0.1
-        val rangeB = unitsOfPlayerB.map { max(it.groundWeapon.type().maxRange(), it.airWeapon.type().maxRange()) }.sum() + 0.1
-        val mobilityA = unitsOfPlayerA.map { it.topSpeed }.sum() + 0.1
-        val mobilityB = unitsOfPlayerB.map { it.topSpeed }.sum() + 0.1
+        val rangeA = unitsOfPlayerA.map { max(it.groundWeapon.type().maxRange(), it.airWeapon.type().maxRange()) }.average().or(0.1)
+        val rangeB = unitsOfPlayerB.map { max(it.groundWeapon.type().maxRange(), it.airWeapon.type().maxRange()) }.average().or(0.1)
+        val mobilityA = unitsOfPlayerA.map { it.topSpeed }.average().or(0.1)
+        val mobilityB = unitsOfPlayerB.map { it.topSpeed }.average().or(0.1)
 
-        val agg = 5000.0 * (damageA / (hpB.toFloat() + .1) - damageB / (hpA.toFloat() + .1)) +
-                20 * (rangeA / mobilityB - rangeB / mobilityA)
+        // Lanchester's Law
+        val agg = 0.5 * (rangeA / mobilityB * damageA / hpB * unitsOfPlayerA.size * unitsOfPlayerA.size -
+                rangeB / mobilityA * damageB / hpA * unitsOfPlayerB.size * unitsOfPlayerB.size)
         return 1.0 / (exp(-agg) + 1)
     }
 }
 
-class SimUnit(val name : String = "Unknown",
+class SimUnit(val name: String = "Unknown",
               val ground: Int = 0,
               val isUnderDarkSwarm: Boolean = false,
               val airUpgrades: Int = 0,
@@ -46,17 +44,14 @@ class SimUnit(val name : String = "Unknown",
               val armorUpgrades: Int = 0,
               var hitPoints: Int = 0,
               var position: Position? = null,
-              var tilePosition: TilePosition? = null,
-              var canMove: Boolean = false,
               val canHeal: Boolean = false,
               var airWeapon: Weapon = Weapon(WeaponType.None, 0),
               var groundWeapon: Weapon = Weapon(WeaponType.None, 0),
               val isAir: Boolean = false,
-              var framesPaused: Int = 0,
-              val topSpeed : Int = 0,
-              val armor : Int = 0,
-              val size : UnitSizeType = UnitSizeType.None) {
-    val isVisible = false
+              val topSpeed: Double = 0.0,
+              val armor: Int = 0,
+              val size: UnitSizeType = UnitSizeType.None) {
+    val isArmed = groundWeapon.type() != WeaponType.None || airWeapon.type() != WeaponType.None
 
     companion object {
         fun of(unit: PlayerUnit): SimUnit = SimUnit(
@@ -65,13 +60,12 @@ class SimUnit(val name : String = "Unknown",
                 isUnderDarkSwarm = unit is MobileUnit && unit.isUnderDarkSwarm,
                 hitPoints = unit.hitPoints,
                 position = unit.position,
-                tilePosition = unit.tilePosition,
-                airWeapon = (unit as? Armed)?.airWeapon ?: Weapon(WeaponType.None, 0),
-                groundWeapon = (unit as? Armed)?.groundWeapon ?: Weapon(WeaponType.None, 0),
-                canMove = unit is MobileUnit,
+                airWeapon = (unit as? Armed)?.airWeapon ?: if (unit is Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(WeaponType.None, 0),
+                groundWeapon = (unit as? Armed)?.groundWeapon ?: if (unit is Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(WeaponType.None, 0),
                 isAir = unit.isFlyer,
                 armor = 0,
-                size = unit.size)
+                size = unit.size,
+                topSpeed = unit.topSpeed())
     }
 
     /**
@@ -99,13 +93,11 @@ class SimUnit(val name : String = "Unknown",
 
     fun damagePerFrameTo(other: SimUnit): Double {
         val weapon = determineWeaponAgainst(other)
-        return if (weapon == WeaponType.None) 0.0
+        return if (weapon.type() == WeaponType.None) 0.0
         else directDamage(other) / weapon.type().damageCooldown()
     }
 
     fun determineWeaponAgainst(other: SimUnit) = if (other.isAir) airWeapon else groundWeapon
-
-    fun weaponCoolDownVs(other: SimUnit) = if (other.isAir) airWeapon.cooldown() else groundWeapon.cooldown()
 
     private fun damageTypeModifier(damageType: DamageType, unitSizeType: UnitSizeType): Double =
             when (damageType) {

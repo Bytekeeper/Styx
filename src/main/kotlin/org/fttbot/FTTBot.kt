@@ -9,16 +9,19 @@ import org.fttbot.layer.UnitQuery
 import org.fttbot.layer.board
 import org.fttbot.layer.isEnemyUnit
 import org.fttbot.layer.isMyUnit
+import org.fttbot.start.ProcessHelper
 import org.openbw.bwapi4j.*
+import org.openbw.bwapi4j.type.BulletType
 import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.Building
 import org.openbw.bwapi4j.unit.PlayerUnit
+import org.openbw.bwapi4j.unit.Unit
+import org.openbw.bwapi4j.unit.Vulture
 import java.util.logging.ConsoleHandler
 import java.util.logging.Level
 import java.util.logging.Logger
-import org.openbw.bwapi4j.unit.Unit
 
 object FTTBot : BWEventListener {
 
@@ -26,11 +29,14 @@ object FTTBot : BWEventListener {
     val game = BW(this)
     lateinit var self: Player
     lateinit var enemy: Player
-    lateinit var bwta : BWTA
+    lateinit var bwta: BWTA
     lateinit var render: MapDrawer
+    var latency_frames = 0
+    var frameCount = 0
+
     private val workerManager = BehaviorTree(AssignWorkersToResources())
     private val buildManager = BehaviorTree(
-            Selector (
+            Selector(
                     SupplyProduction(),
                     BuildNextItemFromProductionQueue(),
                     ProduceAttacker(), WorkerProduction()
@@ -53,7 +59,7 @@ object FTTBot : BWEventListener {
         render = game.mapDrawer
 
         Thread.sleep(100)
-        game.interactionHandler.setLocalSpeed(1)
+        game.interactionHandler.setLocalSpeed(0)
 
         val consoleHandler = ConsoleHandler()
         consoleHandler.level = Level.INFO
@@ -89,6 +95,8 @@ object FTTBot : BWEventListener {
     }
 
     override fun onFrame() {
+        latency_frames = game.interactionHandler.remainingLatencyFrames
+        frameCount = game.interactionHandler.frameCount
         UnitQuery.update(game.allUnits)
 //        Exporter.export()
         EnemyModel.step()
@@ -97,10 +105,6 @@ object FTTBot : BWEventListener {
         buildManager.step()
         scoutManager.step()
         UnitBehaviors.step()
-
-        for (board in BBUnit.all()) {
-            render.drawTextMap(board.unit.position, board.status)
-        }
 
         bwta.getRegions().forEachIndexed { index, region ->
             val poly = region.polygon.points
@@ -129,17 +133,39 @@ object FTTBot : BWEventListener {
                 render.drawLineMap(a, b, Color.CYAN)
             }
         }
+        for (unit in UnitQuery.myUnits) {
+            val b = unit.userData as? BBUnit ?: continue
+            render.drawTextMap(unit.position, b.status)
+            render.drawTextMap(unit.position + Position(0, -10), "% ${b.combatSuccessProbability}")
+            b.attacking?.let {
+                render.drawLineMap(unit.position, it.target.position, Color.RED)
+            }
+            b.construction?.let {
+                render.drawLineMap(unit.position, it.position.toPosition() + Position(16, 16), Color.GREY)
+            }
+            b.moveTarget?.let {
+                render.drawLineMap(unit.position, it, Color.BLUE)
+            }
+        }
         for (unit in UnitQuery.enemyUnits.filter { !it.isVisible }) {
             if (unit.position == null) continue
             render.drawCircleMap(unit.position, unit.width(), Color.RED)
+            render.drawTextMap(unit.position, unit.toString())
+        }
+        for (unit in EnemyModel.seenUnits) {
+            render.drawCircleMap(unit.position, unit.width(), Color.YELLOW)
+            render.drawTextMap(unit.position, unit.toString())
+        }
+        for (unit in EnemyModel.hiddenUnits()) {
+            render.drawCircleMap(unit.position, unit.width, Color.BROWN)
             render.drawTextMap(unit.position, unit.toString())
         }
     }
 
     override fun onUnitDestroy(unit: Unit) {
         if (unit !is PlayerUnit) return
-        BBUnit.destroy(unit)
         UnitBehaviors.removeBehavior(unit)
+        EnemyModel.onUnitDestroy(unit)
     }
 
     override fun onUnitCreate(unit: Unit) {
@@ -177,11 +203,11 @@ object FTTBot : BWEventListener {
     }
 
     override fun onUnitShow(unit: Unit) {
-        if (unit is PlayerUnit && unit.isEnemyUnit) EnemyModel.updateUnit(unit)
+        if (unit is PlayerUnit && unit.isEnemyUnit) EnemyModel.onUnitShow(unit)
     }
 
-    override fun onUnitHide(unit: Unit?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+    override fun onUnitHide(unit: Unit) {
+        if (unit is PlayerUnit && unit.isEnemyUnit) EnemyModel.onUnitHide(unit)
     }
 
     override fun onUnitRenegade(unit: Unit?) {
@@ -217,6 +243,12 @@ object FTTBot : BWEventListener {
     }
 
     override fun onEnd(isWinner: Boolean) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        ProcessHelper.killStarcraftProcess()
+        ProcessHelper.killChaosLauncherProcess()
+        println()
+        println("Exiting...")
+        System.exit(0)
     }
 }
+
+fun Double.or(other: Double) = if (isNaN()) other else this
