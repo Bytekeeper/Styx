@@ -4,21 +4,18 @@ import bwta.BWTA
 import com.badlogic.gdx.ai.btree.BehaviorTree
 import com.badlogic.gdx.ai.btree.branch.Selector
 import org.fttbot.behavior.*
-import org.fttbot.estimation.EnemyModel
-import org.fttbot.layer.UnitQuery
-import org.fttbot.layer.board
-import org.fttbot.layer.isEnemyUnit
-import org.fttbot.layer.isMyUnit
+import org.fttbot.decision.StrategyUF
+import org.fttbot.info.*
+import org.fttbot.search.MCTS
+import org.fttbot.sim.GameState
 import org.fttbot.start.ProcessHelper
+import org.fttbot.task.Task
 import org.openbw.bwapi4j.*
-import org.openbw.bwapi4j.type.BulletType
-import org.openbw.bwapi4j.type.Color
-import org.openbw.bwapi4j.type.Race
-import org.openbw.bwapi4j.type.UnitType
+import org.openbw.bwapi4j.type.*
 import org.openbw.bwapi4j.unit.Building
 import org.openbw.bwapi4j.unit.PlayerUnit
+import org.openbw.bwapi4j.unit.ResearchingFacility
 import org.openbw.bwapi4j.unit.Unit
-import org.openbw.bwapi4j.unit.Vulture
 import java.util.logging.ConsoleHandler
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -38,6 +35,7 @@ object FTTBot : BWEventListener {
     private val buildManager = BehaviorTree(
             Selector(
                     SupplyProduction(),
+                    DetectorProduction(),
                     BuildNextItemFromProductionQueue(),
                     ProduceAttacker(), WorkerProduction()
             ),
@@ -75,23 +73,21 @@ object FTTBot : BWEventListener {
         }
 
         ProductionBoard.queue.addAll(listOf(
-                ProductionBoard.Item(UnitType.Terran_SCV),
-                ProductionBoard.Item(UnitType.Terran_SCV),
-                ProductionBoard.Item(UnitType.Terran_SCV),
-                ProductionBoard.Item(UnitType.Terran_SCV),
-                ProductionBoard.Item(UnitType.Terran_Barracks),
-                ProductionBoard.Item(UnitType.Terran_SCV),
-                ProductionBoard.Item(UnitType.Terran_Supply_Depot),
-                ProductionBoard.Item(UnitType.Terran_SCV),
-                ProductionBoard.Item(UnitType.Terran_Refinery),
-                ProductionBoard.Item(UnitType.Terran_Marine),
-                ProductionBoard.Item(UnitType.Terran_SCV),
-                ProductionBoard.Item(UnitType.Terran_Marine),
-                ProductionBoard.Item(UnitType.Terran_Factory),
-                ProductionBoard.Item(UnitType.Terran_Machine_Shop),
-                ProductionBoard.Item(UnitType.Terran_Factory),
-                ProductionBoard.Item(UnitType.Terran_Siege_Tank_Tank_Mode)
+                ProductionBoard.UnitItem(UnitType.Terran_SCV),
+                ProductionBoard.UnitItem(UnitType.Terran_SCV),
+                ProductionBoard.UnitItem(UnitType.Terran_SCV),
+                ProductionBoard.UnitItem(UnitType.Terran_SCV),
+                ProductionBoard.UnitItem(UnitType.Terran_SCV),
+                ProductionBoard.UnitItem(UnitType.Terran_Supply_Depot),
+                ProductionBoard.UnitItem(UnitType.Terran_SCV),
+                ProductionBoard.UnitItem(UnitType.Terran_SCV),
+                ProductionBoard.UnitItem(UnitType.Terran_Barracks),
+                ProductionBoard.UnitItem(UnitType.Terran_Refinery),
+                ProductionBoard.UnitItem(UnitType.Terran_SCV),
+                ProductionBoard.UnitItem(UnitType.Terran_SCV),
+                ProductionBoard.UnitItem(UnitType.Terran_Marine)
         ))
+        UnitQuery.update(emptyList())
     }
 
     override fun onFrame() {
@@ -99,7 +95,10 @@ object FTTBot : BWEventListener {
         frameCount = game.interactionHandler.frameCount
         UnitQuery.update(game.allUnits)
 //        Exporter.export()
-        EnemyModel.step()
+        EnemyState.step()
+
+        Task.step()
+
         workerManager.step()
         ProductionBoard.updateReserved()
         buildManager.step()
@@ -137,6 +136,10 @@ object FTTBot : BWEventListener {
             val b = unit.userData as? BBUnit ?: continue
             render.drawTextMap(unit.position, b.status)
             render.drawTextMap(unit.position + Position(0, -10), "% ${b.combatSuccessProbability}")
+            val util = b.utility
+            render.drawTextMap(unit.position + Position(0, -40), "a ${util.attack}, d ${util.defend}, f ${util.force}")
+            render.drawTextMap(unit.position + Position(0, -30), "t ${util.threat}, v ${util.value}, c ${util.construct}")
+            render.drawTextMap(unit.position + Position(0, -20), "g ${util.gather}")
             b.attacking?.let {
                 render.drawLineMap(unit.position, it.target.position, Color.RED)
             }
@@ -152,20 +155,46 @@ object FTTBot : BWEventListener {
             render.drawCircleMap(unit.position, unit.width(), Color.RED)
             render.drawTextMap(unit.position, unit.toString())
         }
-        for (unit in EnemyModel.seenUnits) {
+        for (unit in EnemyState.seenUnits) {
             render.drawCircleMap(unit.position, unit.width(), Color.YELLOW)
             render.drawTextMap(unit.position, unit.toString())
         }
-        for (unit in EnemyModel.hiddenUnits()) {
-            render.drawCircleMap(unit.position, unit.width, Color.BROWN)
-            render.drawTextMap(unit.position, unit.toString())
+
+        val units = UnitQuery.myUnits.map { it.initialType to GameState.UnitState(-1, if (it is Building) it.remainingBuildTime else 0) }
+                .groupBy { (k, v) -> k }
+                .mapValues { it.value.map { it.second }.toMutableList() }.toMutableMap()
+
+        val upgradesInProgress = UnitQuery.myUnits.filterIsInstance(ResearchingFacility::class.java).map {
+            val upgrade = it.upgradeInProgress
+            upgrade.upgradeType to GameState.UpgradeState(-1, upgrade.remainingUpgradeTime, self.getUpgradeLevel(upgrade.upgradeType) + 1)
+        }.toMap()
+        val upgrades = UpgradeType.values()
+                .map { Pair(it, upgradesInProgress[it] ?: GameState.UpgradeState(-1, 0, self.getUpgradeLevel(it))) }.toMap().toMutableMap()
+        val state = GameState(0, self.race, self.supplyUsed(), self.supplyTotal(), self.minerals(), self.gas(),
+                units, mutableMapOf(TechType.None to 0), upgrades)
+
+        if (ProductionBoard.queue.isEmpty()) {
+            val buildPlan = MCTS(mapOf(UnitType.Terran_Marine to 2, UnitType.Terran_Vulture to 12), setOf(), mapOf(UpgradeType.Ion_Thrusters to 1), Race.Terran)
+            repeat(100) { buildPlan.step(state) }
+            var n = buildPlan.root.children?.minBy { it.frames }
+            if (n != null) {
+                val move = n.move ?: IllegalStateException()
+                when (move) {
+                    is MCTS.UnitMove -> ProductionBoard.queue.add(ProductionBoard.UnitItem(move.unit))
+                    is MCTS.UpgradeMove -> ProductionBoard.queue.add(ProductionBoard.UpgradeItem(move.upgrade))
+                }
+            }
         }
+
+        val t = System.currentTimeMillis()
+        render.drawTextScreen(0, 20, "${System.currentTimeMillis() - t} ms")
+        render.drawTextScreen(0, 30, "needDetection: ${StrategyUF.needMobileDetection()}")
     }
 
     override fun onUnitDestroy(unit: Unit) {
         if (unit !is PlayerUnit) return
         UnitBehaviors.removeBehavior(unit)
-        EnemyModel.onUnitDestroy(unit)
+        EnemyState.onUnitDestroy(unit)
     }
 
     override fun onUnitCreate(unit: Unit) {
@@ -203,43 +232,36 @@ object FTTBot : BWEventListener {
     }
 
     override fun onUnitShow(unit: Unit) {
-        if (unit is PlayerUnit && unit.isEnemyUnit) EnemyModel.onUnitShow(unit)
+        if (unit is PlayerUnit && unit.isEnemyUnit) EnemyState.onUnitShow(unit)
     }
 
     override fun onUnitHide(unit: Unit) {
-        if (unit is PlayerUnit && unit.isEnemyUnit) EnemyModel.onUnitHide(unit)
+        if (unit is PlayerUnit && unit.isEnemyUnit) EnemyState.onUnitHide(unit)
     }
 
     override fun onUnitRenegade(unit: Unit?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
+        // Unit changed owner
     }
 
     override fun onUnitDiscover(unit: Unit?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
     override fun onPlayerLeft(player: Player?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
     override fun onSendText(text: String?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
     override fun onReceiveText(player: Player?, text: String?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
     override fun onNukeDetect(target: Position?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
     override fun onSaveGame(gameName: String?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
     override fun onUnitEvade(unit: Unit?) {
-        TODO("not implemented") //To change body of created functions use File | Settings | File Templates.
     }
 
     override fun onEnd(isWinner: Boolean) {

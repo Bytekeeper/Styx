@@ -22,8 +22,10 @@ dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
 //    compile 'com.github.gered:bwmirror:2.7.1'
     compile 'com.badlogicgames.gdx:gdx-ai:1.8.1'
-    compile 'org.junit.jupiter:junit-jupiter-api:5.0.2'
     compile fileTree(dir: 'lib', include: ['*.jar'])
+
+    testCompile 'org.junit.jupiter:junit-jupiter-api:5.0.2'
+    testCompile 'org.hamcrest:hamcrest-core:1.3'
 }
 
 compileKotlin {

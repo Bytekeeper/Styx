@@ -4,7 +4,7 @@ import com.badlogic.gdx.math.ConvexHull
 import com.badlogic.gdx.math.Polygon
 import com.badlogic.gdx.math.Rectangle
 import org.fttbot.behavior.RESOURCE_RANGE
-import org.fttbot.layer.UnitQuery
+import org.fttbot.info.UnitQuery
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.UnitType
@@ -44,14 +44,18 @@ object ConstructionPosition {
     private fun willNotBlockOtherAddon(unitType: UnitType, pos: TilePosition): Boolean {
         val building = Rectangle(pos.x.toFloat(), pos.y.toFloat(), unitType.tileWidth().toFloat(), unitType.tileHeight().toFloat())
         return !UnitQuery.unitsInRadius(pos.toPosition() + Position(0, unitType.height()), 100)
-                .any { it is ExtendibleByAddon && building.overlaps(
-                        Rectangle(it.tilePosition.x.toFloat() + it.tileWidth().toFloat(), it.tilePosition.y.toFloat(), 2f, it.tileHeight().toFloat())) }
+                .any {
+                    it is ExtendibleByAddon && building.overlaps(
+                            Rectangle(it.tilePosition.x.toFloat() + it.tileWidth().toFloat(), it.tilePosition.y.toFloat(), 2f, it.tileHeight().toFloat()))
+                }
     }
 
     private fun hasNoAddonOrEnoughSpace(unitType: UnitType, pos: TilePosition): Boolean {
         if (!unitType.canBuildAddon()) return true
         val addonRect = Rectangle((pos.x + unitType.tileWidth()).toFloat(), pos.y.toFloat(), 2f, unitType.tileHeight().toFloat())
-        return !UnitQuery.unitsInRadius(pos.toPosition() + Position(unitType.width(), unitType.height()), 100)
+
+        return FTTBot.game.bwMap.canBuildHere(TilePosition(pos.x + unitType.tileWidth(), pos.y + 1), unitType)
+                && !UnitQuery.unitsInRadius(pos.toPosition() + Position(unitType.width(), unitType.height()), 100)
                 .any { it is Building && addonRect.overlaps(Rectangle(it.tilePosition.x.toFloat(), it.tilePosition.y.toFloat(), it.tileWidth().toFloat(), it.tileHeight().toFloat())) }
     }
 

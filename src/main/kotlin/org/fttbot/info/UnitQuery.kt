@@ -1,51 +1,68 @@
-package org.fttbot.layer
+package org.fttbot.info
 
 import org.fttbot.FTTBot
 import org.fttbot.behavior.BBUnit
-import org.fttbot.estimation.EnemyModel
 import org.fttbot.estimation.MAX_FRAMES_TO_ATTACK
-import org.fttbot.layer.UnitQuery.ownedUnits
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
-import java.util.*
 
 const val MAX_MELEE_RANGE = 64
 
 val MobileUnit.isWorker get() = javaClass == SCV::class.java || javaClass == Drone::class.java || javaClass == Probe::class.java
-val Weapon.onCooldown get () = cooldown() > FTTBot.latency_frames
+val Weapon.onCooldown get () = cooldown() >= FTTBot.latency_frames
 val PlayerUnit.isMyUnit get() = player == FTTBot.self
 val PlayerUnit.isEnemyUnit get() = player == FTTBot.enemy
 fun Armed.getWeaponAgainst(target: Unit) = if (target.isFlying) airWeapon else groundWeapon
 fun Weapon.isMelee() = this != WeaponType.None && type().maxRange() <= MAX_MELEE_RANGE
 fun Weapon.inRange(distance: Int, safety: Int): Boolean =
         type().minRange() <= distance && type().maxRange() >= distance - safety
+
 val PlayerUnit.board get() = userData as BBUnit
 
-fun Unit.canAttack(target: Unit, safety: Int = 0): Boolean {
+fun Unit.canAttack(target: PlayerUnit, safety: Int = 0): Boolean {
     if (this !is Armed) return false
     val distance = getDistance(target)
-    return getWeaponAgainst(target).inRange(distance, safety)
+    return getWeaponAgainst(target).inRange(distance, safety) && target.isVisible && (target !is Cloakable && target !is Burrowable || target.isDetected)
 }
 
-fun Unit.potentialAttackers(safety: Int = 16): List<Unit> =
-        (UnitQuery.unitsInRadius(position, 300) + EnemyModel.seenUnits.filter { it.getDistance(this) < 300 })
+fun PlayerUnit.potentialAttackers(safety: Int = 16): List<Unit> =
+        (UnitQuery.unitsInRadius(position, 300) + EnemyState.seenUnits.filter { it.getDistance(this) < 300 })
                 .filter { it is PlayerUnit && it.isEnemyUnit && it.canAttack(this, safety + (it.topSpeed() * MAX_FRAMES_TO_ATTACK).toInt()) }
 
-fun Unit.canBeAttacked(safety: Int = 16) = !potentialAttackers(safety).isEmpty()
+fun PlayerUnit.canBeAttacked(safety: Int = 16) = !potentialAttackers(safety).isEmpty()
 fun TrainingFacility.trains() = UnitType.values().filter { (this as Unit).isA(it.whatBuilds().first) }
+fun UnitType.allRequiredUnits() = allRequiredUnits(HashSet())
+private fun UnitType.allRequiredUnits(set: HashSet<UnitType>): HashSet<UnitType> {
+    if (set.contains(this)) return set
+    if (this.gasPrice() > 0) set.add(race.refinery)
+    set.add(this)
+    requiredUnits().forEach { it.allRequiredUnits(set) }
+    whatBuilds().first.allRequiredUnits(set)
+    return set
+}
+
+fun UnitType.whatNeedsToBeBuild(): List<UnitType> {
+    val result = ArrayList<UnitType>()
+    var current = this;
+    while (!current.isWorker) {
+        result.add(current)
+        current = current.whatBuilds().first
+    }
+    return result
+}
 
 
 object UnitQuery {
     lateinit private var allUnits: Collection<Unit>
 
     fun update(allUnits: Collection<Unit>) {
-        this.allUnits = allUnits.filter { it.isVisible }
+        UnitQuery.allUnits = allUnits.filter { it.isVisible }
     }
 
-    val minerals get() = allUnits.filter { it is MineralPatch }
+    val minerals get() = allUnits.filterIsInstance(MineralPatch::class.java)
     val geysers get() = allUnits.filter { it is VespeneGeyser }
     val ownedUnits get() = allUnits.filterIsInstance(PlayerUnit::class.java)
     val myUnits get() = ownedUnits.filter { it.player == FTTBot.self }

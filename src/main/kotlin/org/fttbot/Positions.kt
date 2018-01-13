@@ -9,7 +9,6 @@ import kotlin.math.sqrt
 
 fun TilePosition.translated(x: Int, y: Int) = TilePosition(this.x + x, this.y + y)
 fun Position.translated(x: Int, y: Int) = Position(this.x + x, this.y + y)
-fun Position.toWalkable() = WalkPosition(this.x / 8, this.y / 8)
 fun TilePosition.toVector() = Vector2(this.x.toFloat(), this.y.toFloat())
 fun Position.toVector() = Vector2(this.x.toFloat(), this.y.toFloat())
 fun Vector2.toPosition() = Position(this.x.toInt(), this.y.toInt())

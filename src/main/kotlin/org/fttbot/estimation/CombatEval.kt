@@ -1,6 +1,6 @@
 package org.fttbot.estimation
 
-import org.fttbot.layer.isMelee
+import org.fttbot.info.isMelee
 import org.fttbot.or
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.DamageType
@@ -30,8 +30,8 @@ object CombatEval {
         val mobilityB = unitsOfPlayerB.map { it.topSpeed }.average().or(0.1)
 
         // Lanchester's Law
-        val agg = 0.5 * (rangeA / mobilityB * damageA / hpB * unitsOfPlayerA.size * unitsOfPlayerA.size -
-                rangeB / mobilityA * damageB / hpA * unitsOfPlayerB.size * unitsOfPlayerB.size)
+        val agg = 0.5 * ((1 + rangeA / mobilityB / 10.0) * damageA / hpB * unitsOfPlayerA.size * unitsOfPlayerA.size -
+                (1 + rangeB / mobilityA / 10.0) * damageB / hpA * unitsOfPlayerB.size * unitsOfPlayerB.size)
         return 1.0 / (exp(-agg) + 1)
     }
 }
@@ -50,7 +50,9 @@ class SimUnit(val name: String = "Unknown",
               val isAir: Boolean = false,
               val topSpeed: Double = 0.0,
               val armor: Int = 0,
-              val size: UnitSizeType = UnitSizeType.None) {
+              val size: UnitSizeType = UnitSizeType.None,
+              val hidden : Boolean = false,
+              val detected: Boolean = false) {
     val isArmed = groundWeapon.type() != WeaponType.None || airWeapon.type() != WeaponType.None
 
     companion object {
@@ -65,7 +67,9 @@ class SimUnit(val name: String = "Unknown",
                 isAir = unit.isFlyer,
                 armor = 0,
                 size = unit.size,
-                topSpeed = unit.topSpeed())
+                topSpeed = unit.topSpeed(),
+                hidden = unit.isCloaked || unit is Burrowable && unit.isBurrowed,
+                detected = unit.isDetected)
     }
 
     /**

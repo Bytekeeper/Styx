@@ -9,7 +9,10 @@ import com.badlogic.gdx.ai.btree.leaf.Success
 import com.badlogic.gdx.ai.btree.utils.BehaviorTreeLibrary
 import org.fttbot.behavior.*
 import org.fttbot.behavior.Scout
-import org.fttbot.layer.isWorker
+import org.fttbot.decision.Utilities
+import org.fttbot.decision.UtilitySelector
+import org.fttbot.decision.UtilityTask
+import org.fttbot.info.isWorker
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 
@@ -25,18 +28,24 @@ object UnitBehaviors {
     private val btlib = BehaviorTreeLibrary()
     private val unitBehavior = HashMap<PlayerUnit, BehaviorTree<*>>()
 
-    private val gatherMinerals
+    private val gatherResources
         get() = DynamicGuardSelector(ReturnResource().guardedBy(ShouldReturnResource()),
                 Selector(GatherMinerals(), GatherGas()))
     private val construct: Task<BBUnit>
         get() = Selector(Sequence(ReturnResource(), SelectConstructionSiteAsTarget(), MoveToPosition(120.0), Construct())
-                , AbortConstruct()).guardedBy(ShouldConstruct())
+                , AbortConstruct())
     private val defendWithWorker: Task<BBUnit>
-        get() = Sequence(SelectBestAttackTarget(), Attack()).guardedBy(EmergencySituation().guardedBy(ShouldDefendWithWorker()))
+        get() = Sequence(SelectBestAttackTarget(), Attack())
 
     init {
-        btlib.registerArchetypeTree(Behavior.WORKER.name, BehaviorTree(DynamicGuardSelector(defendWithWorker, construct, Scout(), gatherMinerals)))
-        btlib.registerArchetypeTree(Behavior.TRAINER.name, BehaviorTree(TrainOrAddon()))
+        btlib.registerArchetypeTree(Behavior.WORKER.name, BehaviorTree(
+            UtilitySelector(UtilityTask(defendWithWorker, Utilities::defend),
+                    UtilityTask(construct, Utilities::construct),
+                    UtilityTask(Scout(), Utilities::scout),
+                    UtilityTask(gatherResources, Utilities::gather),
+                    UtilityTask(MoveToEnemyBase(), Utilities::runaway))
+        ))
+        btlib.registerArchetypeTree(Behavior.TRAINER.name, BehaviorTree(Selector(TrainOrAddon(), ResearchOrUpgrade())))
         btlib.registerArchetypeTree(Behavior.COMBAT_UNIT.name, BehaviorTree(
                 DynamicGuardSelector(
                         Selector(Attack().guardedBy(SelectRetreatAttackTarget()), Retreat()).guardedBy(UnfavorableSituation()),
@@ -54,6 +63,7 @@ object UnitBehaviors {
                 unit.userData = b
                 createTreeFor(Behavior.WORKER, b)
             }
+            unit is ResearchingFacility ||
             unit is TrainingFacility -> {
                 val b = BBUnit(unit)
                 unit.userData = b

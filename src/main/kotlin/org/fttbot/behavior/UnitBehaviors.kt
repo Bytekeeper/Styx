@@ -36,8 +36,6 @@ abstract class UnitLT : LeafTask<BBUnit>() {
     override fun copyTo(task: Task<BBUnit>): Task<BBUnit> = task
 }
 
-const val MOVE_TIMEOUT = 60
-
 class MoveToPosition(var threshold: Double = 12.0) : UnitLT() {
     var bestDistance = Int.MAX_VALUE
     var bestDistanceFrame = 0

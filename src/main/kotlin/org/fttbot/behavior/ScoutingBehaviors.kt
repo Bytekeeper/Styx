@@ -1,11 +1,13 @@
 package org.fttbot.behavior
 
-import bwta.BWTA
 import com.badlogic.gdx.ai.btree.LeafTask
 import com.badlogic.gdx.ai.btree.Task
 import org.fttbot.*
-import org.fttbot.estimation.EnemyModel
-import org.fttbot.layer.*
+import org.fttbot.info.EnemyState
+import org.fttbot.info.UnitQuery
+import org.fttbot.info.board
+import org.fttbot.info.canAttack
+import org.fttbot.info.isEnemyUnit
 import org.openbw.bwapi4j.unit.Building
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.PlayerUnit
@@ -29,7 +31,7 @@ class Scout : UnitLT() {
         }
 
         if (order.points == null && UnitQuery.unitsInRadius(currentTargetLocation, 300).any { it is Building && it.isEnemyUnit }) {
-            EnemyModel.enemyBase = currentTargetLocation
+            EnemyState.enemyBase = currentTargetLocation
             val regionPoly = FTTBot.bwta.getRegion(currentTargetLocation).polygon
             order.points = regionPoly.points
             val closest = order.points!!.minBy { it.getDistance(unit.position) }
@@ -42,7 +44,7 @@ class Scout : UnitLT() {
                 // TODO run
             }
             val nextPoint = points[order.index].toVector().scl(0.9f).mulAdd(currentTargetLocation.toVector(), 0.1f).toPosition()
-            if (unit.position.getDistance(nextPoint) > 80 && (unit.isFlyer || FTTBot.game.bwMap.isWalkable(nextPoint.toWalkable()))) {
+            if (unit.position.getDistance(nextPoint) > 80 && (unit.isFlyer || FTTBot.game.bwMap.isWalkable(nextPoint.toWalkPosition()))) {
                 if (unit.targetPosition.getDistance(nextPoint) > 20) {
                     unit.move(nextPoint)
                 }

@@ -1,16 +1,19 @@
 package org.fttbot.behavior
 
 import org.fttbot.*
+import org.fttbot.decision.Utilities
 import org.fttbot.estimation.CombatEval
-import org.fttbot.estimation.EnemyModel
+import org.fttbot.info.EnemyState
 import org.fttbot.estimation.MAX_FRAMES_TO_ATTACK
 import org.fttbot.estimation.SimUnit
-import org.fttbot.layer.*
+import org.fttbot.info.*
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.UnitType
+import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
+import kotlin.math.max
 
 
 class SelectRetreatAttackTarget : UnitLT() {
@@ -43,6 +46,7 @@ class SelectBestAttackTarget : UnitLT() {
 
     override fun execute(): Status {
         val unit = board().unit
+        if (unit !is Armed) return Status.FAILED
         val simUnit = SimUnit.of(unit)
         val enemiesInArea = UnitQuery.unitsInRadius(unit.position, 300)
                 .filter { it is PlayerUnit && it.isEnemyUnit }
@@ -67,6 +71,10 @@ class SelectBestAttackTarget : UnitLT() {
                 else 0
             }
         }) ?: return Status.FAILED
+        if (unit.getWeaponAgainst(bestEnemy).type() == WeaponType.None) return Status.FAILED
+        if (board().attacking?.target != bestEnemy && board().attacking != null) {
+            LOG.severe("$unit is switching from ${board().attacking?.target} to $bestEnemy");
+        }
         board().attacking = Attacking(bestEnemy)
         return Status.SUCCEEDED
     }
@@ -100,7 +108,7 @@ class FindGoodAttackPosition : UnitLT() {
         if (unit !is Armed) return Status.FAILED
         val simUnit = SimUnit.of(unit)
         val relevantEnemyPositions = (UnitQuery.unitsInRadius(unit.position, 300)
-                + unit.getUnitsInRadius(300, EnemyModel.seenUnits))
+                + unit.getUnitsInRadius(300, EnemyState.seenUnits))
                 .filter { it is PlayerUnit && it.isEnemyUnit && it.canAttack(unit, 32) }
                 .map {
                     val wpn = (it as Armed).getWeaponAgainst(unit)
@@ -122,17 +130,9 @@ class UnfavorableSituation : SituationEvaluator() {
     override fun execute(): Status {
         val probability = evaluate()
         val unit = board().unit
-        if (probability < 0.55 && unit.canBeAttacked(128)) return Status.SUCCEEDED
-        return Status.FAILED
-    }
-}
-
-class EmergencySituation : SituationEvaluator() {
-    override fun execute(): Status {
-        val probability = evaluate()
-        if (probability < 0.33) return Status.SUCCEEDED
-        if (probability < 0.7 && board().attacking != null) return Status.SUCCEEDED
-        board().attacking = null
+        if (Utilities.defend(board()) > 0.7)
+            return Status.FAILED
+        if (probability < 0.55 && unit.canBeAttacked(192)) return Status.SUCCEEDED
         return Status.FAILED
     }
 }
@@ -144,7 +144,7 @@ abstract class SituationEvaluator : UnitLT() {
     protected fun evaluate(): Double {
         val unit = board().unit as MobileUnit
         val unitsInArea = (UnitQuery.unitsInRadius(unit.position, 600) +
-                EnemyModel.seenUnits.filter { it.getDistance(unit.position) < 600 })
+                EnemyState.seenUnits.filter { it.getDistance(unit.position) < 600 })
                 .filter { it is PlayerUnit && (it is Armed || it is Bunker) && it.isCompleted }
                 .map { it as PlayerUnit }
         val center = unitsInArea.fold(Position(0, 0)) { a, u -> a + u.position } / unitsInArea.size
@@ -173,7 +173,7 @@ class Retreat : UnitLT() {
 
 class MoveToEnemyBase : UnitLT() {
     override fun execute(): Status {
-        val target = EnemyModel.enemyBase ?: return Status.FAILED
+        val target = EnemyState.enemyBase ?: return Status.FAILED
         val unit = board().unit as MobileUnit
         if (!unit.isMoving || unit.targetPosition != target) {
             unit.move(target)
@@ -189,16 +189,9 @@ class OnCooldownWithBetterPosition : UnitLT() {
     }
 
     override fun execute(): Status {
-        val unit = board().unit as MobileUnit
-        // Not engaged or shooting in this very moment? Don't fall back
-        if (!unit.groundWeapon.onCooldown || !unit.airWeapon.onCooldown) return Status.FAILED
-        // Melee? Don't fall back, but maybe retreat
-        if (unit.groundWeapon.onCooldown && unit.groundWeapon.isMelee()) return Status.FAILED
-        unit.potentialAttackers().firstOrNull {
-            it is Armed && it.canAttack(unit, 32)
-                    && it.getWeaponAgainst(unit).type().maxRange() + 32 < unit.getWeaponAgainst(it).type().maxRange()
-        } ?: return Status.FAILED
-        return Status.SUCCEEDED
+        if (Utilities.fallback(board()) > 0.3)
+            return Status.SUCCEEDED
+        return Status.FAILED
     }
 }
 
@@ -211,7 +204,7 @@ class FallBack : UnitLT() {
                 .sub(enemyCenter.toVector())
                 .setLength((unit.topSpeed() * unit.groundWeapon.cooldown()).toFloat())
                 .toPosition() + unit.position
-        if (FTTBot.game.bwMap.isWalkable(targetPosition.toWalkable()) && unit.targetPosition.getDistance(targetPosition) > 16) {
+        if (FTTBot.game.bwMap.isWalkable(targetPosition.toWalkPosition()) && unit.targetPosition.getDistance(targetPosition) > 16) {
             if (!unit.move(targetPosition)) return Status.FAILED
         }
         if (unit.position.getDistance(targetPosition) < 16) return Status.SUCCEEDED

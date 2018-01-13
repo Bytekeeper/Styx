@@ -3,9 +3,9 @@ package org.fttbot.behavior
 import com.badlogic.gdx.ai.btree.LeafTask
 import com.badlogic.gdx.ai.btree.Task
 import org.fttbot.board
-import org.fttbot.layer.UnitQuery
-import org.fttbot.layer.board
-import org.fttbot.layer.isMyUnit
+import org.fttbot.info.UnitQuery
+import org.fttbot.info.board
+import org.fttbot.info.isMyUnit
 import org.fttbot.translated
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
@@ -68,9 +68,11 @@ class GatherMinerals : UnitLT() {
         if (targetResource != null && targetResource !is MineralPatch) return Status.FAILED
 
         if (!unit.isGatheringMinerals || targetResource != null) {
-            val target = (targetResource ?: UnitQuery.minerals
+            val target = (targetResource as? MineralPatch ?: UnitQuery.minerals
                     .filter { it.getDistance(unit) < 300 }
-                    .minBy { it.getDistance(unit) }) as? MineralPatch
+                    .minBy { it.getDistance(unit) })
+                    ?: UnitQuery.minerals.filter { m -> UnitQuery.myBases.any { it.getDistance(m) < 300 } }
+                    .minBy { it.getDistance(unit) }
             board().targetResource = null
             if (target == null || !latencyGuarded { unit.gather(target) }) {
                 return Status.FAILED
@@ -98,13 +100,6 @@ class GatherGas : UnitLT() {
         }
         return Status.RUNNING
     }
-}
-
-class ShouldConstruct : UnitLT() {
-    override fun start() {
-    }
-
-    override fun execute(): Status = if (board().construction != null) Status.SUCCEEDED else Status.FAILED
 }
 
 class SelectConstructionSiteAsTarget : UnitLT() {

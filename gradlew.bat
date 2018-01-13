@@ -56,11 +56,11 @@ set CMD_LINE_ARGS=
 set _SKIP=2
 
 :win9xME_args_slurp
-if "x%~1" == "x" goto execute
+if "x%~1" == "x" goto build
 
 set CMD_LINE_ARGS=%*
 
-:execute
+:build
 @rem Setup the command line
 
 set CLASSPATH=%APP_HOME%\gradle\wrapper\gradle-wrapper.jar
