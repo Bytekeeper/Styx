@@ -3,7 +3,6 @@ package org.fttbot.behavior
 import org.fttbot.*
 import org.fttbot.decision.Utilities
 import org.fttbot.estimation.CombatEval
-import org.fttbot.info.EnemyState
 import org.fttbot.estimation.MAX_FRAMES_TO_ATTACK
 import org.fttbot.estimation.SimUnit
 import org.fttbot.info.*
@@ -13,17 +12,13 @@ import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
-import kotlin.math.max
 
 
 class SelectRetreatAttackTarget : UnitLT() {
-    override fun start() {
-    }
-
-    override fun execute(): Status {
-        val unit = board().unit
-        if (unit !is Armed || unit.groundWeapon.onCooldown || unit.airWeapon.onCooldown) return Status.FAILED
-        if (unit.canBeAttacked()) return Status.FAILED
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val unit = board.unit
+        if (unit !is Armed || unit.groundWeapon.onCooldown || unit.airWeapon.onCooldown) return NodeStatus.FAILED
+        if (unit.canBeAttacked()) return NodeStatus.FAILED
         val safety = (unit.topSpeed() * MAX_FRAMES_TO_ATTACK / 8).toInt()
         val enemiesInArea = UnitQuery.unitsInRadius(unit.position, 300)
                 .filter { it is PlayerUnit && it.isEnemyUnit && unit.canAttack(it, safety) }
@@ -33,20 +28,16 @@ class SelectRetreatAttackTarget : UnitLT() {
             val damageCmp = simUnit.directDamage(SimUnit.of(b)).compareTo(simUnit.directDamage(SimUnit.of(a)))
             if (damageCmp != 0) damageCmp
             else a.hitPoints - b.hitPoints
-        }) ?: return Status.FAILED
-        board().attacking = Attacking(bestEnemy)
-        return Status.SUCCEEDED
+        }) ?: return NodeStatus.FAILED
+        board.target = bestEnemy
+        return NodeStatus.SUCCEEDED
     }
-
 }
 
 class SelectBestAttackTarget : UnitLT() {
-    override fun start() {
-    }
-
-    override fun execute(): Status {
-        val unit = board().unit
-        if (unit !is Armed) return Status.FAILED
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val unit = board.unit
+        if (unit !is Armed) return NodeStatus.FAILED
         val simUnit = SimUnit.of(unit)
         val enemiesInArea = UnitQuery.unitsInRadius(unit.position, 300)
                 .filter { it is PlayerUnit && it.isEnemyUnit }
@@ -66,46 +57,43 @@ class SelectBestAttackTarget : UnitLT() {
                 if (damageB == 0.0) return@Comparator -1
                 val valueCompare = (a.hitPoints / damageA).compareTo(b.hitPoints / damageB)
                 if (valueCompare != 0) valueCompare
-                else if (board().attacking?.target == a) -1
-                else if (board().attacking?.target == b) 1
+                else if (board.target == a) -1
+                else if (board.target == b) 1
                 else 0
             }
-        }) ?: return Status.FAILED
-        if (unit.getWeaponAgainst(bestEnemy).type() == WeaponType.None) return Status.FAILED
-        if (board().attacking?.target != bestEnemy && board().attacking != null) {
-            LOG.severe("$unit is switching from ${board().attacking?.target} to $bestEnemy");
+        }) ?: return NodeStatus.FAILED
+        if (unit.getWeaponAgainst(bestEnemy).type() == WeaponType.None) return NodeStatus.FAILED
+        if (board.target != bestEnemy && board.target != null) {
+            LOG.finest("$unit is switching from ${board.target} to $bestEnemy");
         }
-        board().attacking = Attacking(bestEnemy)
-        return Status.SUCCEEDED
+        board.target = bestEnemy
+        return NodeStatus.SUCCEEDED
     }
 
     private fun disregard(unit: Unit) = unit.isA(UnitType.Zerg_Larva) ||
             unit.isA(UnitType.Zerg_Egg)
 }
 
-class Attack : UnitLT() {
-    override fun execute(): Status {
-        val unit = board().unit
-        if (unit !is Armed) return Status.FAILED
-        val attacking = board().attacking ?: throw IllegalStateException()
-        val target = attacking.target
+object Attack : UnitLT() {
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val unit = board.unit
+        if (unit !is Armed) return NodeStatus.FAILED
+        val target = board.target
         if (target is PlayerUnit && (target.isFlyer && unit.airWeapon.onCooldown ||
-                !target.isFlyer && unit.groundWeapon.onCooldown)) return Status.SUCCEEDED
+                !target.isFlyer && unit.groundWeapon.onCooldown)) return NodeStatus.SUCCEEDED
         if (target != unit.targetUnit
                 || (!unit.isAttacking && (unit !is MobileUnit || !unit.isMoving))) {
-            if (!latencyGuarded { unit.attack(target) }) return Status.FAILED
+            if (!unit.attack(target)) return NodeStatus.FAILED
         }
-        return Status.RUNNING
+        return NodeStatus.RUNNING
     }
 }
 
 class FindGoodAttackPosition : UnitLT() {
-    override fun start() {
-    }
-
-    override fun execute(): Status {
-        val unit = board().unit
-        if (unit !is Armed) return Status.FAILED
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val unit = board.unit
+        val target = board.target ?: return NodeStatus.FAILED
+        if (unit !is Armed) return NodeStatus.FAILED
         val simUnit = SimUnit.of(unit)
         val relevantEnemyPositions = (UnitQuery.unitsInRadius(unit.position, 300)
                 + unit.getUnitsInRadius(300, EnemyState.seenUnits))
@@ -116,33 +104,30 @@ class FindGoodAttackPosition : UnitLT() {
                     val dpf = simEnemy.damagePerFrameTo(simUnit)
                     (unit.position - it.position!!).toVector().setLength(wpn.type().maxRange() + 32f).add(it.position!!.toVector()).scl(dpf.toFloat()) to dpf
                 }
-        if (relevantEnemyPositions.isEmpty()) return Status.FAILED
+        if (relevantEnemyPositions.isEmpty()) return NodeStatus.FAILED
         val aggPosition = relevantEnemyPositions
                 .reduce { (pa, da), (pb, db) -> (pa.add(pb)) to (da + db) }
         val maxAvoidPosition = aggPosition.first.scl(1 / aggPosition.second.toFloat())
-        val targetPos = board().attacking!!.target.position.toVector()
-        board().moveTarget = maxAvoidPosition.sub(targetPos).setLength(unit.getWeaponAgainst(board().attacking!!.target).type().maxRange().toFloat()).add(targetPos).toPosition()
-        return Status.SUCCEEDED
+        val targetPos = target.position?.toVector()
+        board.moveTarget = maxAvoidPosition.sub(targetPos).setLength(unit.getWeaponAgainst(target).type().maxRange().toFloat()).add(targetPos).toPosition()
+        return NodeStatus.SUCCEEDED
     }
 }
 
 class UnfavorableSituation : SituationEvaluator() {
-    override fun execute(): Status {
-        val probability = evaluate()
-        val unit = board().unit
-        if (Utilities.defend(board()) > 0.7)
-            return Status.FAILED
-        if (probability < 0.55 && unit.canBeAttacked(192)) return Status.SUCCEEDED
-        return Status.FAILED
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val probability = evaluate(board)
+        val unit = board.unit
+        if (Utilities.defend(board) > 0.7)
+            return NodeStatus.FAILED
+        if (probability < 0.55 && unit.canBeAttacked(192)) return NodeStatus.SUCCEEDED
+        return NodeStatus.FAILED
     }
 }
 
 abstract class SituationEvaluator : UnitLT() {
-    override fun start() {
-    }
-
-    protected fun evaluate(): Double {
-        val unit = board().unit as MobileUnit
+    protected fun evaluate(board: BBUnit): Double {
+        val unit = board.unit as MobileUnit
         val unitsInArea = (UnitQuery.unitsInRadius(unit.position, 600) +
                 EnemyState.seenUnits.filter { it.getDistance(unit.position) < 600 })
                 .filter { it is PlayerUnit && (it is Armed || it is Bunker) && it.isCompleted }
@@ -153,51 +138,48 @@ abstract class SituationEvaluator : UnitLT() {
 
         FTTBot.render.drawCircleMap(center, 300, Color.YELLOW)
         val probability = CombatEval.probabilityToWin(
-                relevantUnits.filter { it.isMyUnit && (it !is MobileUnit || !it.isWorker || it.board.attacking != null) }.map { SimUnit.of(it) },
+                relevantUnits.filter { it.isMyUnit && (it !is MobileUnit || !it.isWorker || it.board.goal is Attacking) }.map { SimUnit.of(it) },
                 enemyUnits)
-        board().combatSuccessProbability = probability
+        board.combatSuccessProbability = probability
         return probability
     }
 }
 
 class Retreat : UnitLT() {
-    override fun execute(): Status {
-        val unit = board().unit as MobileUnit
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val unit = board.unit as MobileUnit
 
         if (!unit.isMoving || unit.targetPosition.toTilePosition().getDistance(FTTBot.self.startLocation) > 2) {
             unit.move(FTTBot.self.startLocation.toPosition())
         }
-        return Status.RUNNING
+        return NodeStatus.RUNNING
     }
 }
 
 class MoveToEnemyBase : UnitLT() {
-    override fun execute(): Status {
-        val target = EnemyState.enemyBase ?: return Status.FAILED
-        val unit = board().unit as MobileUnit
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val target = EnemyState.enemyBase ?: return NodeStatus.FAILED
+        val unit = board.unit as MobileUnit
         if (!unit.isMoving || unit.targetPosition != target) {
             unit.move(target)
         }
-        return Status.RUNNING
+        return NodeStatus.RUNNING
     }
 }
 
 // When attacking: Should this unit fall back a little?
 class OnCooldownWithBetterPosition : UnitLT() {
 
-    override fun start() {
-    }
-
-    override fun execute(): Status {
-        if (Utilities.fallback(board()) > 0.3)
-            return Status.SUCCEEDED
-        return Status.FAILED
+    override fun internalTick(board: BBUnit): NodeStatus {
+        if (Utilities.fallback(board) > 0.3)
+            return NodeStatus.SUCCEEDED
+        return NodeStatus.FAILED
     }
 }
 
-class FallBack : UnitLT() {
-    override fun execute(): Status {
-        val unit = board().unit as MobileUnit
+object FallBack : UnitLT() {
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val unit = board.unit as MobileUnit
         val relevantEnemyPositions = unit.potentialAttackers().map { it.position!! }
         val enemyCenter = relevantEnemyPositions.fold(Position(0, 0)) { a, b -> a + b } / relevantEnemyPositions.size
         val targetPosition = unit.position.toVector()
@@ -205,10 +187,10 @@ class FallBack : UnitLT() {
                 .setLength((unit.topSpeed() * unit.groundWeapon.cooldown()).toFloat())
                 .toPosition() + unit.position
         if (FTTBot.game.bwMap.isWalkable(targetPosition.toWalkPosition()) && unit.targetPosition.getDistance(targetPosition) > 16) {
-            if (!unit.move(targetPosition)) return Status.FAILED
+            if (!unit.move(targetPosition)) return NodeStatus.FAILED
         }
-        if (unit.position.getDistance(targetPosition) < 16) return Status.SUCCEEDED
-        return Status.RUNNING
+        if (unit.position.getDistance(targetPosition) < 16) return NodeStatus.SUCCEEDED
+        return NodeStatus.RUNNING
     }
 
 }

@@ -22,7 +22,7 @@ data class GameState(var frame: Int,
     val freeSupply get() = max(0, supplyTotal - supplyUsed)
     val hasRefinery get() = units[race.refinery]?.isEmpty() == false
     val refineries get() = amountOf(race.refinery)
-    val workers get() = units[race.worker] ?: throw IllegalStateException()
+    val workers get() = units[race.worker] ?: emptyList<UnitState>()
     val finishedAt get() = units.values.flatten().map { it.availableAt }.max() ?: frame
 
     init {
@@ -34,9 +34,9 @@ data class GameState(var frame: Int,
 
     override fun toString(): String =
             "frame: $frame, minerals: $minerals, gas: $gas, supply: $supplyUsed/$supplyTotal\n" +
-            units.map { (ut, unitStates) -> unitStates.map { Pair(ut, it) } }
-                    .flatten().sortedBy { it.second.startedAt }
-                    .map { (ut, s) -> "$ut : $s" }.joinToString("\n")
+                    units.map { (ut, unitStates) -> unitStates.map { Pair(ut, it) } }
+                            .flatten().sortedBy { it.second.startedAt }
+                            .map { (ut, s) -> "$ut : $s" }.joinToString("\n")
 
     fun isValid(unit: UnitType): Boolean =
             units.containsKey(unit.whatBuilds().first)
@@ -44,14 +44,14 @@ data class GameState(var frame: Int,
                     && tech.contains(unit.requiredTech())
                     && unit.supplyRequired() <= freeSupply + pendingSupply
                     && (unit.gasPrice() <= gas || hasRefinery)
-                && (!unit.isAddon || units[unit.whatBuilds().first]!!.any { it.addon == UnitType.None })
+                    && (!unit.isAddon || units[unit.whatBuilds().first]!!.any { it.addon == UnitType.None })
 
     fun isValid(tech: TechType): Boolean =
             units.containsKey(tech.requiredUnit())
                     && units.containsKey(tech.whatResearches())
                     && (tech.gasPrice() <= gas || hasRefinery)
 
-    fun getUpgradeLevel(upgrade: UpgradeType) = upgrades[upgrade]?.let { if (it.availableAt <= frame) it.level else it.level - 1  } ?: 0
+    fun getUpgradeLevel(upgrade: UpgradeType) = upgrades[upgrade]?.let { if (it.availableAt <= frame) it.level else it.level - 1 } ?: 0
 
     fun isValid(upgrade: UpgradeType): Boolean {
         val level = upgrades[upgrade]?.level ?: 0
@@ -60,6 +60,7 @@ data class GameState(var frame: Int,
                 && units.containsKey(upgrade.whatUpgrades())
                 && (upgrade.gasPrice(level) <= gas || hasRefinery)
     }
+
     fun amountOf(unit: UnitType) = units[unit]?.size ?: 0
     fun amountOfBases() = amountOf(race.center) + amountOf(UnitType.Zerg_Lair) + amountOf(UnitType.Zerg_Hive)
     fun completedUnits(type: UnitType) = unitsOfType(type).filter { it.availableAt <= frame }
@@ -86,7 +87,7 @@ data class GameState(var frame: Int,
         if (!unit.isBuilding) throw IllegalStateException("$unit is not a building!")
         acquireResources(unit.mineralPrice(), unit.gasPrice())
 
-        val availableAt : Int
+        val availableAt: Int
         if (unit.isAddon) {
             val building = units[unit.whatBuilds().first]!!.minBy { it.availableAt } ?: throw IllegalStateException()
             passTimeWithDefaultWorkerLayout(building.availableAt)
@@ -134,6 +135,10 @@ data class GameState(var frame: Int,
         var missingMinerals = max(mineralPrice - minerals, 0)
         var missingGas = max(gasPrice - gas, 0)
 
+        if ((missingGas > 0 || missingGas > 0) && workers.isEmpty() || missingGas > 0 && !hasRefinery) {
+            throw IllegalStateException()
+        }
+
         val maxGasGatherers = refineries * 3
 
         // Overall frames required for gathering (distributed over workforce)
@@ -146,9 +151,11 @@ data class GameState(var frame: Int,
             val nextFreeWorker = workers.filter { it.availableAt > frame }.map { it.availableAt }.min() ?: Int.MAX_VALUE
             val forGas = min(amountOfGatherers, min(maxGasGatherers, gasFrames * amountOfGatherers / (miningFrames + gasFrames)))
             val forMinerals = amountOfGatherers - forGas
-            val gatherTime = if (forMinerals == 0) gasFrames / forGas else
-                if (forGas == 0) miningFrames / forMinerals
-                else min(miningFrames / forMinerals, gasFrames / forGas)
+            val gatherTime = if (forMinerals == 0 && forGas > 0) gasFrames / forGas else
+                if (forGas == 0 && forMinerals > 0) miningFrames / forMinerals
+                else if (forGas != 0 && forMinerals != 0)
+                    min(miningFrames / forMinerals, gasFrames / forGas)
+                else Int.MAX_VALUE
             val passTime = min(gatherTime, nextFreeWorker - frame)
 
             passTime(passTime, forMinerals, forGas)

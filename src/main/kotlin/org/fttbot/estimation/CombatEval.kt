@@ -16,10 +16,10 @@ const val HEAL_PER_ENERGY = 2
 object CombatEval {
     fun probabilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>): Double {
         val damageA = unitsOfPlayerA.map { a ->
-            unitsOfPlayerB.map { b -> a.damagePerFrameTo(b) }.max() ?: 0.01
+            unitsOfPlayerB.map { b -> if (!b.hidden || b.detected) a.damagePerFrameTo(b) else 0.0}.average()
         }.average().or(0.01)
         val damageB = unitsOfPlayerB.map { b ->
-            unitsOfPlayerA.map { a -> b.damagePerFrameTo(a) }.max() ?: 0.01
+            unitsOfPlayerA.map { a -> if (!a.hidden || a.detected) b.damagePerFrameTo(a) else 0.0}.average()
         }.average().or(0.01)
         val hpA = unitsOfPlayerA.filter { it.isArmed }.map { it.hitPoints }.average().or(0.1) + unitsOfPlayerA.count { it.canHeal } * HEAL_PER_ENERGY
         val hpB = unitsOfPlayerB.filter { it.isArmed }.map { it.hitPoints }.average().or(0.1) + unitsOfPlayerB.count { it.canHeal } * HEAL_PER_ENERGY
@@ -30,7 +30,7 @@ object CombatEval {
         val mobilityB = unitsOfPlayerB.map { it.topSpeed }.average().or(0.1)
 
         // Lanchester's Law
-        val agg = 0.5 * ((1 + rangeA / mobilityB / 10.0) * damageA / hpB * unitsOfPlayerA.size * unitsOfPlayerA.size -
+        val agg = 5 * ((1 + rangeA / mobilityB / 10.0) * damageA / hpB * unitsOfPlayerA.size * unitsOfPlayerA.size -
                 (1 + rangeB / mobilityA / 10.0) * damageB / hpA * unitsOfPlayerB.size * unitsOfPlayerB.size)
         return 1.0 / (exp(-agg) + 1)
     }

@@ -13,12 +13,10 @@ import java.util.*
 
 open class BBUnit(val unit: PlayerUnit) {
     var moveTarget: Position? = null
-    var targetResource: Unit? = null
+    var target: Unit? = null
     var status: String = "<Nothing>"
-    var construction: Construction? = null
-    var scouting: Scouting? = null
-    var attacking: Attacking? = null
     var goal: Goal? = null
+
     var combatSuccessProbability: Double = 0.5
     val utility = UtilityStats()
     val importance: Double = 1.0
@@ -26,18 +24,19 @@ open class BBUnit(val unit: PlayerUnit) {
 
 class UtilityStats(var attack: Double = 0.0,
                    var defend: Double = 0.0,
-                   var force : Double = 0.0,
-                   var threat : Double = 0.0,
-                   var value : Double = 0.0,
-                   var construct : Double = 0.0,
-                   var gather : Double = 0.0)
+                   var force: Double = 0.0,
+                   var threat: Double = 0.0,
+                   var value: Double = 0.0,
+                   var construct: Double = 0.0,
+                   var gather: Double = 0.0)
 
 abstract class Goal(val name: String)
 
-class Repair(val target: PlayerUnit) : Goal("Repair")
+class Repairing(val target: Mechanical) : Goal("Repair")
 class BeRepairedBy(val worker: SCV) : Goal("Being repaired")
+class IdleAt(val position: Position) : Goal("Idling")
 
-class Construction(val type: UnitType, var position: TilePosition) {
+class Construction(val type: UnitType, var position: TilePosition) : Goal("Construct") {
     // Confirmed by the engine to have started
     var started: Boolean = false
     // Worker called "build"
@@ -45,12 +44,16 @@ class Construction(val type: UnitType, var position: TilePosition) {
     var building: Building? = null
 }
 
-class Scouting(val locations: Deque<Position>) {
+class Scouting(val locations: Deque<Position>) : Goal("Scout") {
     var points: List<Position>? = null
     var index: Int = 0
 }
 
-class Attacking(val target: Unit)
+class Defending : Goal("Defending")
+
+class Gathering(var target: Unit?) : Goal("Gathering")
+
+class Attacking : Goal("Attack")
 
 object ProductionBoard {
     val orderedConstructions = ArrayDeque<Construction>()

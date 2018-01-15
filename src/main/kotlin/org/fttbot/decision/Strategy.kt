@@ -11,6 +11,6 @@ object StrategyUF {
     fun needMobileDetection() : Double {
         if (!EnemyState.hasInvisibleUnits) return 0.0
         return min(1.0, UnitQuery.myUnits.count { it is Armed } /
-                (UnitQuery.myUnits.count { it is ComsatStation || it is MobileUnit && it.isDetector } * 40.0 + 40))
+                (UnitQuery.myUnits.count { it is ComsatStation || it is MobileUnit && it.isDetector } * 40.0 + 10))
     }
 }

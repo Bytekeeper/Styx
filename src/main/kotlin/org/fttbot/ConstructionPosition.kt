@@ -3,8 +3,8 @@ package org.fttbot
 import com.badlogic.gdx.math.ConvexHull
 import com.badlogic.gdx.math.Polygon
 import com.badlogic.gdx.math.Rectangle
-import org.fttbot.behavior.RESOURCE_RANGE
 import org.fttbot.info.UnitQuery
+import org.fttbot.task.RESOURCE_RANGE
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.UnitType
@@ -12,7 +12,7 @@ import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 
 object ConstructionPosition {
-    private val convexHull = ConvexHull()
+    val convexHull = ConvexHull()
     var resourcePolygons = HashMap<Unit, Polygon>()
 
     fun findPositionFor(unitType: UnitType): TilePosition? {

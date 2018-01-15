@@ -1,7 +1,5 @@
 package org.fttbot.behavior
 
-import com.badlogic.gdx.ai.btree.LeafTask
-import com.badlogic.gdx.ai.btree.Task
 import org.fttbot.*
 import org.fttbot.info.EnemyState
 import org.fttbot.info.UnitQuery
@@ -15,15 +13,12 @@ import java.util.*
 
 
 class Scout : UnitLT() {
-    init {
-        guard = Guard()
-    }
 
-    override fun execute(): Status {
-        val unit = board().unit as MobileUnit
-        val order = board().scouting ?: throw IllegalStateException()
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val unit = board.unit as MobileUnit
+        val order = board.goal as Scouting
 
-        if (order.locations.isEmpty()) return Status.FAILED
+        if (order.locations.isEmpty()) return NodeStatus.FAILED
 
         val currentTargetLocation = order.locations.peek()
         if (!unit.isMoving) {
@@ -58,32 +53,6 @@ class Scout : UnitLT() {
             order.locations.pop()
         }
 
-        return Status.RUNNING
+        return NodeStatus.RUNNING
     }
-
-    class Guard : UnitLT() {
-        override fun start() {}
-        override fun execute(): Status = if (board().scouting != null) Status.SUCCEEDED else Status.FAILED
-
-    }
-}
-
-
-class ScoutEnemyBase : LeafTask<ScoutingBoard>() {
-    override fun execute(): Status {
-        val time = FTTBot.game.interactionHandler.frameCount
-        if (time - `object`.lastScoutFrameCount > 2800) {
-            `object`.lastScoutFrameCount = time
-            if (UnitQuery.myUnits.any { it.userData != null && it.board.scouting != null }) {
-                return Status.RUNNING
-            }
-            val bbUnit = findWorker()?.board ?: return Status.FAILED
-            val locations = FTTBot.bwta.getStartLocations().mapTo(ArrayDeque()) { it.tilePosition }
-            locations.remove(FTTBot.self.startLocation)
-            bbUnit.scouting = Scouting(locations.mapTo(ArrayDeque()) { it.toPosition() })
-        }
-        return Status.RUNNING
-    }
-
-    override fun copyTo(task: Task<ScoutingBoard>?): Task<ScoutingBoard> = ScoutEnemyBase()
 }

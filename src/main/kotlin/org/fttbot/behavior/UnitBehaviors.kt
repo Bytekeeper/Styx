@@ -1,57 +1,47 @@
 package org.fttbot.behavior
 
-import com.badlogic.gdx.ai.btree.LeafTask
-import com.badlogic.gdx.ai.btree.Task
 import org.fttbot.FTTBot
-import org.fttbot.board
+import org.fttbot.Node
+import org.fttbot.NodeStatus
+import org.fttbot.info.UnitQuery
+import org.fttbot.info.board
+import org.openbw.bwapi4j.WalkPosition
 import org.openbw.bwapi4j.unit.MobileUnit
 import java.util.logging.Logger
 
 
-abstract class UnitLT : LeafTask<BBUnit>() {
+abstract class UnitLT : Node<BBUnit> {
     protected val LOG = Logger.getLogger(this::class.java.simpleName)
-    private var lastOrderFrame = -24
-    protected val latencyAffected get() = FTTBot.frameCount - lastOrderFrame <= FTTBot.latency_frames
 
-    override fun start() {
-        board().status = this::class.java.simpleName ?: "<Unknown>"
-        LOG.fine("${board().unit} started ${board().status}")
-        lastOrderFrame = -24
+    final override fun tick(board: BBUnit): NodeStatus {
+        board.status = this::class.java.simpleName
+        return internalTick(board)
     }
 
-    override fun end() {
-        LOG.finest("${board().unit} stopped ${board().status} with ${status}")
+    abstract fun internalTick(board: BBUnit): NodeStatus
+
+    override fun aborted(board: BBUnit) {
+        board.status = ""
     }
-
-
-    protected fun latencyGuarded(op: () -> Boolean): Boolean {
-        if (latencyAffected) return true
-        if (op()) {
-            lastOrderFrame = FTTBot.frameCount
-            return true
-        }
-        return false
-    }
-
-    override fun copyTo(task: Task<BBUnit>): Task<BBUnit> = task
 }
 
 class MoveToPosition(var threshold: Double = 12.0) : UnitLT() {
     var bestDistance = Int.MAX_VALUE
     var bestDistanceFrame = 0
 
-    override fun start() {
-        super.start()
+    override fun aborted(board: BBUnit) {
+        super.aborted(board)
         bestDistance = Int.MAX_VALUE
     }
 
-    override fun execute(): Status {
-        val unit = board().unit as MobileUnit
-        val targetPosition = board().moveTarget ?: return Status.FAILED
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val unit = board.unit as MobileUnit
+        val targetPosition = board.moveTarget ?: return NodeStatus.FAILED
         val distance = unit.position.getDistance(targetPosition)
         if (distance <= threshold) {
-            board().moveTarget = null
-            return Status.SUCCEEDED
+            board.moveTarget = null
+            unit.stop(false)
+            return NodeStatus.SUCCEEDED
         }
         val elapsedFrames = FTTBot.game.interactionHandler.frameCount
         if (distance < bestDistance) {
@@ -59,17 +49,38 @@ class MoveToPosition(var threshold: Double = 12.0) : UnitLT() {
             bestDistance = distance
         }
         if (elapsedFrames - bestDistanceFrame > distance * 5 / unit.topSpeed()) {
-            return Status.FAILED
+            return NodeStatus.FAILED
         }
         if (!unit.isMoving || targetPosition.getDistance(unit.targetPosition) >= threshold) {
-            latencyGuarded { unit.move(targetPosition) }
+            unit.move(targetPosition)
         }
-        return Status.RUNNING
+        return NodeStatus.RUNNING
     }
+}
 
-    override fun copyTo(task: Task<BBUnit>): Task<BBUnit> {
-        (task as MoveToPosition).threshold = threshold
-        return task
+class MoveTargetFromGoal : UnitLT() {
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val idle = board.goal as IdleAt
+        board.moveTarget = idle.position
+        return NodeStatus.SUCCEEDED
+    }
+}
+
+class SelectSafePosition : UnitLT() {
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val unit = board.unit as MobileUnit
+        val myBases = UnitQuery.myBases
+        if (myBases.isEmpty()) return NodeStatus.FAILED
+        val relevantEnemyPositions = UnitQuery.enemyUnits.filter { it.getDistance(unit) < 300 }
+        val path = FTTBot.bwem.GetMap().GetPath(unit.position, myBases.first().position)
+        // Already in base!
+        if (path.isEmpty) return NodeStatus.FAILED
+        val target = path.zipWithNext { a, b -> a.Center().add(b.Center()).divide(WalkPosition(2, 2)) }
+                .map { it.toPosition() }
+                .firstOrNull { spot -> relevantEnemyPositions.map { it.getDistance(spot) }.min() ?: 400.0 > 300 }
+        if (target == null) return NodeStatus.FAILED
+        unit.board.moveTarget = target
+        return NodeStatus.SUCCEEDED
     }
 }
 

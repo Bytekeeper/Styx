@@ -32,7 +32,7 @@ class MCTS(val units: Map<UnitType, Int>, val tech: Set<TechType>, val upgrades:
 
     fun step(state: GameState) {
         val cpy = state.copy()
-        var node = root;
+        var node = root
         do {
             val next = node.select(prng, node.maxFrames)
             if (next != null) {
@@ -45,7 +45,9 @@ class MCTS(val units: Map<UnitType, Int>, val tech: Set<TechType>, val upgrades:
         } else {
             val result = if (notDone(cpy)) {
                 expand(cpy, node)
-                simulate(cpy, node.select(prng, node.maxFrames)!!)
+                if (node.children?.isEmpty() == false) {
+                    simulate(cpy, node.select(prng, node.maxFrames)!!)
+                } else 0
             } else {
                 val finishedAt = cpy.finishedAt
                 bestFrameDepth = finishedAt

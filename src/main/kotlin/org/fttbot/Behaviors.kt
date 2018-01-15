@@ -1,12 +1,5 @@
 package org.fttbot
 
-import com.badlogic.gdx.ai.btree.BehaviorTree
-import com.badlogic.gdx.ai.btree.Task
-import com.badlogic.gdx.ai.btree.branch.DynamicGuardSelector
-import com.badlogic.gdx.ai.btree.branch.Selector
-import com.badlogic.gdx.ai.btree.branch.Sequence
-import com.badlogic.gdx.ai.btree.leaf.Success
-import com.badlogic.gdx.ai.btree.utils.BehaviorTreeLibrary
 import org.fttbot.behavior.*
 import org.fttbot.behavior.Scout
 import org.fttbot.decision.Utilities
@@ -16,65 +9,71 @@ import org.fttbot.info.isWorker
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 
-fun <T> Task<T>.board(): T = this.`object`
-
-fun <E, T : Task<E>> T.guardedBy(guard: Task<E>): T {
-    this.guard = guard
-    return this
-}
-
 
 object UnitBehaviors {
-    private val btlib = BehaviorTreeLibrary()
-    private val unitBehavior = HashMap<PlayerUnit, BehaviorTree<*>>()
+    private val unitBehavior = HashMap<PlayerUnit, BTree<*>>()
 
     private val gatherResources
-        get() = DynamicGuardSelector(ReturnResource().guardedBy(ShouldReturnResource()),
-                Selector(GatherMinerals(), GatherGas()))
-    private val construct: Task<BBUnit>
-        get() = Selector(Sequence(ReturnResource(), SelectConstructionSiteAsTarget(), MoveToPosition(120.0), Construct())
+        get() = MSelector(ReturnResource() onlyIf ShouldReturnResource(),
+                GatherMinerals(), GatherGas())
+    private val construct: Node<BBUnit>
+        get() = Fallback(MSequence(ReturnResource(), SelectConstructionSiteAsTarget(), MoveToPosition(120.0), Construct())
                 , AbortConstruct())
-    private val defendWithWorker: Task<BBUnit>
-        get() = Sequence(SelectBestAttackTarget(), Attack())
+    private val defendWithWorker
+        get() = Attack onlyIf SelectBestAttackTarget()
 
-    init {
-        btlib.registerArchetypeTree(Behavior.WORKER.name, BehaviorTree(
-            UtilitySelector(UtilityTask(defendWithWorker, Utilities::defend),
-                    UtilityTask(construct, Utilities::construct),
-                    UtilityTask(Scout(), Utilities::scout),
-                    UtilityTask(gatherResources, Utilities::gather),
-                    UtilityTask(MoveToEnemyBase(), Utilities::runaway))
-        ))
-        btlib.registerArchetypeTree(Behavior.TRAINER.name, BehaviorTree(Selector(TrainOrAddon(), ResearchOrUpgrade())))
-        btlib.registerArchetypeTree(Behavior.COMBAT_UNIT.name, BehaviorTree(
-                DynamicGuardSelector(
-                        Selector(Attack().guardedBy(SelectRetreatAttackTarget()), Retreat()).guardedBy(UnfavorableSituation()),
-                        FallBack().guardedBy(OnCooldownWithBetterPosition()),
-                        Sequence(Attack(), Sequence(FindGoodAttackPosition(), MoveToPosition()).guardedBy(OnCooldownWithBetterPosition())).guardedBy(SelectBestAttackTarget()),
-                        MoveToEnemyBase())))
-    }
+    private fun createWorkerTree(board: BBUnit) = BTree(
+            Fallback(
+                    UtilitySelector(UtilityTask(defendWithWorker) { u -> if (u.goal is Defending) 1.0 else 0.0 },
+                            UtilityTask(construct, Utilities::construct),
+                            UtilityTask(Scout(), Utilities::scout),
+                            UtilityTask(gatherResources, Utilities::gather),
+                            UtilityTask(MoveToEnemyBase(), Utilities::runaway),
+                            UtilityTask(Repair()) { u -> if (u.goal is Repairing) 1.0 else 0.0 },
+                            UtilityTask(MoveToPosition(96.0) onlyIf MoveTargetFromGoal()) { u -> if (u.goal is IdleAt) 1.0 else 0.0 },
+                            UtilityTask(MoveToPosition(96.0) onlyIf SelectSafePosition()) { u -> if (u.goal is BeRepairedBy) 1.0 else 0.0 }
+                    ),
+                    MoveToPosition(70.0) onlyIf SelectBaseAsTarget()
+            ),
+            board
+    )
+
+    private fun createTrainerTree(board: BBUnit) = BTree(
+            Fallback(TrainOrAddon(), ResearchOrUpgrade()), board
+    )
+
+    private fun createCombatUnitTree(board: BBUnit) = BTree(
+            UtilitySelector(
+                    UtilityTask(MoveToPosition(96.0) onlyIf SelectSafePosition()) { u -> if (u.goal is BeRepairedBy) 1.0 else 0.0 },
+                    UtilityTask(Fallback(
+                            Fallback(Attack onlyIf SelectRetreatAttackTarget(), Retreat()) onlyIf UnfavorableSituation(),
+                            FallBack onlyIf OnCooldownWithBetterPosition(),
+                            Sequence(Attack, MSequence(FindGoodAttackPosition(), MoveToPosition())) onlyIf SelectBestAttackTarget(),
+                            MoveToEnemyBase())) { 0.5 })
+            , board
+    )
 
     fun hasBehaviorFor(unit: PlayerUnit) = unitBehavior.containsKey(unit)
 
-    fun createTreeFor(unit: PlayerUnit): BehaviorTree<*> {
+    fun createTreeFor(unit: PlayerUnit): BTree<*> {
         val behavior = when {
             (unit is MobileUnit) && unit.isWorker -> {
                 val b = BBUnit(unit)
                 unit.userData = b
-                createTreeFor(Behavior.WORKER, b)
+                createWorkerTree(b)
             }
             unit is ResearchingFacility ||
-            unit is TrainingFacility -> {
+                    unit is TrainingFacility -> {
                 val b = BBUnit(unit)
                 unit.userData = b
-                createTreeFor(Behavior.TRAINER, b)
+                createTrainerTree(b)
             }
             unit is Armed -> {
                 val b = BBUnit(unit)
                 unit.userData = b
-                createTreeFor(Behavior.COMBAT_UNIT, b)
+                createCombatUnitTree(b)
             }
-            else -> BehaviorTree<Unit>(Success())
+            else -> BTree<Unit>(Success(), unit)
         }
         unitBehavior[unit] = behavior
         return behavior
@@ -85,10 +84,8 @@ object UnitBehaviors {
     }
 
     fun step() {
-        unitBehavior.values.forEach { it.step() }
+        unitBehavior.values.forEach { it.tick() }
     }
-
-    private fun createTreeFor(behavior: Behavior, blackboard: Any) = btlib.createBehaviorTree(behavior.name, blackboard)
 
     enum class Behavior() {
         WORKER,
