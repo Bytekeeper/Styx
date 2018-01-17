@@ -3,11 +3,13 @@ package org.fttbot.behavior
 import org.fttbot.FTTBot
 import org.fttbot.Node
 import org.fttbot.NodeStatus
+import org.fttbot.div
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.board
 import org.openbw.bwapi4j.WalkPosition
 import org.openbw.bwapi4j.unit.MobileUnit
 import java.util.logging.Logger
+import kotlin.math.min
 
 
 abstract class UnitLT : Node<BBUnit> {
@@ -41,6 +43,7 @@ class MoveToPosition(var threshold: Double = 12.0) : UnitLT() {
         if (distance <= threshold) {
             board.moveTarget = null
             unit.stop(false)
+            bestDistance = Int.MAX_VALUE
             return NodeStatus.SUCCEEDED
         }
         val elapsedFrames = FTTBot.game.interactionHandler.frameCount
@@ -48,7 +51,8 @@ class MoveToPosition(var threshold: Double = 12.0) : UnitLT() {
             bestDistanceFrame = elapsedFrames
             bestDistance = distance
         }
-        if (elapsedFrames - bestDistanceFrame > distance * 5 / unit.topSpeed()) {
+        if (elapsedFrames - bestDistanceFrame > min(600.0, distance * 3 / unit.topSpeed())) {
+            bestDistance = Int.MAX_VALUE
             return NodeStatus.FAILED
         }
         if (!unit.isMoving || targetPosition.getDistance(unit.targetPosition) >= threshold) {
@@ -84,3 +88,16 @@ class SelectSafePosition : UnitLT() {
     }
 }
 
+object SelectRunawayPosition : UnitLT() {
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val unit = board.unit
+        val enemies = UnitQuery.enemyUnits.filter { it.getDistance(unit) < 600 }
+        val myUnits = UnitQuery.myUnits.filter { it.getDistance(unit) < 600 }
+        val map = FTTBot.bwem.GetMap()
+        val target = map.GetNearestArea(unit.tilePosition).AccessibleNeighbours().minBy { area ->
+            enemies.count { map.GetNearestArea(it.tilePosition) == area } - myUnits.count { map.GetNearestArea(it.tilePosition) == area }
+        } ?: return NodeStatus.FAILED
+        board.moveTarget = (target.TopLeft().add(target.BottomRight()) / 2).toPosition()
+        return NodeStatus.SUCCEEDED
+    }
+}

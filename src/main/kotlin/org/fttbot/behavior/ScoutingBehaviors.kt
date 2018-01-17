@@ -26,7 +26,6 @@ class Scout : UnitLT() {
         }
 
         if (order.points == null && UnitQuery.unitsInRadius(currentTargetLocation, 300).any { it is Building && it.isEnemyUnit }) {
-            EnemyState.enemyBase = currentTargetLocation
             val regionPoly = FTTBot.bwta.getRegion(currentTargetLocation).polygon
             order.points = regionPoly.points
             val closest = order.points!!.minBy { it.getDistance(unit.position) }

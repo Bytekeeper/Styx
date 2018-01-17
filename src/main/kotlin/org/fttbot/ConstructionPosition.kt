@@ -28,6 +28,9 @@ object ConstructionPosition {
             for (j in -15..15) {
                 val dist = i * i + j * j
                 val pos = center.translated(i, j);
+                // Simple way to leave gaps
+                if (pos.x % 3 < 1 || pos.y % 5 < 2)
+                    continue
                 if (dist < bestDistance
                         && FTTBot.game.canBuildHere(pos, unitType)
                         && outsideOfResourceLines(pos, unitType)

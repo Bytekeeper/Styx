@@ -20,7 +20,10 @@ class ScoutingTask(var scout: PlayerUnit? = null) : Task {
             scout = findWorker(candidates = units.filterIsInstance(Worker::class.java) ) ?: return TaskResult(emptyList(), TaskStatus.FAILED)
         }
         if (scout!!.board.goal is Scouting) return TaskResult(listOf(scout!!))
-        val locations = FTTBot.bwta.getStartLocations().mapTo(ArrayDeque()) { it.tilePosition }
+        val locations = FTTBot.bwta
+                .getStartLocations()
+                .sortedBy { FTTBot.game.bwMap.isExplored(it.tilePosition) }
+                .mapTo(ArrayDeque()) { it.tilePosition }
         locations.remove(FTTBot.self.startLocation)
         scout!!.board.goal = Scouting(locations.mapTo(ArrayDeque()) { it.toPosition() })
         return TaskResult(listOf(scout!!))

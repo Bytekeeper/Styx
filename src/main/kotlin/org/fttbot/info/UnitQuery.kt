@@ -22,6 +22,25 @@ fun Weapon.inRange(distance: Int, safety: Int): Boolean =
 
 val PlayerUnit.board get() = userData as BBUnit
 
+// From https://docs.google.com/spreadsheets/d/1bsvPvFil-kpvEUfSG74U3E5PLSTC02JxSkiR8QdLMuw/edit#gid=0 resp. PurpleWave
+val Armed.stopFrames get() = when (this) {
+    is Goliath, is SiegeTank, is Reaver -> 1
+    is Worker<*>, is Vulture, is Wraith, is BattleCruiser, is Scout, is Lurker -> 2
+    is Ghost, is Hydralisk -> 3
+    is Arbiter, is Zergling -> 4
+    is Zealot, is Dragoon -> 7
+    is Marine, is Firebat, is Corsair -> 8
+    is DarkTemplar, is Devourer -> 9
+    is Ultralisk -> 14
+    is Archon -> 15
+    is Valkyrie -> 40
+    else -> 2
+}
+
+fun Weapon.attackIsComplete(unit: Armed) = type().damageCooldown() - cooldown() + FTTBot.remaining_latency_frames >= unit.stopFrames
+
+val Armed.canMoveWithoutBreakingAttack get() = groundWeapon.attackIsComplete(this) && airWeapon.attackIsComplete(this)
+
 fun Unit.canAttack(target: PlayerUnit, safety: Int = 0): Boolean {
     if (this !is Armed) return false
     val distance = getDistance(target)

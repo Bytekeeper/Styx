@@ -11,10 +11,12 @@ import org.fttbot.info.*
 import org.openbw.bwapi4j.unit.Armed
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.PlayerUnit
+import org.openbw.bwapi4j.unit.Unit
 import org.openbw.bwapi4j.unit.Worker
 import java.lang.Math.pow
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
 class UtilitySelector<E>(vararg val children: UtilityTask<E>) : Node<E> {
     override fun tick(board: E): NodeStatus {
@@ -49,9 +51,13 @@ object Utilities {
         if (unit.groundWeapon.onCooldown && unit.groundWeapon.isMelee()) return 0.0
         return min(1.0, unit.potentialAttackers().count {
             it is Armed && it.canAttack(unit, if (it is MobileUnit) (it.topSpeed() * max(unit.groundWeapon.cooldown(), unit.airWeapon.cooldown())).toInt() else 32)
-                    && it.getWeaponAgainst(unit).type().maxRange() + 32 < unit.getWeaponAgainst(it).type().maxRange()
-        } / 2.0)
+                    && it.getWeaponAgainst(unit).type().maxRange() + 16 < unit.getWeaponAgainst(it).type().maxRange()
+        } / 2.0 + nearDeath(unit))
     }
+
+    fun health(unit : PlayerUnit) = unit.hitPoints / unit.maxHitPoints().toDouble()
+
+    fun nearDeath(unit: PlayerUnit) = sqrt(1 - health(unit))
 
     fun attack(board: BBUnit): Double {
         val unit = board.unit as Armed

@@ -28,7 +28,7 @@ object UnitBehaviors {
                             UtilityTask(construct, Utilities::construct),
                             UtilityTask(Scout(), Utilities::scout),
                             UtilityTask(gatherResources, Utilities::gather),
-                            UtilityTask(MoveToEnemyBase(), Utilities::runaway),
+                            UtilityTask(MoveToPosition(96.0) onlyIf SelectRunawayPosition, Utilities::runaway),
                             UtilityTask(Repair()) { u -> if (u.goal is Repairing) 1.0 else 0.0 },
                             UtilityTask(MoveToPosition(96.0) onlyIf MoveTargetFromGoal()) { u -> if (u.goal is IdleAt) 1.0 else 0.0 },
                             UtilityTask(MoveToPosition(96.0) onlyIf SelectSafePosition()) { u -> if (u.goal is BeRepairedBy) 1.0 else 0.0 }

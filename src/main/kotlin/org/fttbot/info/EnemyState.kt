@@ -1,15 +1,14 @@
 package org.fttbot.info
 
 import org.fttbot.FTTBot
-import org.openbw.bwapi4j.Position
-import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.*
 
 const val DISCARD_HIDDEN_UNITS_AFTER = 480
 
 object EnemyState {
     val seenUnits = HashSet<PlayerUnit>()
-    var enemyBase: Position? = null
+    val enemyBases = ArrayList<Cluster<PlayerUnit>>()
+    var hasSeenBase = false
     var hasInvisibleUnits = false
 
 
@@ -27,6 +26,15 @@ object EnemyState {
     }
 
     fun step() {
+        enemyBases.clear()
+        enemyBases.addAll(Cluster.enemyClusters.filter { it.units.any { it is Building } })
+        hasSeenBase = hasSeenBase || !enemyBases.isEmpty()
+        if (!hasSeenBase && FTTBot.bwtaAvailable) {
+            val unexploredLocations = FTTBot.bwta.startLocations.filter { !FTTBot.game.bwMap.isExplored(it.tilePosition) }
+            if (unexploredLocations.size == 1) {
+                enemyBases.add(Cluster(unexploredLocations.first().position, mutableSetOf()))
+            }
+        }
         seenUnits.removeIf {
             (it !is Burrowable || !it.isBurrowed)
                     && (it !is Cloakable || !it.isCloaked)

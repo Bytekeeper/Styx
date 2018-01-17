@@ -3,9 +3,7 @@ package org.fttbot.task
 import com.badlogic.gdx.utils.Array
 import org.fttbot.behavior.*
 import org.fttbot.decision.Utilities
-import org.fttbot.info.UnitQuery
-import org.fttbot.info.board
-import org.fttbot.info.isMyUnit
+import org.fttbot.info.*
 import org.fttbot.search.EPS
 import org.omg.PortableInterceptor.SUCCESSFUL
 import org.openbw.bwapi4j.unit.*
@@ -13,7 +11,7 @@ import org.openbw.bwapi4j.unit.*
 interface Task {
     companion object {
         var repairTaskScale = 1.0
-        private val tasks = HashSet<Task>()
+        private val tasks = mutableSetOf(GatherResources, ResetGoal, ConstructGoal, DetectorTask)
 
         fun step() {
             val availableUnits = UnitQuery.myUnits.filter { it.isCompleted }.toMutableList()
@@ -21,12 +19,6 @@ interface Task {
             WorkerDefence.provideTasksTo(tasks)
             ScoutingTask.provideTasksTo(tasks)
             RepairerCompanyTask.provideTasksTo(tasks)
-            if (tasks.none { it is GatherResources }) {
-                tasks.add(GatherResources)
-            }
-            if (tasks.none { it is ResetGoal }) {
-                tasks.add(ResetGoal)
-            }
             val tasksToProcess = Array<Task>(false, 20)
             tasks.forEach(tasksToProcess::add)
             while (tasksToProcess.size > 0) {
@@ -57,13 +49,15 @@ class WorkerDefence(val base: PlayerUnit) : Task {
 
     override fun run(units: List<PlayerUnit>): TaskResult {
         val potentialWorkerDefenders = units.filter { it is Worker<*> && it.getDistance(base) < 300 }
+                .sortedByDescending { it.hitPoints }
         val numWorkerDefenders = (potentialWorkerDefenders.size * utility).toInt()
         val alreadyDefending = potentialWorkerDefenders.filter { it.board.goal is Defending }
         if (alreadyDefending.size > numWorkerDefenders) {
             // TODO Choose "best" not "any"
             return TaskResult(potentialWorkerDefenders.subList(0, numWorkerDefenders), TaskStatus.SUCCESSFUL)
         }
-        val newDefenders = potentialWorkerDefenders.filter { it.board.goal !is Defending }.take(numWorkerDefenders - alreadyDefending.size)
+        val newDefenders = potentialWorkerDefenders.filter { it.board.goal !is Defending }
+                .take(numWorkerDefenders - alreadyDefending.size)
         newDefenders.forEach { it.board.goal = Defending() }
         return TaskResult(newDefenders, TaskStatus.SUCCESSFUL)
     }
@@ -133,12 +127,33 @@ object GatherResources : Task {
 
 }
 
+object ConstructGoal : Task {
+    override val utility: Double
+        get() = 0.5
+
+    override fun run(units: List<PlayerUnit>): TaskResult {
+        return TaskResult(units.filterIsInstance(Worker::class.java).filter { it.board.goal is Construction })
+    }
+}
+
 object ResetGoal : Task {
     override val utility: Double = 0.0
 
     override fun run(units: List<PlayerUnit>): TaskResult {
         units.forEach { if (it.userData != null) it.board.goal = null }
         return TaskResult(emptyList(), TaskStatus.RUNNING)
+    }
+}
+
+object DetectorTask : Task {
+    override val utility: Double
+        get() = 0.5
+
+    override fun run(units: List<PlayerUnit>): TaskResult {
+        val clusterNeedingDetection = Cluster.mobileCombatUnits.firstOrNull { ClusterUnitInfo.getInfo(it).needDetection > 0.55 } ?: return TaskResult(emptyList())
+        val comsat = units.firstOrNull { it is ComsatStation } as? ComsatStation ?: return TaskResult(emptyList())
+        comsat.scannerSweep(ClusterUnitInfo.getInfo(clusterNeedingDetection).forceCenter)
+        return TaskResult(listOf(comsat))
     }
 
 }

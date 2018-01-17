@@ -4,9 +4,14 @@ import org.fttbot.*
 import org.fttbot.behavior.ProductionBoard.orderedConstructions
 import org.fttbot.decision.StrategyUF
 import org.fttbot.info.*
+import org.fttbot.search.MCTS
+import org.fttbot.sim.GameState
 import org.openbw.bwapi4j.type.Race
+import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
+import org.openbw.bwapi4j.type.UpgradeType
 import org.openbw.bwapi4j.unit.*
+import java.util.logging.Level
 import java.util.logging.Logger
 
 class TrainOrAddon : UnitLT() {
@@ -97,6 +102,48 @@ class DetectorProduction : Node<ProductionBoard> {
             NodeStatus.SUCCEEDED
         } else
             NodeStatus.FAILED
+    }
+}
+
+object BoSearch : Node<ProductionBoard> {
+    private val LOG = Logger.getLogger(this::class.java.simpleName)
+
+    override fun tick(board: ProductionBoard): NodeStatus {
+        if (FTTBot.self.canMake(UnitType.Terran_Marine) && FTTBot.self.canMake(UnitType.Terran_Vulture) && FTTBot.self.getUpgradeLevel(UpgradeType.Ion_Thrusters) > 0) return NodeStatus.FAILED
+        if (!ProductionBoard.queue.isEmpty()) return NodeStatus.SUCCEEDED
+        val upgradesInProgress = UnitQuery.myUnits.filterIsInstance(ResearchingFacility::class.java).map {
+            val upgrade = it.upgradeInProgress
+            upgrade.upgradeType to GameState.UpgradeState(-1, upgrade.remainingUpgradeTime, FTTBot.self.getUpgradeLevel(upgrade.upgradeType) + 1)
+        }.toMap()
+        val upgrades = UpgradeType.values()
+                .map { Pair(it, upgradesInProgress[it] ?: GameState.UpgradeState(-1, 0, FTTBot.self.getUpgradeLevel(it))) }.toMap().toMutableMap()
+        val units = UnitQuery.myUnits.map {
+            it.initialType to GameState.UnitState(-1,
+                    if (!it.isCompleted && it is Building) it.remainingBuildTime
+                    else if (it is TrainingFacility) it.remainingTrainTime
+                    else 0)
+        }.groupBy { (k, v) -> k }
+                .mapValues { it.value.map { it.second }.toMutableList() }.toMutableMap()
+
+        val state = GameState(0, FTTBot.self.race, FTTBot.self.supplyUsed(), FTTBot.self.supplyTotal(), FTTBot.self.minerals(), FTTBot.self.gas(),
+                units, mutableMapOf(TechType.None to 0), upgrades)
+
+        val buildPlan = MCTS(mapOf(UnitType.Terran_Marine to 2, UnitType.Terran_Vulture to 12), setOf(), mapOf(UpgradeType.Ion_Thrusters to 1), Race.Terran)
+        try {
+            repeat(400) { buildPlan.step(state) }
+            var n = buildPlan.root.children?.minBy { it.frames }
+            if (n != null) {
+                val move = n.move ?: IllegalStateException()
+                when (move) {
+                    is MCTS.UnitMove -> if (!move.unit.isRefinery || !state.hasRefinery) ProductionBoard.queue.add(ProductionBoard.UnitItem(move.unit))
+                    is MCTS.UpgradeMove -> ProductionBoard.queue.add(ProductionBoard.UpgradeItem(move.upgrade))
+                }
+            }
+            return NodeStatus.SUCCEEDED
+        } catch (e: IllegalStateException) {
+            LOG.log(Level.SEVERE, "Couldn't determine build order, guess it's over", e)
+        }
+        return NodeStatus.FAILED
     }
 }
 

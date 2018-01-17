@@ -157,6 +157,10 @@ class Construct : UnitLT() {
                 (unit as SCV).haltConstruction()
             }
             if (construct.building != null) {
+                if (construct.building?.isBeingConstructed == true) {
+                    LOG.severe("${unit}: Huh, building to 'continue' is already being worked on!")
+                    return NodeStatus.FAILED
+                }
                 if (unit.rightClick(construct.building!!, false)) {
                     LOG.info("${unit} will continue construction of ${construct.type} at ${construct.position}")
                 } else return NodeStatus.FAILED

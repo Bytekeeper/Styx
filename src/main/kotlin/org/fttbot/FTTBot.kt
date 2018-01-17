@@ -5,13 +5,14 @@ import bwta.BWTA
 import org.fttbot.behavior.*
 import org.fttbot.decision.StrategyUF
 import org.fttbot.info.*
-import org.fttbot.search.MCTS
-import org.fttbot.sim.GameState
 import org.fttbot.start.ProcessHelper
 import org.fttbot.task.Task
 import org.openbw.bwapi4j.*
-import org.openbw.bwapi4j.type.*
-import org.openbw.bwapi4j.unit.*
+import org.openbw.bwapi4j.type.Color
+import org.openbw.bwapi4j.type.Race
+import org.openbw.bwapi4j.type.UnitType
+import org.openbw.bwapi4j.unit.Building
+import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Unit
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
@@ -36,15 +37,19 @@ object FTTBot : BWEventListener {
     }
     lateinit var render: MapDrawer
     var latency_frames = 0
+    var remaining_latency_frames = 0
     var frameCount = 0
 
     private val buildManager = BTree(
-            Fallback(
-                    SupplyProduction(),
-                    DetectorProduction(),
-                    BuildNextItemFromProductionQueue(),
-                    ProduceAttacker(),
-                    WorkerProduction()
+            Sequence(
+                    Fallback(
+                            BoSearch,
+                            SupplyProduction(),
+                            DetectorProduction(),
+                            WorkerProduction(),
+                            ProduceAttacker(),
+                            Success()),
+                    BuildNextItemFromProductionQueue()
             ),
             ProductionBoard)
 
@@ -53,6 +58,8 @@ object FTTBot : BWEventListener {
     fun start() {
         game.startGame()
     }
+
+    val bwtaAvailable get() = bwtaInitializer.isDone
 
     override fun onStart() {
         bwtaInitializer = CompletableFuture.supplyAsync {
@@ -104,7 +111,8 @@ object FTTBot : BWEventListener {
     }
 
     override fun onFrame() {
-        latency_frames = game.interactionHandler.remainingLatencyFrames
+        latency_frames = game.interactionHandler.latencyFrames
+        remaining_latency_frames = game.interactionHandler.remainingLatencyFrames
         frameCount = game.interactionHandler.frameCount
 
         if (game.interactionHandler.frameCount % latency_frames == 0) {
@@ -112,46 +120,14 @@ object FTTBot : BWEventListener {
 //        Exporter.export()
             EnemyState.step()
             Cluster.step()
-
+            ClusterUnitInfo.step()
             Task.step()
 
             ProductionBoard.updateReserved()
             buildManager.tick()
             UnitBehaviors.step()
 
-            val upgradesInProgress = UnitQuery.myUnits.filterIsInstance(ResearchingFacility::class.java).map {
-                val upgrade = it.upgradeInProgress
-                upgrade.upgradeType to GameState.UpgradeState(-1, upgrade.remainingUpgradeTime, self.getUpgradeLevel(upgrade.upgradeType) + 1)
-            }.toMap()
-            val upgrades = UpgradeType.values()
-                    .map { Pair(it, upgradesInProgress[it] ?: GameState.UpgradeState(-1, 0, self.getUpgradeLevel(it))) }.toMap().toMutableMap()
-            val units = UnitQuery.myUnits.map {
-                it.initialType to GameState.UnitState(-1,
-                        if (!it.isCompleted && it is Building) it.remainingBuildTime
-                        else if (it is TrainingFacility) it.remainingTrainTime
-                        else 0)
-            }.groupBy { (k, v) -> k }
-                    .mapValues { it.value.map { it.second }.toMutableList() }.toMutableMap()
 
-            val state = GameState(0, self.race, self.supplyUsed(), self.supplyTotal(), self.minerals(), self.gas(),
-                    units, mutableMapOf(TechType.None to 0), upgrades)
-
-            if (ProductionBoard.queue.isEmpty()) {
-                val buildPlan = MCTS(mapOf(UnitType.Terran_Marine to 2, UnitType.Terran_Vulture to 12), setOf(), mapOf(UpgradeType.Ion_Thrusters to 1), Race.Terran)
-                try {
-                    repeat(400) { buildPlan.step(state) }
-                    var n = buildPlan.root.children?.minBy { it.frames }
-                    if (n != null) {
-                        val move = n.move ?: IllegalStateException()
-                        when (move) {
-                            is MCTS.UnitMove -> if (!move.unit.isRefinery || !state.hasRefinery) ProductionBoard.queue.add(ProductionBoard.UnitItem(move.unit))
-                            is MCTS.UpgradeMove -> ProductionBoard.queue.add(ProductionBoard.UpgradeItem(move.upgrade))
-                        }
-                    }
-                } catch (e: IllegalStateException) {
-                    LOG.log(Level.SEVERE, "Couldn't determine build order, guess it's over", e)
-                }
-            }
         }
 
         if (bwtaInitializer.isDone) {
@@ -195,6 +171,7 @@ object FTTBot : BWEventListener {
             when (goal) {
                 is Attacking -> if (b.target != null) render.drawLineMap(unit.position, b.target!!.position, Color.RED)
                 is Construction -> render.drawLineMap(unit.position, goal.position.toPosition() + Position(16, 16), Color.GREY)
+                is Repairing -> render.drawLineMap(unit.position, (goal.target as Unit).position + Position(16, 16), Color.GREY)
             }
             b.moveTarget?.let {
                 render.drawLineMap(unit.position, it, Color.BLUE)
@@ -209,8 +186,14 @@ object FTTBot : BWEventListener {
             render.drawCircleMap(unit.position, unit.width(), Color.YELLOW)
             render.drawTextMap(unit.position, unit.toString())
         }
+        Cluster.enemyClusters.forEach {
+            render.drawCircleMap(it.position, 300, Color.RED)
+        }
         Cluster.mobileCombatUnits.forEach {
             render.drawCircleMap(it.position, 300, Color.ORANGE)
+            val combat = ClusterUnitInfo.getInfo(it)
+            val prob = combat.combatEval
+            render.drawTextMap(it.position + Position(0, -200), "$prob, # ${combat.combatRelevantUnits.size} / ${combat.unitsInArea.size}")
         }
 
         val t = System.currentTimeMillis()
