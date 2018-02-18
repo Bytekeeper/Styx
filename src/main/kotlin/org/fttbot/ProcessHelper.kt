@@ -1,4 +1,4 @@
-package org.fttbot.start
+package org.fttbot
 
 /**
  * Kills and starts processes, including Starcraft game itself and Chaoslauncher.
@@ -22,8 +22,8 @@ object ProcessHelper {
     fun startChaosLauncherProcess() {
         try {
             Thread.sleep(250)
-            executeInCommandLine("c:\\Users\\dante\\BWAPI\\Chaoslauncher\\Chaoslauncher.exe")
-//            executeInCommandLine("C:\\Program Files (x86)\\BWAPI\\Chaoslauncher\\Chaoslauncher.exe")
+            executeInCommandLine("c:\\Users\\dante\\BWAPI\\Chaoslauncher\\Chaoslauncher - MultiInstance.exe")
+//            executeInCommandLine("C:\\Program Files (x86)\\BWAPI\\Chaoslauncher\\Chaoslauncher - MultiInstance.exe")
         } catch (ex: InterruptedException) {
             // Don't do anything
         }

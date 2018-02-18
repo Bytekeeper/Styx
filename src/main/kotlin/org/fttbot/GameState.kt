@@ -1,4 +1,4 @@
-package org.fttbot.sim
+package org.fttbot
 
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.TechType
@@ -16,7 +16,7 @@ data class GameState(var frame: Int,
                      var minerals: Int,
                      var gas: Int,
                      var units: MutableMap<UnitType, MutableList<UnitState>>,
-                     var tech: MutableMap<TechType, Int>,
+                     var tech: MutableMap<TechType, Int>, // Tech -> frame available at
                      var upgrades: MutableMap<UpgradeType, UpgradeState>) {
     val pendingSupply get() = min(400 - supplyUsed, units[race.supplyProvider]?.sumBy { it.supplyProvided } ?: 0)
     val freeSupply get() = max(0, supplyTotal - supplyUsed)
@@ -113,7 +113,9 @@ data class GameState(var frame: Int,
             val nextSupplyFrame = units[race.supplyProvider]?.filter { it.supplyProvided > 0 }?.map { it.availableAt }?.min() ?: throw IllegalStateException()
             passTimeWithDefaultWorkerLayout(nextSupplyFrame)
         }
-        if (unit.supplyRequired() > freeSupply) throw IllegalStateException()
+        if (unit.supplyRequired() > freeSupply) {
+            throw IllegalStateException()
+        }
         val trainers = units[unit.whatBuilds().first] ?: throw IllegalStateException()
         val requiredAddon = unit.requiredUnits().firstOrNull() { it.isAddon }
         val filteredTrainers = if (requiredAddon != null) trainers.filter { it.addon == requiredAddon } else trainers

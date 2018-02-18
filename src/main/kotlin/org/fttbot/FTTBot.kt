@@ -2,21 +2,20 @@ package org.fttbot
 
 import bwem.BWEM
 import bwta.BWTA
+import org.fttbot.StrategyUtility.needMobileDetection
 import org.fttbot.behavior.*
-import org.fttbot.decision.StrategyUF
+import org.fttbot.estimation.BOPrediction
+import org.fttbot.estimation.UnitVsUnit
 import org.fttbot.info.*
-import org.fttbot.start.ProcessHelper
-import org.fttbot.task.Task
+import org.fttbot.task.*
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.UnitType
-import org.openbw.bwapi4j.unit.Building
 import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Unit
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
-import java.util.logging.ConsoleHandler
 import java.util.logging.Level
 import java.util.logging.Logger
 
@@ -39,19 +38,6 @@ object FTTBot : BWEventListener {
     var latency_frames = 0
     var remaining_latency_frames = 0
     var frameCount = 0
-
-    private val buildManager = BTree(
-            Sequence(
-                    Fallback(
-                            BoSearch,
-                            SupplyProduction(),
-                            DetectorProduction(),
-                            WorkerProduction(),
-                            ProduceAttacker(),
-                            Success()),
-                    BuildNextItemFromProductionQueue()
-            ),
-            ProductionBoard)
 
 //    private val combatManager = BehaviorTree(AttackEnemyBase())
 
@@ -78,10 +64,8 @@ object FTTBot : BWEventListener {
 
         Thread.sleep(100)
         game.interactionHandler.setLocalSpeed(0)
+        game.interactionHandler.enableLatCom(false)
 
-        val consoleHandler = ConsoleHandler()
-        consoleHandler.level = Level.INFO
-        Logger.getLogger("").addHandler(consoleHandler)
         Logger.getLogger("").level = Level.INFO
 
         val racePlayed = self.race
@@ -92,20 +76,11 @@ object FTTBot : BWEventListener {
             else -> throw IllegalStateException("Can't handle race ${racePlayed}")
         }
 
-        ProductionBoard.queue.addAll(listOf(
-                ProductionBoard.UnitItem(UnitType.Terran_SCV),
-                ProductionBoard.UnitItem(UnitType.Terran_SCV),
-                ProductionBoard.UnitItem(UnitType.Terran_SCV),
-                ProductionBoard.UnitItem(UnitType.Terran_SCV),
-                ProductionBoard.UnitItem(UnitType.Terran_SCV),
-                ProductionBoard.UnitItem(UnitType.Terran_Supply_Depot),
-                ProductionBoard.UnitItem(UnitType.Terran_SCV),
-                ProductionBoard.UnitItem(UnitType.Terran_SCV),
-                ProductionBoard.UnitItem(UnitType.Terran_Barracks),
-                ProductionBoard.UnitItem(UnitType.Terran_Refinery),
-                ProductionBoard.UnitItem(UnitType.Terran_SCV),
-                ProductionBoard.UnitItem(UnitType.Terran_SCV),
-                ProductionBoard.UnitItem(UnitType.Terran_Marine)
+        ProductionQueue.enqueue(listOf(
+                BOUnit(UnitType.Terran_SCV),
+                BOUnit(UnitType.Terran_SCV),
+                BOUnit(UnitType.Terran_SCV),
+                BOUnit(UnitType.Terran_SCV)
         ))
         UnitQuery.update(emptyList())
     }
@@ -115,19 +90,18 @@ object FTTBot : BWEventListener {
         remaining_latency_frames = game.interactionHandler.remainingLatencyFrames
         frameCount = game.interactionHandler.frameCount
 
+//        val result = bwem.GetMap().GetPath(game.bwMap.startPositions[0].toPosition(), game.bwMap.startPositions[1].toPosition())
+
         if (game.interactionHandler.frameCount % latency_frames == 0) {
             UnitQuery.update(game.allUnits)
 //        Exporter.export()
+            ProductionQueue.onFrame()
             EnemyState.step()
             Cluster.step()
             ClusterUnitInfo.step()
+
             Task.step()
-
-            ProductionBoard.updateReserved()
-            buildManager.tick()
             UnitBehaviors.step()
-
-
         }
 
         if (bwtaInitializer.isDone) {
@@ -161,11 +135,13 @@ object FTTBot : BWEventListener {
         }
         for (unit in UnitQuery.myUnits) {
             val b = unit.userData as? BBUnit ?: continue
-            render.drawTextMap(unit.position, b.status)
+            render.drawTextMap(unit.position, "${unit.id}: ${b.status}")
+            render.drawTextMap(unit.position + Position(0, 10), "a:${UnitUtility.attack(b)} ct:${UnitUtility.collateralThreat(b)}")
+            render.drawTextMap(unit.position + Position(0, 20), "r:${UnitUtility.runaway(b)} it:${UnitUtility.immediateThreat(unit)}")
 //            render.drawTextMap(unit.position + Position(0, -10), "% ${b.combatSuccessProbability}")
             val util = b.utility
 //            render.drawTextMap(unit.position + Position(0, -40), "a ${util.attack}, d ${util.defend}, f ${util.force}")
-//            render.drawTextMap(unit.position + Position(0, -30), "t ${util.threat}, v ${util.value}, c ${util.construct}")
+//            render.drawTextMap(unit.position + Position(0, -30), "t ${util.collateralThreat}, v ${util.worth}, c ${util.construct}")
 //            render.drawTextMap(unit.position + Position(0, -20), "g ${util.gather}")
             val goal = b.goal
             when (goal) {
@@ -195,36 +171,35 @@ object FTTBot : BWEventListener {
             val prob = combat.combatEval
             render.drawTextMap(it.position + Position(0, -200), "$prob, # ${combat.combatRelevantUnits.size} / ${combat.unitsInArea.size}")
         }
+        Task.lastTaskOrder.forEachIndexed { index, task -> render.drawTextScreen(0, 60 + 10 * index, "${task.javaClass.simpleName} : ${task.utility}") }
 
         val t = System.currentTimeMillis()
         render.drawTextScreen(0, 20, "${System.currentTimeMillis() - t} ms")
-        render.drawTextScreen(0, 30, "needDetection: ${StrategyUF.needMobileDetection()}")
+        render.drawTextScreen(0, 30, "needDetection: ${StrategyUtility.needMobileDetection()}")
+        val predict = BOPrediction.predict()
+        if (predict != null) {
+            render.drawTextScreen(0, 40, "${predict.category} : ${predict.probability}")
+            val bestVs = UnitVsUnit.bestUnitVs(UnitTypes.trainables, predict.category)
+            render.drawTextScreen(0, 50, "Best I could build: $bestVs")
+        }
     }
 
     override fun onUnitDestroy(unit: Unit) {
         if (unit !is PlayerUnit) return
         UnitBehaviors.removeBehavior(unit)
         EnemyState.onUnitDestroy(unit)
+        BoSearch.onUnitDestroy(unit)
     }
 
     override fun onUnitCreate(unit: Unit) {
         if (unit !is PlayerUnit) return
         checkForStartedConstruction(unit)
+        BoSearch.onUnitCreate(unit)
     }
 
-    private fun checkForStartedConstruction(unit: Unit) {
-        if (unit is Building && unit.isMyUnit) {
-            val workerWhoStartedIt = UnitQuery.myWorkers.firstOrNull {
-                val construction = it.board.goal as? Construction ?: return@firstOrNull false
-                construction.commissioned && construction.position == unit.tilePosition && unit.isA(construction.type)
-            }
-            if (workerWhoStartedIt != null) {
-                val construction = workerWhoStartedIt.board.goal as Construction
-                construction.building = unit
-                construction.started = true
-            } else {
-                LOG.severe("Can't find worker associated with building ${unit}!")
-            }
+    private fun checkForStartedConstruction(unit: PlayerUnit) {
+        if (unit.isMyUnit) {
+            ProductionQueue.onStarted(unit)
         }
     }
 
@@ -242,7 +217,10 @@ object FTTBot : BWEventListener {
     }
 
     override fun onUnitShow(unit: Unit) {
-        if (unit is PlayerUnit && unit.isEnemyUnit) EnemyState.onUnitShow(unit)
+        if (unit is PlayerUnit && unit.isEnemyUnit) {
+            BOPrediction.onSeenUnit(unit)
+            EnemyState.onUnitShow(unit)
+        }
     }
 
     override fun onUnitHide(unit: Unit) {
@@ -251,6 +229,10 @@ object FTTBot : BWEventListener {
 
     override fun onUnitRenegade(unit: Unit?) {
         // Unit changed owner
+        if (unit is PlayerUnit) {
+            EnemyState.onUnitRenegade(unit)
+            BoSearch.onUnitRenegade(unit)
+        }
     }
 
     override fun onUnitDiscover(unit: Unit?) {

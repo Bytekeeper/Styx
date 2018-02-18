@@ -23,6 +23,7 @@ class Scout : UnitLT() {
         val currentTargetLocation = order.locations.peek()
         if (!unit.isMoving) {
             unit.move(currentTargetLocation)
+            board.nextOrderFrame = FTTBot.frameCount + FTTBot.latency_frames
         }
 
         if (order.points == null && UnitQuery.unitsInRadius(currentTargetLocation, 300).any { it is Building && it.isEnemyUnit }) {
@@ -41,6 +42,7 @@ class Scout : UnitLT() {
             if (unit.position.getDistance(nextPoint) > 80 && (unit.isFlyer || FTTBot.game.bwMap.isWalkable(nextPoint.toWalkPosition()))) {
                 if (unit.targetPosition.getDistance(nextPoint) > 20) {
                     unit.move(nextPoint)
+                    board.nextOrderFrame = FTTBot.frameCount + FTTBot.latency_frames
                 }
             } else {
                 do {

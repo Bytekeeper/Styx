@@ -1,9 +1,7 @@
 package org.fttbot.behavior
 
-import org.fttbot.FTTBot
-import org.fttbot.Node
-import org.fttbot.NodeStatus
-import org.fttbot.div
+import com.badlogic.gdx.math.Vector2
+import org.fttbot.*
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.board
 import org.openbw.bwapi4j.WalkPosition
@@ -57,12 +55,14 @@ class MoveToPosition(var threshold: Double = 12.0) : UnitLT() {
         }
         if (!unit.isMoving || targetPosition.getDistance(unit.targetPosition) >= threshold) {
             unit.move(targetPosition)
+            board.nextOrderFrame = FTTBot.frameCount + FTTBot.latency_frames
+            bestDistance = Int.MAX_VALUE
         }
         return NodeStatus.RUNNING
     }
 }
 
-class MoveTargetFromGoal : UnitLT() {
+object MoveTargetFromGoal : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
         val idle = board.goal as IdleAt
         board.moveTarget = idle.position
@@ -70,7 +70,7 @@ class MoveTargetFromGoal : UnitLT() {
     }
 }
 
-class SelectSafePosition : UnitLT() {
+object SelectSafePosition : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
         val unit = board.unit as MobileUnit
         val myBases = UnitQuery.myBases
@@ -90,14 +90,24 @@ class SelectSafePosition : UnitLT() {
 
 object SelectRunawayPosition : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
-        val unit = board.unit
-        val enemies = UnitQuery.enemyUnits.filter { it.getDistance(unit) < 600 }
-        val myUnits = UnitQuery.myUnits.filter { it.getDistance(unit) < 600 }
-        val map = FTTBot.bwem.GetMap()
-        val target = map.GetNearestArea(unit.tilePosition).AccessibleNeighbours().minBy { area ->
-            enemies.count { map.GetNearestArea(it.tilePosition) == area } - myUnits.count { map.GetNearestArea(it.tilePosition) == area }
-        } ?: return NodeStatus.FAILED
-        board.moveTarget = (target.TopLeft().add(target.BottomRight()) / 2).toPosition()
+        val unit = board.unit as MobileUnit
+        val direction = Vector2(Potential.threatsRepulsion(unit))
+                .mulAdd(Potential.collisionRepulsion(unit), 0.2f)
+                .mulAdd(Potential.wallRepulsion(unit), 0.4f)
+                .mulAdd(Potential.safeAreaAttraction(unit), 0.5f)
+        if (direction == Vector2.Zero) return NodeStatus.FAILED
+        board.moveTarget = unit.position + direction.setLength(96f).toPosition()
         return NodeStatus.SUCCEEDED
+    }
+}
+
+class IsTrue(val condition: (a: BBUnit) -> Boolean) : UnitLT() {
+    override fun internalTick(board: BBUnit): NodeStatus = if (condition(board)) NodeStatus.SUCCEEDED else NodeStatus.FAILED
+}
+
+object Sleep : UnitLT() {
+    override fun internalTick(board: BBUnit): NodeStatus {
+        if (board.nextOrderFrame > FTTBot.frameCount) return NodeStatus.SUCCEEDED
+        return NodeStatus.FAILED
     }
 }

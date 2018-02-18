@@ -11,16 +11,17 @@ import org.openbw.bwapi4j.unit.Unit
 
 const val MAX_MELEE_RANGE = 64
 
-val MobileUnit.isWorker get() = javaClass == SCV::class.java || javaClass == Drone::class.java || javaClass == Probe::class.java
 val Weapon.onCooldown get () = cooldown() >= FTTBot.latency_frames
 val PlayerUnit.isMyUnit get() = player == FTTBot.self
 val PlayerUnit.isEnemyUnit get() = player == FTTBot.enemy
 fun Armed.getWeaponAgainst(target: Unit) = if (target.isFlying) airWeapon else groundWeapon
 fun Weapon.isMelee() = this != WeaponType.None && type().maxRange() <= MAX_MELEE_RANGE
-fun Weapon.inRange(distance: Int, safety: Int): Boolean =
-        type().minRange() <= distance && type().maxRange() >= distance - safety
+fun WeaponType.inRange(distance: Int, safety: Int): Boolean =
+        minRange() <= distance && maxRange() >= distance - safety
 
 val PlayerUnit.board get() = userData as BBUnit
+
+fun <T : Unit> List<T>.inRadius(other: Unit, maxRadius: Int) = filter { other.getDistance(it) < maxRadius }
 
 // From https://docs.google.com/spreadsheets/d/1bsvPvFil-kpvEUfSG74U3E5PLSTC02JxSkiR8QdLMuw/edit#gid=0 resp. PurpleWave
 val Armed.stopFrames get() = when (this) {
@@ -37,19 +38,21 @@ val Armed.stopFrames get() = when (this) {
     else -> 2
 }
 
-fun Weapon.attackIsComplete(unit: Armed) = type().damageCooldown() - cooldown() + FTTBot.remaining_latency_frames >= unit.stopFrames
+//  + FTTBot.remaining_latency_frames
+fun Weapon.attackIsComplete(unit: Armed) = type().damageCooldown() == 0 || type().damageCooldown() - cooldown() >= unit.stopFrames
 
 val Armed.canMoveWithoutBreakingAttack get() = groundWeapon.attackIsComplete(this) && airWeapon.attackIsComplete(this)
 
-fun Unit.canAttack(target: PlayerUnit, safety: Int = 0): Boolean {
-    if (this !is Armed) return false
+fun PlayerUnit.canAttack(target: Unit, safety: Int = 0): Boolean {
+    if (!isCompleted) return false
+    val weaponType = if (this is Bunker) UnitType.Terran_Marine.groundWeapon() else if (this is Armed) getWeaponAgainst(target).type() else return false
     val distance = getDistance(target)
-    return getWeaponAgainst(target).inRange(distance, safety) && target.isVisible && (target !is Cloakable && target !is Burrowable || target.isDetected)
+    return weaponType.inRange(distance, safety) && target.isVisible && (target !is Cloakable && target !is Burrowable || target is PlayerUnit && target.isDetected)
 }
 
-fun PlayerUnit.potentialAttackers(safety: Int = 16): List<Unit> =
-        (UnitQuery.unitsInRadius(position, 300) + EnemyState.seenUnits.filter { it.getDistance(this) < 300 })
-                .filter { it is PlayerUnit && it.isEnemyUnit && it.canAttack(this, safety + (it.topSpeed() * MAX_FRAMES_TO_ATTACK).toInt()) }
+fun Unit.potentialAttackers(safety: Int = 16): List<PlayerUnit> =
+        (UnitQuery.unitsInRadius(position, 300).filterIsInstance(PlayerUnit::class.java) + EnemyState.seenUnits.filter { it.getDistance(this) < 300 })
+                .filter { it.isEnemyUnit && it.canAttack(this, safety + (it.topSpeed() * MAX_FRAMES_TO_ATTACK).toInt()) }
 
 fun PlayerUnit.canBeAttacked(safety: Int = 16) = !potentialAttackers(safety).isEmpty()
 fun TrainingFacility.trains() = UnitType.values().filter { (this as Unit).isA(it.whatBuilds().first) }
@@ -91,4 +94,12 @@ object UnitQuery {
 
     fun allUnits(): Collection<Unit> = allUnits
     fun unitsInRadius(position: Position, radius: Int) = allUnits.filter { it.getDistance(position) <= radius }
+}
+
+object UnitTypes {
+    val trainables : Set<UnitType> get() = UnitQuery.myUnits.filterIsInstance(TrainingFacility::class.java)
+            .flatMap { it.trains() }
+            .filter { FTTBot.self.canMake(it) }
+            .toSet()
+
 }

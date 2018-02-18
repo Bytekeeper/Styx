@@ -14,19 +14,20 @@ class ScoutingTask(var scout: PlayerUnit? = null) : Task {
     override val utility: Double
         get() = 1.0
 
-    override fun run(units: List<PlayerUnit>): TaskResult {
-        if (scout != null && (!scout!!.exists() || !units.contains(scout!!))) return TaskResult(emptyList(), TaskStatus.FAILED)
+    override fun run(available: Resources): TaskResult {
+        val units = available.units
+        if (scout != null && (!scout!!.exists() || !units.contains(scout!!))) return TaskResult(status = TaskStatus.FAILED)
         if (scout == null || !units.contains(scout!!)) {
-            scout = findWorker(candidates = units.filterIsInstance(Worker::class.java) ) ?: return TaskResult(emptyList(), TaskStatus.FAILED)
+            scout = findWorker(candidates = units.filterIsInstance(Worker::class.java) ) ?: return TaskResult(status = TaskStatus.FAILED)
         }
-        if (scout!!.board.goal is Scouting) return TaskResult(listOf(scout!!))
-        val locations = FTTBot.bwta
-                .getStartLocations()
-                .sortedBy { FTTBot.game.bwMap.isExplored(it.tilePosition) }
-                .mapTo(ArrayDeque()) { it.tilePosition }
+        if (scout!!.board.goal is Scouting) return TaskResult(Resources(listOf(scout!!)))
+        val locations = (FTTBot.game.bwMap.startPositions
+                + FTTBot.bwem.GetMap().Areas().flatMap { it.Bases() }.map { it.Location() })
+                .sortedBy { FTTBot.game.bwMap.isExplored(it) }
+                .toCollection(ArrayDeque())
         locations.remove(FTTBot.self.startLocation)
         scout!!.board.goal = Scouting(locations.mapTo(ArrayDeque()) { it.toPosition() })
-        return TaskResult(listOf(scout!!))
+        return TaskResult(Resources(listOf(scout!!)))
     }
 
     companion object {

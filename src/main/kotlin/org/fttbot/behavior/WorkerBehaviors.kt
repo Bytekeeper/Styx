@@ -9,10 +9,10 @@ import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.unit.*
 
-fun findWorker(forPosition: Position? = null, maxRange: Double = 400.0, candidates: List<Worker<*>> = UnitQuery.myWorkers): Worker<*>? {
+fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidates: List<Worker<*>> = UnitQuery.myWorkers): Worker<*>? {
     val selection =
             if (forPosition != null) {
-                candidates.filter { forPosition.getDistance(it.position) <= maxRange }
+                candidates.filter { it.getDistance(forPosition) <= maxRange }
             } else candidates
     return selection.minWith(Comparator { a, b ->
         if (a.isIdle != b.isIdle) {
@@ -72,12 +72,12 @@ class GatherMinerals : UnitLT() {
 
         if (targetResource != null && targetResource !is MineralPatch) return NodeStatus.FAILED
 
-        if (!unit.isGatheringMinerals || targetResource != null) {
+        if (unit.isInterruptible && (!unit.isGatheringMinerals || targetResource != null)) {
             val target = (targetResource as? MineralPatch ?: UnitQuery.minerals
                     .filter { it.getDistance(unit) < 300 }
                     .minBy { it.getDistance(unit) })
                     ?: UnitQuery.minerals.filter { m -> UnitQuery.myBases.any { it.getDistance(m) < 300 } }
-                    .minBy { it.getDistance(unit) }
+                            .minBy { it.getDistance(unit) }
             gathering.target = null
             if (target == null || !unit.gather(target)) {
                 return NodeStatus.FAILED
@@ -95,7 +95,7 @@ class GatherGas : UnitLT() {
 
         if (targetResource != null && targetResource !is GasMiningFacility) return NodeStatus.FAILED
 
-        if (!unit.isGatheringGas || targetResource != null) {
+        if (unit.isInterruptible && (!unit.isGatheringGas || targetResource != null)) {
             val target = (targetResource ?: UnitQuery.allUnits()
                     .filter { it is GasMiningFacility && it.isMyUnit && it.getDistance(unit) < 300 }
                     .minBy { it.getDistance(unit) }) as? GasMiningFacility
@@ -137,6 +137,24 @@ class AbortConstruct : UnitLT() {
     }
 }
 
+object ResumeConstruct : UnitLT() {
+    override fun internalTick(board: BBUnit): NodeStatus {
+        val unit = board.unit as SCV
+        val resume = board.goal as ResumeConstruction
+
+        if (!resume.building.exists()) return NodeStatus.FAILED
+        if (resume.building.isCompleted) return NodeStatus.SUCCEEDED
+
+        if (unit.targetUnit != resume.building) {
+            if (unit.rightClick(resume.building, false)) {
+                LOG.info("${unit} will continue construction of ${resume.building} at ${resume.building.position}")
+            } else return NodeStatus.FAILED
+        }
+        return NodeStatus.RUNNING
+    }
+
+}
+
 class Construct : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
         val unit = board.unit as Worker<*>
@@ -144,7 +162,8 @@ class Construct : UnitLT() {
         val position = construct.position
 
         if (construct.started && !construct.commissioned) {
-            throw IllegalStateException("Building ${construct.type}was started but not yet 'started' by this worker")
+            LOG.severe("Building ${construct.type} was started but not yet 'started' by this worker")
+            return NodeStatus.FAILED
         }
 
         if (construct.building?.isCompleted == true) {
@@ -157,13 +176,8 @@ class Construct : UnitLT() {
                 (unit as SCV).haltConstruction()
             }
             if (construct.building != null) {
-                if (construct.building?.isBeingConstructed == true) {
-                    LOG.severe("${unit}: Huh, building to 'continue' is already being worked on!")
-                    return NodeStatus.FAILED
-                }
-                if (unit.rightClick(construct.building!!, false)) {
-                    LOG.info("${unit} will continue construction of ${construct.type} at ${construct.position}")
-                } else return NodeStatus.FAILED
+                LOG.severe("${unit}: Huh, building to 'build' is already being constructed!")
+                return NodeStatus.FAILED
             } else if (unit.build(position, construct.type)) {
                 LOG.info("${unit} at ${unit.position} sent to construct ${construct.type} at ${construct.position}")
                 construct.commissioned = true

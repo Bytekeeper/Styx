@@ -25,14 +25,20 @@ object EnemyState {
         seenUnits.remove(unit)
     }
 
+    fun onUnitRenegade(unit: PlayerUnit) {
+        if (!unit.isEnemyUnit) {
+            seenUnits.remove(unit)
+        }
+    }
+
     fun step() {
         enemyBases.clear()
         enemyBases.addAll(Cluster.enemyClusters.filter { it.units.any { it is Building } })
         hasSeenBase = hasSeenBase || !enemyBases.isEmpty()
-        if (!hasSeenBase && FTTBot.bwtaAvailable) {
-            val unexploredLocations = FTTBot.bwta.startLocations.filter { !FTTBot.game.bwMap.isExplored(it.tilePosition) }
+        if (!hasSeenBase) {
+            val unexploredLocations = FTTBot.game.bwMap.startPositions.filter { !FTTBot.game.bwMap.isExplored(it) }
             if (unexploredLocations.size == 1) {
-                enemyBases.add(Cluster(unexploredLocations.first().position, mutableSetOf()))
+                enemyBases.add(Cluster(unexploredLocations.first().toPosition(), mutableSetOf()))
             }
         }
         seenUnits.removeIf {

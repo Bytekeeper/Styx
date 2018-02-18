@@ -30,7 +30,8 @@ class RepairerCompanyTask(var area: Position) : Task {
     override val utility: Double
         get() = clamp(relevantUnits / 100.0, 0.0, 1.0)
 
-    override fun run(units: List<PlayerUnit>): TaskResult {
+    override fun run(available: Resources): TaskResult {
+        val units = available.units
         val numRepairers = max(0, sqrt(relevantUnits.toDouble()).toInt() / 2)
         currentRepairers.retainAll(units)
         while (currentRepairers.size > numRepairers + 1) {
@@ -41,11 +42,11 @@ class RepairerCompanyTask(var area: Position) : Task {
         if (workersToAdd > 0) {
             currentRepairers.addAll(additionalRepairers.subList(0, workersToAdd))
         }
-        if (currentRepairers.isEmpty()) return TaskResult(currentRepairers, TaskStatus.FAILED)
+        if (currentRepairers.isEmpty()) return TaskResult(Resources(currentRepairers), TaskStatus.FAILED)
         currentRepairers.forEach {
             it.board.goal = IdleAt(area)
         }
-        return TaskResult(currentRepairers, TaskStatus.RUNNING)
+        return TaskResult(Resources(currentRepairers), TaskStatus.RUNNING)
     }
 
     companion object {
@@ -75,11 +76,12 @@ class RepairerCompanyTask(var area: Position) : Task {
 class RepairTask(val target: PlayerUnit) : Task {
     override val utility: Double get() = (1 - target.hitPoints * target.hitPoints / target.maxHitPoints().toDouble() / target.maxHitPoints()) * 1.0 * Task.repairTaskScale
 
-    override fun run(units: List<PlayerUnit>): TaskResult {
-        if (FTTBot.self.minerals() < 10) return TaskResult(emptyList(), TaskStatus.FAILED)
-        if (target.hitPoints >= target.maxHitPoints()) return TaskResult(emptyList(), TaskStatus.SUCCESSFUL)
+    override fun run(available: Resources): TaskResult {
+        val units = available.units
+        if (FTTBot.self.minerals() < 10) return TaskResult(status = TaskStatus.FAILED)
+        if (target.hitPoints >= target.maxHitPoints()) return TaskResult(status =  TaskStatus.SUCCESSFUL)
         if (!units.contains(target)) {
-            return TaskResult(emptyList(), TaskStatus.FAILED)
+            return TaskResult(status = TaskStatus.FAILED)
         }
         val repairer =
                 if (target is MobileUnit && target.board.goal is BeRepairedBy && units.contains((target.board.goal as BeRepairedBy).worker))
@@ -91,13 +93,14 @@ class RepairTask(val target: PlayerUnit) : Task {
                     existingRepairer ?: units.filterIsInstance(SCV::class.java).filter { it != target && units.contains(it) }.minBy { it.getDistance(target) }
                 }
         if (repairer == null || repairer.getDistance(target) > 300) {
-            return TaskResult(emptyList(), TaskStatus.FAILED)
+            return TaskResult(status = TaskStatus.FAILED)
         }
         repairer.board.goal = Repairing(target as Mechanical)
         if (target is MobileUnit) {
             target.board.goal = BeRepairedBy(repairer)
+            return TaskResult(Resources(listOf(repairer, target)))
         }
-        return TaskResult(listOf(repairer, target))
+        return TaskResult(Resources(listOf(repairer)))
     }
 
     companion object {
