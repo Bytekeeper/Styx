@@ -1,15 +1,35 @@
 package org.fttbot.estimation
 
+import de.daslaboratorium.machinelearning.classifier.Classification
+import de.daslaboratorium.machinelearning.classifier.bayes.BayesClassifier
 import org.openbw.bwapi4j.type.UnitType
-import kotlin.math.abs
+import org.openbw.bwapi4j.unit.PlayerUnit
 
 object BOPrediction {
-    val predictors = HashMap<Item, List<Prediction>>()
+    private val classifier = BayesClassifier<Event, UnitType>()
+    private val seenUnits = HashMap<UnitType, MutableSet<PlayerUnit>>()
 
-    fun bestMatch(type: UnitType, amount: Int) =
-            predictors.keys.filter { it.type == type }.minBy { abs(it.amount - amount) }
+    fun predict() : Classification<Event, UnitType>? = classifier.classify(eventsFromSeenUnits())
 
+    fun onSeenUnit(unit: PlayerUnit) {
+        val units = seenUnits.computeIfAbsent(unit.initialType) { HashSet() }
+        if (units.add(unit)) {
+            classifier.learn(unit.initialType, eventsFromSeenUnits())
+        }
+    }
 
-    class Item(val type: UnitType, val amount: Int)
-    class Prediction(val times: Int, val items: List<Item>)
+    private fun eventsFromSeenUnits(): List<Event> {
+        return seenUnits.map { (k, v) ->
+            Event(when {
+                v.size < 5 -> Amount.SMALL
+                v.size < 10 -> Amount.MEDIUM
+                else -> Amount.LARGE
+            }, k)
+        }
+    }
+
+    data class Event(val amount: Amount, val unitType: UnitType)
+    enum class Amount {
+        SMALL, MEDIUM, LARGE
+    }
 }

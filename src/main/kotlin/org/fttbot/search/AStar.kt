@@ -1,8 +1,8 @@
 package org.fttbot.search
 
+import org.fttbot.GameState
 import org.fttbot.info.allRequiredUnits
 import org.fttbot.info.whatNeedsToBeBuild
-import org.fttbot.sim.GameState
 import org.openbw.bwapi4j.type.UnitType
 import java.lang.Integer.compare
 import java.lang.Integer.max
@@ -55,9 +55,13 @@ class AStar(val initialState: GameState, val units: Map<UnitType, Int>) {
         }
     }
 
-    fun eval(state: GameState) = requiredSet.map {
-        (it.whatNeedsToBeBuild() - state.units.keys).map { it.buildTime() }.sum()
-    }.max() ?: 0
+    fun eval(state: GameState) : Int {
+        val cpy = state.copy(minerals = 100000, gas = 100000)
+        units.forEach { ut, amount ->
+
+        }
+        return 0
+    }
 
     class Node(val state: GameState, val f: Int) : Comparable<Node> {
         override fun compareTo(other: Node): Int = compare(f, other.f)

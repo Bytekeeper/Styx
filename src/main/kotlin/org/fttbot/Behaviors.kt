@@ -2,10 +2,6 @@ package org.fttbot
 
 import org.fttbot.behavior.*
 import org.fttbot.behavior.Scout
-import org.fttbot.decision.Utilities
-import org.fttbot.decision.UtilitySelector
-import org.fttbot.decision.UtilityTask
-import org.fttbot.info.isWorker
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 
@@ -19,37 +15,54 @@ object UnitBehaviors {
     private val construct: Node<BBUnit>
         get() = Fallback(MSequence(ReturnResource(), SelectConstructionSiteAsTarget(), MoveToPosition(120.0), Construct())
                 , AbortConstruct())
+    private val resumeConstruct: Node<BBUnit>
+        get() = Fallback(MSequence(ReturnResource(), ResumeConstruct), AbortConstruct())
     private val defendWithWorker
         get() = Attack onlyIf SelectBestAttackTarget()
+    private val backUp get() = MoveToPosition(16.0) onlyIf SelectRunawayPosition
+
+    private val attack get() = Sequence(Attack, MSequence(FindGoodAttackPosition(), MoveToPosition())) onlyIf SelectBestAttackTarget()
 
     private fun createWorkerTree(board: BBUnit) = BTree(
-            Fallback(
-                    UtilitySelector(UtilityTask(defendWithWorker) { u -> if (u.goal is Defending) 1.0 else 0.0 },
-                            UtilityTask(construct, Utilities::construct),
-                            UtilityTask(Scout(), Utilities::scout),
-                            UtilityTask(gatherResources, Utilities::gather),
-                            UtilityTask(MoveToPosition(96.0) onlyIf SelectRunawayPosition, Utilities::runaway),
-                            UtilityTask(Repair()) { u -> if (u.goal is Repairing) 1.0 else 0.0 },
-                            UtilityTask(MoveToPosition(96.0) onlyIf MoveTargetFromGoal()) { u -> if (u.goal is IdleAt) 1.0 else 0.0 },
-                            UtilityTask(MoveToPosition(96.0) onlyIf SelectSafePosition()) { u -> if (u.goal is BeRepairedBy) 1.0 else 0.0 }
-                    ),
-                    MoveToPosition(70.0) onlyIf SelectBaseAsTarget()
-            ),
+            Fallback(Sleep,
+                    Fallback(
+                            UtilitySelector(UtilityTask(defendWithWorker) { u -> if (u.goal is Defending) 1.0 else 0.0 },
+                                    UtilityTask(construct, UnitUtility::construct),
+                                    UtilityTask(resumeConstruct) { u -> if (u.goal is ResumeConstruction) 1.0 else 0.0 },
+                                    UtilityTask(Scout(), UnitUtility::scout),
+                                    UtilityTask(gatherResources, UnitUtility::gather),
+                                    UtilityTask(backUp, UnitUtility::runaway),
+                                    UtilityTask(Repair()) { u -> if (u.goal is Repairing) 1.0 else 0.0 },
+                                    UtilityTask(MoveToPosition(96.0) onlyIf MoveTargetFromGoal) { u -> if (u.goal is IdleAt) 1.0 else 0.0 },
+                                    UtilityTask(MoveToPosition(96.0) onlyIf SelectSafePosition) { u -> if (u.goal is BeRepairedBy) 1.0 else 0.0 }
+                            ),
+                            MoveToPosition(70.0) onlyIf SelectBaseAsTarget()
+                    )),
             board
     )
 
     private fun createTrainerTree(board: BBUnit) = BTree(
-            Fallback(TrainOrAddon(), ResearchOrUpgrade()), board
+            Fallback(ResearchingOrUpgrading), board
     )
 
     private fun createCombatUnitTree(board: BBUnit) = BTree(
-            UtilitySelector(
-                    UtilityTask(MoveToPosition(96.0) onlyIf SelectSafePosition()) { u -> if (u.goal is BeRepairedBy) 1.0 else 0.0 },
-                    UtilityTask(Fallback(
-                            Fallback(Attack onlyIf SelectRetreatAttackTarget(), Retreat()) onlyIf UnfavorableSituation(),
-                            FallBack onlyIf OnCooldownWithBetterPosition(),
-                            Sequence(Attack, MSequence(FindGoodAttackPosition(), MoveToPosition())) onlyIf SelectBestAttackTarget(),
-                            MoveToEnemyBase())) { 0.5 })
+            Fallback(Sleep,
+                    Fallback(
+                            Sequence(IsTrue { it.goal is BeRepairedBy }, SelectSafePosition, MoveToPosition(64.0)),
+                            attack onlyIf IsTrue { it.goal is Defending },
+                            Fallback(Attack onlyIf SelectRetreatAttackTarget(), backUp) onlyIf UnfavorableSituation(),
+                            backUp onlyIf OnCooldownWithBetterPosition,
+                            attack,
+                            MoveToEnemyBase()
+                    ))
+//            UtilitySelector(
+//                    UtilityTask(MoveToPosition(96.0) onlyIf SelectSafePosition()) { u -> if (u.goal is BeRepairedBy) 1.0 else 0.0 },
+//                    UtilityTask(createAttackPart()) { UnitUtility.defend(board) },
+//                    UtilityTask(Fallback(
+//
+//                            backUp onlyIf OnCooldownWithBetterPosition,
+//                            createAttackPart(),
+//                            MoveToEnemyBase())) { 0.5 })
             , board
     )
 
@@ -57,7 +70,7 @@ object UnitBehaviors {
 
     fun createTreeFor(unit: PlayerUnit): BTree<*> {
         val behavior = when {
-            (unit is MobileUnit) && unit.isWorker -> {
+            (unit is Worker<*>) -> {
                 val b = BBUnit(unit)
                 unit.userData = b
                 createWorkerTree(b)

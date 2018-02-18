@@ -1,6 +1,6 @@
 package org.fttbot.estimation
 
-import org.fttbot.sim.GameState
+import org.fttbot.GameState
 import org.hamcrest.CoreMatchers.`is`
 import org.hamcrest.MatcherAssert.assertThat
 import org.junit.jupiter.api.BeforeAll

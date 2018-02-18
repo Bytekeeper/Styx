@@ -5,6 +5,7 @@ import org.fttbot.or
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.DamageType
 import org.openbw.bwapi4j.type.UnitSizeType
+import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
 import kotlin.math.exp
@@ -15,25 +16,26 @@ const val HEAL_PER_ENERGY = 2
 
 object CombatEval {
     fun probabilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>): Double {
-        val damageA = unitsOfPlayerA.map { a ->
-            unitsOfPlayerB.map { b -> if (!b.hidden || b.detected) a.damagePerFrameTo(b) else 0.0}.average()
-        }.average().or(0.01)
-        val damageB = unitsOfPlayerB.map { b ->
-            unitsOfPlayerA.map { a -> if (!a.hidden || a.detected) b.damagePerFrameTo(a) else 0.0}.average()
-        }.average().or(0.01)
+        val damageA = averageDamageOf(unitsOfPlayerA, unitsOfPlayerB)
+        val damageB = averageDamageOf(unitsOfPlayerB, unitsOfPlayerA)
         val hpA = unitsOfPlayerA.filter { it.isArmed }.map { it.hitPoints }.average().or(0.1) + unitsOfPlayerA.count { it.canHeal } * HEAL_PER_ENERGY
         val hpB = unitsOfPlayerB.filter { it.isArmed }.map { it.hitPoints }.average().or(0.1) + unitsOfPlayerB.count { it.canHeal } * HEAL_PER_ENERGY
 
-        val rangeA = unitsOfPlayerA.map { max(it.groundWeapon.type().maxRange(), it.airWeapon.type().maxRange()) }.average().or(0.1)
-        val rangeB = unitsOfPlayerB.map { max(it.groundWeapon.type().maxRange(), it.airWeapon.type().maxRange()) }.average().or(0.1)
-        val mobilityA = unitsOfPlayerA.map { it.topSpeed }.average().or(0.1)
-        val mobilityB = unitsOfPlayerB.map { it.topSpeed }.average().or(0.1)
+        val rangeA = (unitsOfPlayerA.map { max(it.groundWeapon.type().maxRange(), it.airWeapon.type().maxRange()) } + 1).average()
+        val rangeB = (unitsOfPlayerB.map { max(it.groundWeapon.type().maxRange(), it.airWeapon.type().maxRange()) } + 1).average()
+        val mobilityA = (unitsOfPlayerA.map { it.topSpeed } + 0.01).average()
+        val mobilityB = (unitsOfPlayerB.map { it.topSpeed } + 0.01).average()
 
         // Lanchester's Law
-        val agg = 5 * ((1 + rangeA / mobilityB / 10.0) * damageA / hpB * unitsOfPlayerA.size * unitsOfPlayerA.size -
-                (1 + rangeB / mobilityA / 10.0) * damageB / hpA * unitsOfPlayerB.size * unitsOfPlayerB.size)
+        val agg = 0.1 * ((mobilityA / 100.0 + rangeA / 1000.0 + 4000.0 *  damageA / hpB) * unitsOfPlayerA.size * unitsOfPlayerA.size -
+                (mobilityB / 100.0 + rangeB / 1000.0 + 4000.0 * damageB / hpA) * unitsOfPlayerB.size * unitsOfPlayerB.size)
         return 1.0 / (exp(-agg) + 1)
     }
+
+    private fun averageDamageOf(unitsA: List<SimUnit>, unitsB: List<SimUnit>) = (unitsA.map { a ->
+        if (!a.isPowered) 0.0 else
+            unitsB.map { b -> if (!b.hidden || b.detected) a.damagePerFrameTo(b) else 0.0 }.average()
+    }).average().or(0.1)
 }
 
 class SimUnit(val name: String = "Unknown",
@@ -51,8 +53,9 @@ class SimUnit(val name: String = "Unknown",
               val topSpeed: Double = 0.0,
               val armor: Int = 0,
               val size: UnitSizeType = UnitSizeType.None,
-              val hidden : Boolean = false,
-              val detected: Boolean = false) {
+              val hidden: Boolean = false,
+              val detected: Boolean = false,
+              val isPowered: Boolean = true) {
     val isArmed = groundWeapon.type() != WeaponType.None || airWeapon.type() != WeaponType.None
 
     companion object {
@@ -62,14 +65,27 @@ class SimUnit(val name: String = "Unknown",
                 isUnderDarkSwarm = unit is MobileUnit && unit.isUnderDarkSwarm,
                 hitPoints = unit.hitPoints,
                 position = unit.position,
-                airWeapon = (unit as? Armed)?.airWeapon ?: if (unit is Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(WeaponType.None, 0),
-                groundWeapon = (unit as? Armed)?.groundWeapon ?: if (unit is Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(WeaponType.None, 0),
+                airWeapon = (unit as? Armed)?.airWeapon
+                        ?: if (unit is Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(WeaponType.None, 0),
+                groundWeapon = (unit as? Armed)?.groundWeapon
+                        ?: if (unit is Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(WeaponType.None, 0),
                 isAir = unit.isFlyer,
                 armor = 0,
                 size = unit.size,
                 topSpeed = unit.topSpeed(),
                 hidden = unit.isCloaked || unit is Burrowable && unit.isBurrowed,
-                detected = unit.isDetected)
+                detected = unit.isDetected,
+                isPowered = unit.isPowered)
+
+        fun of(type: UnitType) : SimUnit = SimUnit(
+                name = type.name,
+                hitPoints = type.maxHitPoints(),
+                airWeapon = Weapon(type.airWeapon(), 0),
+                groundWeapon =  Weapon(type.groundWeapon(), 0),
+                isAir = type.isFlyer,
+                size = type.size(),
+                topSpeed = type.topSpeed()
+        )
     }
 
     /**
@@ -109,12 +125,14 @@ class SimUnit(val name: String = "Unknown",
                     UnitSizeType.Small -> 1.0
                     UnitSizeType.Medium -> 0.5
                     UnitSizeType.Large -> 0.25
+                    UnitSizeType.Independent -> 0.0
                     else -> throw IllegalStateException("Can't compare against ${unitSizeType}")
                 }
                 DamageType.Explosive -> when (unitSizeType) {
                     UnitSizeType.Small -> 0.5
                     UnitSizeType.Medium -> 0.75
                     UnitSizeType.Large -> 1.0
+                    UnitSizeType.Independent -> 0.0
                     else -> throw IllegalStateException("Can't compare against ${unitSizeType}")
                 }
                 DamageType.Normal -> 1.0

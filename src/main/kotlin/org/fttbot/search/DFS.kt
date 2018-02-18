@@ -1,7 +1,7 @@
 package org.fttbot.search
 
+import org.fttbot.GameState
 import org.fttbot.info.allRequiredUnits
-import org.fttbot.sim.GameState
 import org.openbw.bwapi4j.type.UnitType
 import kotlin.math.max
 

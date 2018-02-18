@@ -1,6 +1,6 @@
 package org.fttbot.search
 
-import org.fttbot.sim.GameState
+import org.fttbot.GameState
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.openbw.bwapi4j.test.KickStart
@@ -10,7 +10,7 @@ import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.UpgradeType
 import java.util.*
 
-internal class MTCSTest {
+internal class MCTSTest {
     companion object {
         @BeforeAll
         @JvmStatic
@@ -31,7 +31,7 @@ internal class MTCSTest {
                 mutableMapOf(TechType.None to 0), mutableMapOf(UpgradeType.None to GameState.UpgradeState(0, 0, 0)))
         val search = MCTS(mapOf(UnitType.Terran_Vulture to 4, UnitType.Terran_Marine to 2), setOf(), mapOf(UpgradeType.Ion_Thrusters to 1), Race.Terran)
         val start = System.currentTimeMillis()
-        repeat(50000) { search.step(state) }
+        repeat(4000) { search.step(state) }
         val prng = Random()
         var n = search.root.children!!.minBy { it.frames }
         println("${n!!.frames} in ${System.currentTimeMillis() - start} ms");

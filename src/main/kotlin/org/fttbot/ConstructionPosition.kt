@@ -15,19 +15,18 @@ object ConstructionPosition {
     val convexHull = ConvexHull()
     var resourcePolygons = HashMap<Unit, Polygon>()
 
-    fun findPositionFor(unitType: UnitType): TilePosition? {
+    fun findPositionFor(unitType: UnitType, near: Position? = null): TilePosition? {
         if (unitType.isRefinery) {
             return findPositionForGas(unitType);
         }
 
-        val base = UnitQuery.myBases[0]
-        val center = base.position.toTilePosition()
+        val target = if (near != null) near.toTilePosition() else UnitQuery.myBases[0].tilePosition
         var bestBuildPosition: TilePosition? = null
         var bestDistance: Int = Int.MAX_VALUE
         for (i in -15..15) {
             for (j in -15..15) {
                 val dist = i * i + j * j
-                val pos = center.translated(i, j);
+                val pos = target.translated(i, j);
                 // Simple way to leave gaps
                 if (pos.x % 3 < 1 || pos.y % 5 < 2)
                     continue
@@ -66,7 +65,7 @@ object ConstructionPosition {
         val base = UnitQuery.myBases.minBy { it.tilePosition.getDistance(pos) } ?: return true
         val poly = resourcePolygons.computeIfAbsent(base) {
             val relevantUnits = UnitQuery.unitsInRadius(base.position, RESOURCE_RANGE)
-                    .filter { it is MineralPatch || it is VespeneGeyser }
+                    .filter { it is MineralPatch || it is VespeneGeyser || it is Refinery }
                     .toMutableList()
             relevantUnits.add(base)
             val points = FloatArray(relevantUnits.size * 8)

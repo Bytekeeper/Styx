@@ -1,12 +1,11 @@
 package org.fttbot.search
 
+import org.fttbot.GameState
 import org.fttbot.info.allRequiredUnits
-import org.fttbot.sim.GameState
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.UpgradeType
-import sun.security.util.PropertyExpander.expand
 import java.util.*
 import kotlin.math.ln
 import kotlin.math.min
@@ -28,6 +27,22 @@ class MCTS(val units: Map<UnitType, Int>, val tech: Set<TechType>, val upgrades:
                 tech.map { it.requiredUnit() } + tech.map { it.whatResearches() } + upgrades.keys.map { it.whatUpgrades() }
                 + upgrades.entries.flatMap { (ut, lvl) -> (0 until lvl).map { ut.whatsRequired(it) } + ut.whatUpgrades() }).toSet() - UnitType.None
         unitsToTest = requiredSet + race.supplyProvider
+    }
+
+    fun reset() {
+        bestFrameDepth = Int.MAX_VALUE
+        bestNode = null
+    }
+
+    fun restart() {
+        reset()
+        root = Node()
+    }
+
+    fun relocateTo(nextRoot: Node) {
+        reset()
+        root = nextRoot
+        root.parent = null
     }
 
     fun step(state: GameState) {
@@ -82,7 +97,7 @@ class MCTS(val units: Map<UnitType, Int>, val tech: Set<TechType>, val upgrades:
     }
 
     private fun simulate(state: GameState, select: Node): Int {
-        select.move.apply { state }
+        select.move?.applyTo(state)
         do {
             val toBuild = requiredSet.firstOrNull { state.isValid(it) && state.unitsOfType(it).isEmpty() }
             if (toBuild != null) {
@@ -90,7 +105,8 @@ class MCTS(val units: Map<UnitType, Int>, val tech: Set<TechType>, val upgrades:
             }
         } while (toBuild != null)
         upgrades.forEach { ut, lvl ->
-            ((state.upgrades[ut]?.level ?: 0) until lvl).forEach { state.upgrade(ut) } }
+            ((state.upgrades[ut]?.level ?: 0) until lvl).forEach { state.upgrade(ut) }
+        }
         do {
             var toBuild = units.entries.firstOrNull { (u, a) -> state.isValid(u) && state.unitsOfType(u).size < a }?.key
             if (toBuild == null && notDone(state)) {
@@ -119,7 +135,8 @@ class MCTS(val units: Map<UnitType, Int>, val tech: Set<TechType>, val upgrades:
                 .toMutableList()
     }
 
-    class Node(val parent : Node? = null, val move: Move? = null, var frames: Int = 0, var plays: Int = 0, var children: MutableList<Node>? = null) {
+    class Node(var parent: Node? = null, val move: Move? = null, var frames: Int = 0, var plays: Int = 0, var children: MutableList<Node>? = null) {
+
         val maxFrames get() = children?.map { it.frames }?.max() ?: Int.MAX_VALUE
         fun select(prng: Random, maxFrames: Int): Node? = children?.maxBy { n -> (1.0 - n.frames / (maxFrames + EPS)) + 0.3 * sqrt(ln(plays + 1.0) / (n.plays + 1)) + prng.nextDouble() * EPS }
 
@@ -127,6 +144,7 @@ class MCTS(val units: Map<UnitType, Int>, val tech: Set<TechType>, val upgrades:
     }
 
     interface Move {
+
         fun applyTo(state: GameState)
     }
 
@@ -144,5 +162,6 @@ class MCTS(val units: Map<UnitType, Int>, val tech: Set<TechType>, val upgrades:
         }
 
         override fun toString(): String = "$upgrade"
+
     }
 }

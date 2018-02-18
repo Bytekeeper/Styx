@@ -1,14 +1,9 @@
 package org.fttbot.behavior
 
-import com.badlogic.gdx.math.Vector2
 import org.fttbot.*
-import org.fttbot.decision.Utilities
-import org.fttbot.estimation.CombatEval
 import org.fttbot.estimation.MAX_FRAMES_TO_ATTACK
 import org.fttbot.estimation.SimUnit
 import org.fttbot.info.*
-import org.openbw.bwapi4j.Position
-import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
@@ -17,15 +12,23 @@ import org.openbw.bwapi4j.unit.Unit
 
 class SelectRetreatAttackTarget : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
-        val unit = board.unit
-        if (unit !is Armed || unit.groundWeapon.onCooldown || unit.airWeapon.onCooldown) return NodeStatus.FAILED
+        val unit = board.unit as MobileUnit
+        if (unit !is Armed) return NodeStatus.FAILED
+        if (!unit.canMoveWithoutBreakingAttack) return NodeStatus.SUCCEEDED
         if (unit.canBeAttacked()) return NodeStatus.FAILED
-        val safety = (unit.topSpeed() * MAX_FRAMES_TO_ATTACK / 8).toInt()
-        val enemiesInArea = UnitQuery.unitsInRadius(unit.position, 300)
-                .filter { it is PlayerUnit && it.isEnemyUnit && unit.canAttack(it, safety) }
-                .map { it as PlayerUnit }
+        if (unit.groundWeapon.onCooldown || unit.airWeapon.onCooldown) return NodeStatus.FAILED
+        val enemyCluster = Cluster.enemyClusters.minBy { unit.getDistance(it.position) }
+        if (enemyCluster == null) return NodeStatus.FAILED
+
+        val closestEnemyCombatDistance =
+                ClusterUnitInfo.getInfo(enemyCluster)
+                        .unitsInArea.filter { it is Armed && it.getWeaponAgainst(unit).type() != WeaponType.None }
+                        .map { it.getDistance(unit) - (it as Armed).getWeaponAgainst(unit).type().maxRange() }
+                        .min() ?: Int.MAX_VALUE
+        val enemyCandidates = enemyCluster.units
+                .filter { closestEnemyCombatDistance > it.getDistance(unit) - unit.getWeaponAgainst(it).type().maxRange() }
         val simUnit = SimUnit.of(unit)
-        val bestEnemy = enemiesInArea.minWith(Comparator { a, b ->
+        val bestEnemy = enemyCandidates.minWith(Comparator { a, b ->
             val damageCmp = simUnit.directDamage(SimUnit.of(b)).compareTo(simUnit.directDamage(SimUnit.of(a)))
             if (damageCmp != 0) damageCmp
             else a.hitPoints - b.hitPoints
@@ -38,7 +41,8 @@ class SelectRetreatAttackTarget : UnitLT() {
 class SelectBestAttackTarget : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
         val unit = board.unit
-        if (unit !is Armed || unit.groundWeapon.onCooldown && unit.airWeapon.onCooldown) return NodeStatus.FAILED
+        if (unit !is Armed) return NodeStatus.FAILED
+        if (!unit.canMoveWithoutBreakingAttack) return NodeStatus.SUCCEEDED
         val simUnit = SimUnit.of(unit)
         val enemiesInArea = UnitQuery.unitsInRadius(unit.position, 300)
                 .filter { it is PlayerUnit && it.isEnemyUnit }
@@ -79,10 +83,12 @@ object Attack : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
         val unit = board.unit
         if (unit !is Armed) return NodeStatus.FAILED
+        if (!unit.canMoveWithoutBreakingAttack) return NodeStatus.RUNNING
         val target = board.target
-        if ((unit.groundWeapon.cooldown() > 0 || unit.airWeapon.cooldown() > 0) && unit.canMoveWithoutBreakingAttack) return NodeStatus.SUCCEEDED
+        if (unit.groundWeapon.onCooldown || unit.airWeapon.onCooldown) return NodeStatus.SUCCEEDED
         if (target != unit.targetUnit) {
-            if (!unit.attack(target)) return NodeStatus.FAILED
+            if (target == null || !unit.attack(target)) return NodeStatus.FAILED
+            board.nextOrderFrame = FTTBot.frameCount + FTTBot.latency_frames + unit.stopFrames
         }
         return NodeStatus.RUNNING
     }
@@ -98,10 +104,10 @@ class FindGoodAttackPosition : UnitLT() {
                 + unit.getUnitsInRadius(300, EnemyState.seenUnits))
                 .filter { it is PlayerUnit && it.isEnemyUnit && it.canAttack(unit, 32) }
                 .map {
-                    val wpn = (it as Armed).getWeaponAgainst(unit)
+                    val weaponType = if (it is Armed) it.getWeaponAgainst(unit).type() else UnitType.Terran_Marine.groundWeapon()
                     val simEnemy = SimUnit.of(it as PlayerUnit)
                     val dpf = simEnemy.damagePerFrameTo(simUnit)
-                    (unit.position - it.position!!).toVector().setLength(wpn.type().maxRange() + 32f).add(it.position!!.toVector()).scl(dpf.toFloat()) to dpf
+                    (unit.position - it.position!!).toVector().setLength(weaponType.maxRange() + 32f).add(it.position!!.toVector()).scl(dpf.toFloat()) to dpf
                 }
         if (relevantEnemyPositions.isEmpty()) return NodeStatus.FAILED
         val aggPosition = relevantEnemyPositions
@@ -118,21 +124,10 @@ class UnfavorableSituation : UnitLT() {
         val unit = board.unit
         val myCluster = Cluster.mobileCombatUnits.firstOrNull { it.units.contains(unit) } ?: return NodeStatus.FAILED
         val probability = ClusterUnitInfo.getInfo(myCluster).combatEval
-        if (Utilities.defend(board) > 0.7)
+        if (UnitUtility.defend(board) > 0.7)
             return NodeStatus.FAILED
-        if (probability < 0.55 && unit.canBeAttacked(192)) return NodeStatus.SUCCEEDED
+        if (probability < 0.55 && unit.canBeAttacked(64)) return NodeStatus.SUCCEEDED
         return NodeStatus.FAILED
-    }
-}
-
-class Retreat : UnitLT() {
-    override fun internalTick(board: BBUnit): NodeStatus {
-        val unit = board.unit as MobileUnit
-
-        if (!unit.isMoving || unit.targetPosition.toTilePosition().getDistance(FTTBot.self.startLocation) > 2) {
-            unit.move(FTTBot.self.startLocation.toPosition())
-        }
-        return NodeStatus.RUNNING
     }
 }
 
@@ -144,35 +139,19 @@ class MoveToEnemyBase : UnitLT() {
         val unit = board.unit as MobileUnit
         if (!unit.isMoving || unit.targetPosition != target) {
             unit.move(target)
+            board.nextOrderFrame = FTTBot.frameCount + FTTBot.latency_frames
         }
         return NodeStatus.RUNNING
     }
 }
 
 // When attacking: Should this unit fall back a little?
-class OnCooldownWithBetterPosition : UnitLT() {
+object OnCooldownWithBetterPosition : UnitLT() {
 
     override fun internalTick(board: BBUnit): NodeStatus {
-        if (Utilities.fallback(board) > 0.3)
+        if (board.unit is Armed && !board.unit.canMoveWithoutBreakingAttack) return NodeStatus.FAILED
+        if (UnitUtility.fallback(board) > 0.3)
             return NodeStatus.SUCCEEDED
         return NodeStatus.FAILED
     }
-}
-
-object FallBack : UnitLT() {
-    override fun internalTick(board: BBUnit): NodeStatus {
-        val unit = board.unit as MobileUnit
-        val repulse = Potential.threatsRepulsion(unit)
-        if (repulse == Vector2.Zero) return NodeStatus.FAILED
-        val targetPosition = repulse.add(Potential.collisionRepulsion(unit))
-                .setLength(2f * (unit.topSpeed() * unit.groundWeapon.cooldown()).toFloat())
-                .add(unit.position.toVector())
-                .toPosition()
-        if (FTTBot.game.bwMap.isWalkable(targetPosition.toWalkPosition()) && unit.targetPosition.getDistance(targetPosition) > 16) {
-            if (!unit.move(targetPosition)) return NodeStatus.FAILED
-        }
-        if (unit.position.getDistance(targetPosition) < 16) return NodeStatus.SUCCEEDED
-        return NodeStatus.RUNNING
-    }
-
 }

@@ -1,7 +1,5 @@
 package org.fttbot
 
-import org.fttbot.start.ProcessHelper
-
 fun main(args: Array<String>) {
     // Kill previous Starcraft.exe process
     ProcessHelper.killStarcraftProcess()
