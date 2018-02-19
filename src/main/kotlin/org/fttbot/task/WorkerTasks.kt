@@ -16,7 +16,7 @@ class WorkerDefence(val base: PlayerUnit) : Task {
 
     override fun run(available: Resources): TaskResult {
         val units = available.units
-        val potentialWorkerDefenders = units.filter { it is Worker<*> && it.getDistance(base) < 300 }
+        val potentialWorkerDefenders = units.filter { it is Worker && it.getDistance(base) < 300 }
                 .sortedByDescending { it.hitPoints }
         val numWorkerDefenders = (potentialWorkerDefenders.size * utility).toInt()
         val alreadyDefending = potentialWorkerDefenders.filter { it.board.goal is Defending }
@@ -54,7 +54,7 @@ object GatherResources : Task {
         val workerUnits = myBases.flatMap { base ->
             val relevantUnits = UnitQuery.unitsInRadius(base.position, RESOURCE_RANGE)
             val refineries = relevantUnits.filter { it is GasMiningFacility && it.isMyUnit && it.isCompleted }.map { it as GasMiningFacility }
-            val remainingWorkers = units.filter { it.getDistance(base) < RESOURCE_RANGE && it is Worker<*> && it.isMyUnit && it.isCompleted }.map { it as Worker<*> }
+            val remainingWorkers = units.filter { it.getDistance(base) < RESOURCE_RANGE && it is Worker && it.isMyUnit && it.isCompleted }.map { it as Worker }
             val workersToAssign = remainingWorkers.toMutableList()
             val minerals = relevantUnits.filter { it is MineralPatch }.map { it as MineralPatch }.toMutableList()
 

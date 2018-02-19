@@ -51,7 +51,7 @@ object Potential {
         for (i in -3..3 ) {
             for (j in -3..3) {
                 val wp = WalkPosition(pos.x + i * 2, pos.y + j * 2)
-                if (i != 0 || j != 0) {
+                if ((i != 0 || j != 0) && FTTBot.game.bwMap.isValidPosition(wp)) {
                     val miniTile = FTTBot.bwem.GetMap().data.getMiniTile(wp, check_t.no_check)
                     val altitude = miniTile.altitude
                     if (altitude.intValue() > bestAltitude) {

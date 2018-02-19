@@ -3,7 +3,7 @@ package org.fttbot.search
 import org.fttbot.GameState
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
-import org.openbw.bwapi4j.test.KickStart
+import org.openbw.bwapi4j.test.BWDataProvider
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
@@ -15,7 +15,7 @@ internal class MCTSTest {
         @BeforeAll
         @JvmStatic
         fun setup() {
-            KickStart().injectValues()
+            BWDataProvider.injectValues();
         }
     }
 

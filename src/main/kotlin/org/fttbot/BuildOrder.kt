@@ -37,6 +37,8 @@ class BOResearch(val type: TechType, position: Position? = null) : BOItem(positi
     override val canProcess: Boolean
         get() = FTTBot.self.canResearch(type)
     override val whatProduces: UnitType = type.whatResearches()
+
+    override fun toString(): String = type.toString()
 }
 
 class BOUpgrade(val type: UpgradeType, position: Position? = null) : BOItem(position) {
@@ -47,4 +49,6 @@ class BOUpgrade(val type: UpgradeType, position: Position? = null) : BOItem(posi
     override val canProcess: Boolean
         get() = FTTBot.self.canUpgrade(type)
     override val whatProduces: UnitType = type.whatUpgrades()
+
+    override fun toString(): String = type.toString()
 }

@@ -104,6 +104,7 @@ object FTTBot : BWEventListener {
             UnitBehaviors.step()
         }
 
+        /**
         if (bwtaInitializer.isDone) {
             bwta.getRegions().forEachIndexed { index, region ->
                 val poly = region.polygon.points
@@ -181,6 +182,10 @@ object FTTBot : BWEventListener {
             render.drawTextScreen(0, 40, "${predict.category} : ${predict.probability}")
             val bestVs = UnitVsUnit.bestUnitVs(UnitTypes.trainables, predict.category)
             render.drawTextScreen(0, 50, "Best I could build: $bestVs")
+        }
+        */
+        ProductionQueue.pending.forEachIndexed { index, boItem ->
+            render.drawTextScreen(0, 40 + index * 10, boItem.toString())
         }
     }
 

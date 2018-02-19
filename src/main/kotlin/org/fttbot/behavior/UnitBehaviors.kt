@@ -78,11 +78,19 @@ object SelectSafePosition : UnitLT() {
         val relevantEnemyPositions = UnitQuery.enemyUnits.filter { it.getDistance(unit) < 300 }
         val path = FTTBot.bwem.GetMap().GetPath(unit.position, myBases.first().position)
         // Already in base!
-        if (path.isEmpty) return NodeStatus.FAILED
+        if (path.isEmpty && !relevantEnemyPositions.isEmpty())
+            return NodeStatus.FAILED
         val target = path.zipWithNext { a, b -> a.Center().add(b.Center()).divide(WalkPosition(2, 2)) }
                 .map { it.toPosition() }
                 .firstOrNull { spot -> relevantEnemyPositions.map { it.getDistance(spot) }.min() ?: 400.0 > 300 }
-        if (target == null) return NodeStatus.FAILED
+        if (target == null) {
+            return if (!relevantEnemyPositions.isEmpty())
+                NodeStatus.FAILED
+            else {
+                unit.board.moveTarget = unit.position
+                NodeStatus.SUCCEEDED
+            }
+        }
         unit.board.moveTarget = target
         return NodeStatus.SUCCEEDED
     }

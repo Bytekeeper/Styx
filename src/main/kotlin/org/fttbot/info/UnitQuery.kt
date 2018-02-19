@@ -19,14 +19,16 @@ fun Weapon.isMelee() = this != WeaponType.None && type().maxRange() <= MAX_MELEE
 fun WeaponType.inRange(distance: Int, safety: Int): Boolean =
         minRange() <= distance && maxRange() >= distance - safety
 
-val PlayerUnit.board get() = userData as BBUnit
+val PlayerUnit.board
+    get() = userData as? BBUnit
+    ?: throw IllegalStateException()
 
 fun <T : Unit> List<T>.inRadius(other: Unit, maxRadius: Int) = filter { other.getDistance(it) < maxRadius }
 
 // From https://docs.google.com/spreadsheets/d/1bsvPvFil-kpvEUfSG74U3E5PLSTC02JxSkiR8QdLMuw/edit#gid=0 resp. PurpleWave
 val Armed.stopFrames get() = when (this) {
     is Goliath, is SiegeTank, is Reaver -> 1
-    is Worker<*>, is Vulture, is Wraith, is BattleCruiser, is Scout, is Lurker -> 2
+    is Worker, is Vulture, is Wraith, is BattleCruiser, is Scout, is Lurker -> 2
     is Ghost, is Hydralisk -> 3
     is Arbiter, is Zergling -> 4
     is Zealot, is Dragoon -> 7
@@ -89,8 +91,8 @@ object UnitQuery {
     val ownedUnits get() = allUnits.filterIsInstance(PlayerUnit::class.java)
     val myUnits get() = ownedUnits.filter { it.player == FTTBot.self }
     val enemyUnits get() = ownedUnits.filter { it.player == FTTBot.enemy }
-    val myBases get() = myUnits.filter { it is Hatchery || it is CommandCenter || it is Nexus }
-    val myWorkers get() = myUnits.filter { it.isCompleted && it is Worker<*> }.map { it as Worker<*> }
+    val myBases get() = myUnits.filter { it is Base }
+    val myWorkers get() = myUnits.filterIsInstance(Worker::class.java).filter { it.isCompleted }
 
     fun allUnits(): Collection<Unit> = allUnits
     fun unitsInRadius(position: Position, radius: Int) = allUnits.filter { it.getDistance(position) <= radius }

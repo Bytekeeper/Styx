@@ -41,6 +41,7 @@ object ProductionQueue {
 
     val hasItems get() = !queue.isEmpty()
     val nextItem get() = queue.peek()
+    val pending : List<BOItem> get() = queue + ordered
 
     fun onFrame() {
         ordered.clear()
@@ -54,7 +55,7 @@ object ProductionQueue {
         queue.remove(item)
         ordered.add(item)
         if (item is BOUnit && item.type.isBuilding && !item.type.isAddon) {
-            pendingBuildings.offer(PendingBuilding(producer as Worker<*>, item.type))
+            pendingBuildings.offer(PendingBuilding(producer as Worker, item.type))
         }
     }
 
@@ -76,9 +77,9 @@ object ProductionQueue {
         pendingBuildings.remove(pending)
     }
 
-    fun hasEnqueued(tech: TechType) = (queue + ordered).any { it is BOResearch && it.type == tech }
-    fun hasEnqueued(upgrade: UpgradeType) = (queue + ordered).any { it is BOUpgrade && it.type == upgrade }
-    fun hasEnqueued(unit: UnitType) = (queue + ordered).any { it is BOUnit && it.type == unit } ||
+    fun hasEnqueued(tech: TechType) = pending.any { it is BOResearch && it.type == tech }
+    fun hasEnqueued(upgrade: UpgradeType) = pending.any { it is BOUpgrade && it.type == upgrade }
+    fun hasEnqueued(unit: UnitType) = pending.any { it is BOUnit && it.type == unit } ||
             if (unit.isBuilding && !unit.isAddon) pendingBuildings.any { it.type == unit } else false
 
     fun enqueue(items: List<BOItem>) {
@@ -94,4 +95,4 @@ object ProductionQueue {
     }
 }
 
-class PendingBuilding(val producer: Worker<*>, val type: UnitType)
+class PendingBuilding(val producer: Worker, val type: UnitType)

@@ -119,14 +119,13 @@ class FindGoodAttackPosition : UnitLT() {
     }
 }
 
-class UnfavorableSituation : UnitLT() {
+object UnfavorableSituation : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
         val unit = board.unit
-        val myCluster = Cluster.mobileCombatUnits.firstOrNull { it.units.contains(unit) } ?: return NodeStatus.FAILED
+        val myCluster = Cluster.getClusterOf(unit) ?: return NodeStatus.FAILED
         val probability = ClusterUnitInfo.getInfo(myCluster).combatEval
-        if (UnitUtility.defend(board) > 0.7)
-            return NodeStatus.FAILED
-        if (probability < 0.55 && unit.canBeAttacked(64)) return NodeStatus.SUCCEEDED
+        if (probability < 0.55 && unit.canBeAttacked(64))
+            return NodeStatus.SUCCEEDED
         return NodeStatus.FAILED
     }
 }

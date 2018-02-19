@@ -35,7 +35,9 @@ dependencies {
 distributions {
     scait {
         contents {
-            from ('build/libs')
+            from ('build/libs', 'src', 'lib')
+            exclude('BWAPI4J.jar')
+            into '/'
         }
     }
 }

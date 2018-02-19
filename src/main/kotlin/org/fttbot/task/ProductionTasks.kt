@@ -24,7 +24,7 @@ object ProductionQueueTask : Task {
     private var reservedGas = 0
     private var reservedSupply = 0
     override val utility: Double
-        get() = 0.15
+        get() = 0.5
 
     override fun run(available: Resources): TaskResult {
         val reserved = ProductionQueue.reservedResourcesForPending
@@ -35,7 +35,7 @@ object ProductionQueueTask : Task {
         val workers = available.units.filterIsInstance(Worker::class.java).toMutableList()
         val assignedProducers = UnitQuery.myUnits.filter {
             it.userData != null &&
-                    (it.board.goal is Construction || it.board.goal is Research || it.board.goal is Upgrade || it.board.goal is BuildAddon)
+                    (it.board.goal is Construction || it.board.goal is Research || it.board.goal is Upgrade)
         }.toMutableList()
         workers -= assignedProducers.filterIsInstance(Worker::class.java)
 
@@ -52,10 +52,8 @@ object ProductionQueueTask : Task {
         while (ProductionQueue.hasItems) {
             val nextItem = ProductionQueue.nextItem
             if (!canAfford(available, nextItem)) {
-//                if (nextItem.supplyRequired > max(0, available.supply)) {
-//                    ProductionQueue.prepend(BOUnit(FTTBot.self.race.supplyProvider))
-//                } else
-                    break
+                reserve(nextItem)
+                break
             } else if (canAfford(available, nextItem)) {
                 if (!nextItem.canProcess) {
                     if (checkCancelUnproccessable(nextItem)) {
@@ -89,14 +87,21 @@ object ProductionQueueTask : Task {
                         if (producer != null) {
                             ProductionQueue.setInProgress(nextItem, producer)
                             reserve(nextItem)
+                            if (nextItem is BOResearch || nextItem is BOUpgrade) {
+                                assignedProducers += producer
+                            }
                         } else
                             break
                     }
                 }
             }
         }
+        ProductionQueue.pending.forEach {
+            reserve(it)
+        }
 
-        return TaskResult(Resources(constructionWorkers + assignedWorkersForMissingConstructions + assignedProducers))
+        return TaskResult(Resources(constructionWorkers + assignedWorkersForMissingConstructions + assignedProducers,
+                reservedMinerals, reservedGas))
     }
 
     private fun checkCancelUnproccessable(item: BOItem): Boolean {
@@ -153,7 +158,7 @@ object ProductionQueueTask : Task {
         return builder
     }
 
-    private fun construct(availableUnits: Collection<PlayerUnit>, item: BOItem): Pair<Worker<*>, Construction>? {
+    private fun construct(availableUnits: Collection<PlayerUnit>, item: BOItem): Pair<Worker, Construction>? {
         if (item !is BOUnit) return null
         val position = ConstructionPosition.findPositionFor(item.type, item.position) ?: return null
         val worker = findWorker(position.toPosition(), candidates = availableUnits.filterIsInstance(Worker::class.java))
@@ -214,8 +219,8 @@ object HandleSupplyBlock : Task {
         // At maximum supply, no further units should be queued
         if (totalSupplyWithPending >= 400) {
             ProductionQueue.cancelNextItem()
-        } else if (available.minerals >= FTTConfig.SUPPLY.mineralPrice()){
-            ProductionQueue.prepend(BOUnit(FTTBot.self.race.supplyProvider))
+        } else if (available.minerals >= FTTConfig.SUPPLY.mineralPrice()) {
+            ProductionQueue.prepend(BOUnit(FTTConfig.SUPPLY))
         }
         return TaskResult.RUNNING
     }
@@ -254,7 +259,7 @@ object DoUpgrades : Task {
         val upgradesToConsider = UpgradeType.values().filter { ut -> FTTBot.self.canUpgrade(ut) && !FTTBot.self.isUpgrading(ut) }
                 .sortedByDescending { ut -> myUnits.count { unit -> ut.whatUses().any { unit.isA(it) } } }
         val toUpgrade = upgradesToConsider.firstOrNull() ?: return TaskResult.RUNNING
-        if (UnitQuery.myUnits.any { it.isA(toUpgrade.whatUpgrades()) && it.board.goal == null }) {
+        if (UnitQuery.myUnits.any { it.isCompleted && it.isA(toUpgrade.whatUpgrades()) && it.board.goal == null }) {
             ProductionQueue.enqueue(BOUpgrade(toUpgrade))
         }
         return TaskResult.RUNNING
@@ -286,12 +291,12 @@ object ProduceAttacker : Task {
 object BoSearch : Task {
     private val LOG = Logger.getLogger(this::class.java.simpleName)
     private var mcts: MCTS? = null
-    override val utility: Double = 0.8
+    override val utility: Double = 0.4
     private var relocateTo: MCTS.Node? = null
 
     override fun run(available: Resources): TaskResult {
         if (mcts == null) {
-            mcts = MCTS(mapOf(UnitType.Terran_Marine to 2, UnitType.Terran_Factory to 2), setOf(), mapOf(UpgradeType.Ion_Thrusters to 1), Race.Terran)
+            mcts = MCTS(mapOf(UnitType.Terran_Marine to 1, UnitType.Terran_Vulture to 1, UnitType.Terran_Goliath to 1), setOf(), mapOf(UpgradeType.Ion_Thrusters to 1), Race.Terran)
         }
         if (ProductionQueue.hasItems) return TaskResult.RUNNING
 
@@ -345,7 +350,7 @@ object BoSearch : Task {
 
         try {
             searcher.restart()
-            repeat(100) {
+            repeat(200) {
                 try {
                     searcher.step(state)
                 } catch (e: IllegalStateException) {
@@ -410,7 +415,7 @@ object WorkerProduction : Task {
         if (ProductionQueue.hasItems) return TaskResult.RUNNING
         UnitQuery.myBases.forEach { base ->
             val units = UnitQuery.unitsInRadius(base.position, 300)
-            val workerDelta = units.map { if (it is MineralPatch) 2 else if (it is GasMiningFacility) 3 else if (it is MobileUnit && it is Worker<*> && it.isMyUnit) -1 else 0 }.sum()
+            val workerDelta = units.map { if (it is MineralPatch) 2 else if (it is GasMiningFacility) 3 else if (it is MobileUnit && it is Worker && it.isMyUnit) -1 else 0 }.sum()
             if (workerDelta > 0 && available.minerals >= FTTConfig.WORKER.mineralPrice() && available.supply >= FTTConfig.WORKER.supplyRequired()) {
                 ProductionQueue.enqueue(BOUnit(FTTConfig.WORKER, base.position))
                 return TaskResult(Resources(minerals = FTTConfig.WORKER.mineralPrice(), supply = FTTConfig.WORKER.supplyRequired()))
@@ -431,7 +436,8 @@ object TrainUnits : Task {
                     val goal = trainer.board.goal as? Train ?: return@mapNotNull null
                     if (trainer.isTraining ||
                             trainer.trainingQueueSize > 0 ||
-                            !trainer.canTrain(goal.type)) return@mapNotNull trainer as PlayerUnit
+                            !trainer.canTrain(goal.type)
+                            || trainer is ExtendibleByAddon && trainer.isBuildingAddon) return@mapNotNull trainer as PlayerUnit
                     if (!trainer.train(goal.type)) {
                         LOG.severe("Couldn't start training ${goal.type}")
                         return@mapNotNull trainer as PlayerUnit

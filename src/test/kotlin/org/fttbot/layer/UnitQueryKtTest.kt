@@ -3,7 +3,7 @@ package org.fttbot.layer
 import org.fttbot.info.allRequiredUnits
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
-import org.openbw.bwapi4j.test.KickStart
+import org.openbw.bwapi4j.test.BWDataProvider
 import org.openbw.bwapi4j.type.UnitType
 
 internal class UnitQueryKtTest {
@@ -11,7 +11,7 @@ internal class UnitQueryKtTest {
         @BeforeAll
         @JvmStatic
         fun setup() {
-            KickStart().injectValues()
+            BWDataProvider.injectValues();
         }
     }
 

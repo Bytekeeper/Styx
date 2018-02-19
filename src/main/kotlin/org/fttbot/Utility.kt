@@ -115,7 +115,7 @@ object UnitUtility {
     fun force(board: BBUnit): Double {
         val unit = board.unit
         val result = min(1.0, expI(10.0, UnitQuery.unitsInRadius(unit.position, 300)
-                .count { it is Armed && it is PlayerUnit && it.isCompleted && it.isMyUnit && (it !is Worker<*> || board.goal is Attacking || board.goal is Defending) }.toDouble(), 3.0))
+                .count { it is Armed && it is PlayerUnit && it.isCompleted && it.isMyUnit && (it !is Worker || board.goal is Attacking || board.goal is Defending) }.toDouble(), 3.0))
         board.utility.force = result
         return result
     }

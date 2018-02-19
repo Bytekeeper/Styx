@@ -18,8 +18,10 @@ object CombatEval {
     fun probabilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>): Double {
         val damageA = averageDamageOf(unitsOfPlayerA, unitsOfPlayerB)
         val damageB = averageDamageOf(unitsOfPlayerB, unitsOfPlayerA)
-        val hpA = unitsOfPlayerA.filter { it.isArmed }.map { it.hitPoints }.average().or(0.1) + unitsOfPlayerA.count { it.canHeal } * HEAL_PER_ENERGY
-        val hpB = unitsOfPlayerB.filter { it.isArmed }.map { it.hitPoints }.average().or(0.1) + unitsOfPlayerB.count { it.canHeal } * HEAL_PER_ENERGY
+        val hpA = unitsOfPlayerA.filter { it.isArmed }.map { it.hitPoints }.average().or(0.1) +
+                unitsOfPlayerA.count { it.canHeal } * HEAL_PER_ENERGY
+        val hpB = unitsOfPlayerB.filter { it.isArmed }.map { it.hitPoints }.average().or(0.1) +
+                unitsOfPlayerB.count { it.canHeal } * HEAL_PER_ENERGY
 
         val rangeA = (unitsOfPlayerA.map { max(it.groundWeapon.type().maxRange(), it.airWeapon.type().maxRange()) } + 1).average()
         val rangeB = (unitsOfPlayerB.map { max(it.groundWeapon.type().maxRange(), it.airWeapon.type().maxRange()) } + 1).average()

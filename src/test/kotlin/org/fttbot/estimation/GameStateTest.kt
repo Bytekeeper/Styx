@@ -6,7 +6,7 @@ import org.hamcrest.MatcherAssert.assertThat
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.openbw.bwapi4j.test.KickStart
+import org.openbw.bwapi4j.test.BWDataProvider
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
@@ -17,7 +17,7 @@ class GameStateTest {
         @BeforeAll
         @JvmStatic
         fun setup() {
-            KickStart().injectValues()
+            BWDataProvider.injectValues()
         }
     }
 

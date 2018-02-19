@@ -1,5 +1,6 @@
 package org.fttbot.behavior
 
+import org.fttbot.FTTBot
 import org.fttbot.NodeStatus
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.board
@@ -9,7 +10,7 @@ import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.unit.*
 
-fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidates: List<Worker<*>> = UnitQuery.myWorkers): Worker<*>? {
+fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidates: List<Worker> = UnitQuery.myWorkers): Worker? {
     val selection =
             if (forPosition != null) {
                 candidates.filter { it.getDistance(forPosition) <= maxRange }
@@ -35,7 +36,7 @@ fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidat
 
 class ShouldReturnResource : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
-        val unit = board.unit as Worker<*>
+        val unit = board.unit as Worker
         if (!unit.isGatheringMinerals && unit.isCarryingMinerals
                 || !unit.isGatheringGas && unit.isCarryingGas) return NodeStatus.SUCCEEDED
         return NodeStatus.FAILED
@@ -54,7 +55,7 @@ class SelectBaseAsTarget : UnitLT() {
 
 class ReturnResource : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
-        val unit = board.unit as Worker<*>
+        val unit = board.unit as Worker
         if (!unit.isCarryingGas && !unit.isCarryingMinerals) return NodeStatus.SUCCEEDED
         if (!unit.isGatheringMinerals && !unit.isGatheringGas) {
             if (!unit.returnCargo()) return NodeStatus.FAILED
@@ -66,7 +67,7 @@ class ReturnResource : UnitLT() {
 
 class GatherMinerals : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
-        val unit = board.unit as Worker<*>
+        val unit = board.unit as Worker
         val gathering = board.goal as Gathering
         val targetResource = gathering.target
 
@@ -89,7 +90,7 @@ class GatherMinerals : UnitLT() {
 
 class GatherGas : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
-        val unit = board.unit as Worker<GasMiningFacility>
+        val unit = board.unit as Worker
         val gathering = board.goal as Gathering
         val targetResource = gathering.target
 
@@ -113,7 +114,9 @@ class Repair : UnitLT() {
         val repairing = board.goal as Repairing
         val unit = board.unit as SCV
         if (unit.isRepairing) return NodeStatus.RUNNING
-        if (unit.repair(repairing.target)) return NodeStatus.RUNNING
+        if (unit.targetUnit == repairing.target || unit.repair(repairing.target)) {
+            return NodeStatus.RUNNING
+        }
         return NodeStatus.FAILED
     }
 
@@ -130,7 +133,7 @@ class SelectConstructionSiteAsTarget : UnitLT() {
 class AbortConstruct : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
         val unit = board.unit as SCV
-        if (board.goal !is Construction) throw IllegalStateException()
+        if (board.goal !is Construction && board.goal !is ResumeConstruction) throw IllegalStateException()
         board.goal = null
         if (unit.isConstructing) unit.haltConstruction()
         return NodeStatus.SUCCEEDED
@@ -157,7 +160,7 @@ object ResumeConstruct : UnitLT() {
 
 class Construct : UnitLT() {
     override fun internalTick(board: BBUnit): NodeStatus {
-        val unit = board.unit as Worker<*>
+        val unit = board.unit as Worker
         val construct = board.goal as Construction
         val position = construct.position
 

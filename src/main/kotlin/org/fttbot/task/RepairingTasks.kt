@@ -93,6 +93,10 @@ class RepairTask(val target: PlayerUnit) : Task {
                     existingRepairer ?: units.filterIsInstance(SCV::class.java).filter { it != target && units.contains(it) }.minBy { it.getDistance(target) }
                 }
         if (repairer == null || repairer.getDistance(target) > 300) {
+            if (repairer != null && target is MobileUnit && target.hitPoints < target.maxHitPoints() / 3) {
+                target.board.goal = BeRepairedBy(repairer)
+                return TaskResult(Resources(listOf(target)))
+            }
             return TaskResult(status = TaskStatus.FAILED)
         }
         repairer.board.goal = Repairing(target as Mechanical)

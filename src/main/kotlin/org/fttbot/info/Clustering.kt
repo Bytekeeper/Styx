@@ -7,13 +7,15 @@ import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Unit
 import org.openbw.bwapi4j.unit.Worker
 
-class Cluster<U : Unit>(var position: Position, internal val units: MutableSet<U>, internal var aggPosition: Position = Position(0,0), internal var lastUnitCount: Int = 0) {
+class Cluster<U : Unit>(var position: Position, internal val units: MutableSet<U>, internal var aggPosition: Position = Position(0,0), internal var lastUnitCount: Int = 1) {
     companion object {
         var mobileCombatUnits: List<Cluster<PlayerUnit>> = emptyList()
         var enemyClusters: List<Cluster<PlayerUnit>> = emptyList()
 
+        fun getClusterOf(unit: PlayerUnit) = mobileCombatUnits.firstOrNull { it.units.contains(unit) }
+
         fun step() {
-            mobileCombatUnits = buildClusters(UnitQuery.myUnits.filter { it.isCompleted && it is MobileUnit && it !is Worker<*> })
+            mobileCombatUnits = buildClusters(UnitQuery.myUnits.filter { it.isCompleted && it is MobileUnit && it !is Worker })
             enemyClusters = buildClusters(UnitQuery.enemyUnits + EnemyState.seenUnits)
         }
 
@@ -32,6 +34,7 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableSet<U
                     UnitInCluster(newCluster, unit)
                 }
             }
+            var maxTries = 20
             do {
                 clusters.forEach {
                     val size = it.units.size
@@ -42,7 +45,7 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableSet<U
                 }
                 val changes = clusterUnits.count { cu ->
                     val unit = cu.unit
-                    val cluster = clusters.filter { it.position.getDistance(unit.position) < 300 }.maxBy { it.lastUnitCount }
+                    val cluster = clusters.filter { it.position.getDistance(unit.position) < 300 }.reversed().maxBy { it.lastUnitCount }
                     if (cluster != null) {
                         cluster.aggPosition = cluster.aggPosition.add(unit.position)
                         cluster.units += unit
@@ -58,7 +61,7 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableSet<U
                     }
                 }
                 clusters.removeIf { it.units.isEmpty() }
-            } while (changes > 0)
+            } while (changes > 0 && maxTries-- > 0)
             return clusters.toList()
         }
     }

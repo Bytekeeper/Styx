@@ -25,7 +25,6 @@ object UnitBehaviors {
 
     private fun createWorkerTree(board: BBUnit) = BTree(
             Fallback(Sleep,
-                    Fallback(
                             UtilitySelector(UtilityTask(defendWithWorker) { u -> if (u.goal is Defending) 1.0 else 0.0 },
                                     UtilityTask(construct, UnitUtility::construct),
                                     UtilityTask(resumeConstruct) { u -> if (u.goal is ResumeConstruction) 1.0 else 0.0 },
@@ -37,7 +36,7 @@ object UnitBehaviors {
                                     UtilityTask(MoveToPosition(96.0) onlyIf SelectSafePosition) { u -> if (u.goal is BeRepairedBy) 1.0 else 0.0 }
                             ),
                             MoveToPosition(70.0) onlyIf SelectBaseAsTarget()
-                    )),
+                    ),
             board
     )
 
@@ -47,14 +46,13 @@ object UnitBehaviors {
 
     private fun createCombatUnitTree(board: BBUnit) = BTree(
             Fallback(Sleep,
-                    Fallback(
                             Sequence(IsTrue { it.goal is BeRepairedBy }, SelectSafePosition, MoveToPosition(64.0)),
                             attack onlyIf IsTrue { it.goal is Defending },
-                            Fallback(Attack onlyIf SelectRetreatAttackTarget(), backUp) onlyIf UnfavorableSituation(),
+                            Fallback(Attack onlyIf SelectRetreatAttackTarget(), backUp) onlyIf UnfavorableSituation,
                             backUp onlyIf OnCooldownWithBetterPosition,
                             attack,
                             MoveToEnemyBase()
-                    ))
+                    )
 //            UtilitySelector(
 //                    UtilityTask(MoveToPosition(96.0) onlyIf SelectSafePosition()) { u -> if (u.goal is BeRepairedBy) 1.0 else 0.0 },
 //                    UtilityTask(createAttackPart()) { UnitUtility.defend(board) },
@@ -70,7 +68,7 @@ object UnitBehaviors {
 
     fun createTreeFor(unit: PlayerUnit): BTree<*> {
         val behavior = when {
-            (unit is Worker<*>) -> {
+            (unit is Worker) -> {
                 val b = BBUnit(unit)
                 unit.userData = b
                 createWorkerTree(b)
