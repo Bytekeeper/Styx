@@ -52,9 +52,9 @@ object ProductionQueueTask : Task {
         while (ProductionQueue.hasItems) {
             val nextItem = ProductionQueue.nextItem
             if (!canAfford(available, nextItem)) {
-                if (nextItem.supplyRequired > max(0, available.supply)) {
-                    ProductionQueue.prepend(BOUnit(FTTBot.self.race.supplyProvider))
-                } else
+//                if (nextItem.supplyRequired > max(0, available.supply)) {
+//                    ProductionQueue.prepend(BOUnit(FTTBot.self.race.supplyProvider))
+//                } else
                     break
             } else if (canAfford(available, nextItem)) {
                 if (!nextItem.canProcess) {
@@ -276,9 +276,9 @@ object ProduceAttacker : Task {
                         && FTTBot.self.canMake(trainer as Unit, it)
             }
         }.firstOrNull() ?: return TaskResult.RUNNING
-        if (available.minerals >= toTrain.mineralPrice() && available.gas >= toTrain.gasPrice() && available.supply >= toTrain.supplyRequired() )
-        ProductionQueue.enqueue(BOUnit(toTrain))
-        return TaskResult(Resources(minerals = toTrain.mineralPrice(), gas = toTrain.gasPrice(), supply = toTrain.supplyRequired() ))
+        if (available.minerals >= toTrain.mineralPrice() && available.gas >= toTrain.gasPrice() && available.supply >= toTrain.supplyRequired())
+            ProductionQueue.enqueue(BOUnit(toTrain))
+        return TaskResult(Resources(minerals = toTrain.mineralPrice(), gas = toTrain.gasPrice(), supply = toTrain.supplyRequired()))
     }
 }
 

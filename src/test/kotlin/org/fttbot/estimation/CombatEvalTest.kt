@@ -45,4 +45,19 @@ class CombatEvalTest {
         val b = listOf(SimUnit.of(UnitType.Protoss_Zealot))
         System.err.println(CombatEval.probabilityToWin(a, b))
     }
+
+    @Test
+    fun evalD() {
+        val a = listOf(
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Vulture)
+        )
+        val b = listOf(SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling)
+                )
+        System.err.println(CombatEval.probabilityToWin(a, b))
+    }
 }
