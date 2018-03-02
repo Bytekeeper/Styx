@@ -1,6 +1,6 @@
 package org.fttbot
 
-import bwem.check_t
+import bwem.CheckMode
 import bwem.tile.MiniTile
 import com.badlogic.gdx.math.MathUtils.clamp
 import com.badlogic.gdx.math.Vector2
@@ -52,7 +52,7 @@ object Potential {
             for (j in -3..3) {
                 val wp = WalkPosition(pos.x + i * 2, pos.y + j * 2)
                 if ((i != 0 || j != 0) && FTTBot.game.bwMap.isValidPosition(wp)) {
-                    val miniTile = FTTBot.bwem.GetMap().data.getMiniTile(wp, check_t.no_check)
+                    val miniTile = FTTBot.bwem.map.data.getMiniTile(wp, CheckMode.NO_CHECK)
                     val altitude = miniTile.altitude
                     if (altitude.intValue() > bestAltitude) {
                         bestAltitude = altitude.intValue()
@@ -65,9 +65,9 @@ object Potential {
     }
 
     fun safeAreaAttraction(unit: MobileUnit) : Vector2 {
-        val map = FTTBot.bwem.GetMap()
-        val homePath = map.GetPath(unit.position, UnitQuery.myBases.firstOrNull()?.position ?: return Vector2.Zero)
+        val map = FTTBot.bwem.map
+        val homePath = map.getPath(unit.position, UnitQuery.myBases.firstOrNull()?.position ?: return Vector2.Zero)
         val targetChoke = if (homePath.isEmpty) return Vector2.Zero else homePath[0]
-        return (targetChoke.Center().toPosition() - unit.position).toVector().nor()
+        return (targetChoke.center.toPosition() - unit.position).toVector().nor()
     }
 }

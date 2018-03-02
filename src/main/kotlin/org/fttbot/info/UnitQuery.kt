@@ -1,7 +1,6 @@
 package org.fttbot.info
 
 import org.fttbot.FTTBot
-import org.fttbot.behavior.BBUnit
 import org.fttbot.estimation.MAX_FRAMES_TO_ATTACK
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.UnitType
@@ -19,10 +18,6 @@ fun Weapon.isMelee() = this != WeaponType.None && type().maxRange() <= MAX_MELEE
 fun WeaponType.inRange(distance: Int, safety: Int): Boolean =
         minRange() <= distance && maxRange() >= distance - safety
 
-val PlayerUnit.board
-    get() = userData as? BBUnit
-    ?: throw IllegalStateException()
-
 fun <T : Unit> List<T>.inRadius(other: Unit, maxRadius: Int) = filter { other.getDistance(it) < maxRadius }
 
 // From https://docs.google.com/spreadsheets/d/1bsvPvFil-kpvEUfSG74U3E5PLSTC02JxSkiR8QdLMuw/edit#gid=0 resp. PurpleWave
@@ -39,6 +34,31 @@ val Armed.stopFrames get() = when (this) {
     is Valkyrie -> 40
     else -> 2
 }
+
+fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidates: List<Worker> = UnitQuery.myWorkers): Worker? {
+    val selection =
+            if (forPosition != null) {
+                candidates.filter { it.getDistance(forPosition) <= maxRange }
+            } else candidates
+    return selection.minWith(Comparator { a, b ->
+        if (a.isIdle != b.isIdle) {
+            if (a.isIdle) -1 else 1
+        } else if (a.isGatheringMinerals != b.isGatheringMinerals) {
+            if (a.isGatheringMinerals) -1 else 1
+        } else if ((a.isGatheringMinerals && !a.isCarryingMinerals) != (b.isGatheringMinerals && !b.isCarryingMinerals)) {
+            if (a.isGatheringMinerals && !a.isCarryingMinerals) -1 else 1
+        } else if (a.isGatheringGas != b.isGatheringGas) {
+            if (a.isGatheringGas) -1 else 1
+        } else if ((a.isGatheringGas && !a.isCarryingGas) != (b.isGatheringGas && !b.isCarryingGas)) {
+            if (a.isGatheringGas && !a.isCarryingGas) -1 else 1
+        } else if (a.isConstructing != b.isConstructing) {
+            if (a.isConstructing) -1 else 1
+        } else if (forPosition != null) {
+            a.position.getDistance(forPosition).compareTo(b.position.getDistance(forPosition))
+        } else 0
+    })
+}
+
 
 //  + FTTBot.remaining_latency_frames
 fun Weapon.attackIsComplete(unit: Armed) = type().damageCooldown() == 0 || type().damageCooldown() - cooldown() >= unit.stopFrames

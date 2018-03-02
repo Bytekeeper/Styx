@@ -2,14 +2,14 @@ package org.fttbot
 
 import bwem.BWEM
 import bwta.BWTA
-import org.fttbot.StrategyUtility.needMobileDetection
-import org.fttbot.behavior.*
+import org.fttbot.CompoundActions.build
+import org.fttbot.CompoundActions.train
 import org.fttbot.estimation.BOPrediction
-import org.fttbot.estimation.UnitVsUnit
 import org.fttbot.info.*
-import org.fttbot.task.*
+import org.fttbot.task.BoSearch
+import org.fttbot.task.ConstructBuilding
+import org.fttbot.task.GatherResources
 import org.openbw.bwapi4j.*
-import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.PlayerUnit
@@ -47,6 +47,21 @@ object FTTBot : BWEventListener {
 
     val bwtaAvailable get() = bwtaInitializer.isDone
 
+    val bot = BTree(
+            AtLeastOne(Fallback(ToNodes({ ProductionQueue.queue }, {
+                        ProductionQueue.setInProgress(it)
+                        when (it) {
+                            is BOUnit -> if (it.type.isAddon) throw UnsupportedOperationException()
+                            else if (it.type.isBuilding)
+                                build(it.type, it.position)
+                            else
+                                train(it.type)
+                            else -> throw UnsupportedOperationException()
+                        }
+                    })),
+                    GatherResources)
+    )
+
     override fun onStart() {
         bwtaInitializer = CompletableFuture.supplyAsync {
             val bwta = BWTA()
@@ -77,10 +92,13 @@ object FTTBot : BWEventListener {
         }
 
         ProductionQueue.enqueue(listOf(
-                BOUnit(UnitType.Terran_SCV),
-                BOUnit(UnitType.Terran_SCV),
-                BOUnit(UnitType.Terran_SCV),
-                BOUnit(UnitType.Terran_SCV)
+//                BOUnit(UnitType.Zerg_Drone),
+//                BOUnit(UnitType.Zerg_Drone),
+//                BOUnit(UnitType.Zerg_Drone),
+//                BOUnit(UnitType.Zerg_Drone),
+                BOUnit(UnitType.Zerg_Spawning_Pool),
+                BOUnit(UnitType.Zerg_Zergling),
+                BOUnit(UnitType.Zerg_Zergling)
         ))
         UnitQuery.update(emptyList())
     }
@@ -100,98 +118,14 @@ object FTTBot : BWEventListener {
             Cluster.step()
             ClusterUnitInfo.step()
 
-            Task.step()
-            UnitBehaviors.step()
+            Board.resources.reset(self.minerals(), self.gas(), self.supplyTotal() - self.supplyUsed(), UnitQuery.myUnits)
+            bot.tick()
         }
 
-        /**
-        if (bwtaInitializer.isDone) {
-            bwta.getRegions().forEachIndexed { index, region ->
-                val poly = region.polygon.points
-                for (i in 0 until poly.size) {
-                    val a = poly[i] //.toVector().scl(0.9f).mulAdd(region.polygon.center.toVector(), 0.1f).toPosition()
-                    val b = poly[(i + 1) % poly.size] //.toVector().scl(0.9f).mulAdd(region.polygon.center.toVector(), 0.1f).toPosition()
-                    render.drawLineMap(a, b,
-                            when (index % 5) {
-                                0 -> Color.GREEN
-                                1 -> Color.BLUE
-                                2 -> Color.BROWN
-                                3 -> Color.YELLOW
-                                else -> Color.GREY
-                            })
-                }
-                region.chokepoints.forEach { chokepoint ->
-                    render.drawLineMap(chokepoint.sides.first, chokepoint.sides.second, Color.RED)
-                }
-            }
-        }
-        ConstructionPosition.resourcePolygons.values.forEach { poly ->
-            val v = poly.vertices
-            for (i in 0 until v.size / 2) {
-                var j = i * 2
-                val a = Position(v[j].toInt() * 32, v[j + 1].toInt() * 32)
-                val b = Position(v[(j + 2) % v.size].toInt() * 32, v[(j + 3) % v.size].toInt() * 32)
-                render.drawLineMap(a, b, Color.CYAN)
-            }
-        }
-        for (unit in UnitQuery.myUnits) {
-            val b = unit.userData as? BBUnit ?: continue
-            render.drawTextMap(unit.position, "${unit.id}: ${b.status}")
-            render.drawTextMap(unit.position + Position(0, 10), "a:${UnitUtility.attack(b)} ct:${UnitUtility.collateralThreat(b)}")
-            render.drawTextMap(unit.position + Position(0, 20), "r:${UnitUtility.runaway(b)} it:${UnitUtility.immediateThreat(unit)}")
-//            render.drawTextMap(unit.position + Position(0, -10), "% ${b.combatSuccessProbability}")
-            val util = b.utility
-//            render.drawTextMap(unit.position + Position(0, -40), "a ${util.attack}, d ${util.defend}, f ${util.force}")
-//            render.drawTextMap(unit.position + Position(0, -30), "t ${util.collateralThreat}, v ${util.worth}, c ${util.construct}")
-//            render.drawTextMap(unit.position + Position(0, -20), "g ${util.gather}")
-            val goal = b.goal
-            when (goal) {
-                is Attacking -> if (b.target != null) render.drawLineMap(unit.position, b.target!!.position, Color.RED)
-                is Construction -> render.drawLineMap(unit.position, goal.position.toPosition() + Position(16, 16), Color.GREY)
-                is Repairing -> render.drawLineMap(unit.position, (goal.target as Unit).position + Position(16, 16), Color.GREY)
-            }
-            b.moveTarget?.let {
-                render.drawLineMap(unit.position, it, Color.BLUE)
-            }
-        }
-        for (unit in UnitQuery.enemyUnits.filter { !it.isVisible }) {
-            if (unit.position == null) continue
-            render.drawCircleMap(unit.position, unit.width(), Color.RED)
-            render.drawTextMap(unit.position, unit.toString())
-        }
-        for (unit in EnemyState.seenUnits) {
-            render.drawCircleMap(unit.position, unit.width(), Color.YELLOW)
-            render.drawTextMap(unit.position, unit.toString())
-        }
-        Cluster.enemyClusters.forEach {
-            render.drawCircleMap(it.position, 300, Color.RED)
-        }
-        Cluster.mobileCombatUnits.forEach {
-            render.drawCircleMap(it.position, 300, Color.ORANGE)
-            val combat = ClusterUnitInfo.getInfo(it)
-            val prob = combat.combatEval
-            render.drawTextMap(it.position + Position(0, -200), "$prob, # ${combat.combatRelevantUnits.size} / ${combat.unitsInArea.size}")
-        }
-        Task.lastTaskOrder.forEachIndexed { index, task -> render.drawTextScreen(0, 60 + 10 * index, "${task.javaClass.simpleName} : ${task.utility}") }
-
-        val t = System.currentTimeMillis()
-        render.drawTextScreen(0, 20, "${System.currentTimeMillis() - t} ms")
-        render.drawTextScreen(0, 30, "needDetection: ${StrategyUtility.needMobileDetection()}")
-        val predict = BOPrediction.predict()
-        if (predict != null) {
-            render.drawTextScreen(0, 40, "${predict.category} : ${predict.probability}")
-            val bestVs = UnitVsUnit.bestUnitVs(UnitTypes.trainables, predict.category)
-            render.drawTextScreen(0, 50, "Best I could build: $bestVs")
-        }
-        */
-        ProductionQueue.pending.forEachIndexed { index, boItem ->
-            render.drawTextScreen(0, 40 + index * 10, boItem.toString())
-        }
     }
 
     override fun onUnitDestroy(unit: Unit) {
         if (unit !is PlayerUnit) return
-        UnitBehaviors.removeBehavior(unit)
         EnemyState.onUnitDestroy(unit)
         BoSearch.onUnitDestroy(unit)
     }
@@ -216,9 +150,6 @@ object FTTBot : BWEventListener {
     override fun onUnitComplete(unit: Unit) {
         if (unit !is PlayerUnit) return
         LOG.info("Completed: ${unit}")
-        if (unit.isMyUnit && !UnitBehaviors.hasBehaviorFor(unit)) {
-            UnitBehaviors.createTreeFor(unit)
-        }
     }
 
     override fun onUnitShow(unit: Unit) {

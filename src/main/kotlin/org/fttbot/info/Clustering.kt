@@ -34,7 +34,7 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableSet<U
                     UnitInCluster(newCluster, unit)
                 }
             }
-            var maxTries = 20
+            var maxTries = 10
             do {
                 clusters.forEach {
                     val size = it.units.size
