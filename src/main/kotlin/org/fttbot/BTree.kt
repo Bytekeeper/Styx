@@ -1,7 +1,6 @@
 package org.fttbot
 
 import org.apache.logging.log4j.LogManager
-import org.apache.logging.log4j.Logger
 
 enum class NodeStatus {
     FAILED,
@@ -44,8 +43,13 @@ class Delegate(val delegate: () -> Node) : Node {
     override fun tick(): NodeStatus = delegate().tick()
 }
 
-class Select(val delegate: () -> NodeStatus) : Node {
+class Inline(val delegate: () -> NodeStatus) : Node {
     override fun tick(): NodeStatus = delegate()
+}
+
+
+class Await(val condition: () -> Boolean) : Node {
+    override fun tick(): NodeStatus = if (condition()) NodeStatus.SUCCEEDED else NodeStatus.RUNNING
 }
 
 class Retry(var times: Int, val node: Node) : Node {
@@ -75,43 +79,21 @@ class All(val children: List<Node>) : Node {
 }
 
 class AtLeastOne(vararg val childArray: Node) : Node {
-    private val LOG = LogManager.getLogger()
-    private val children = childArray.toMutableList()
     override fun tick(): NodeStatus {
-        val result = children.map { it to it.tick() }
-        val toRemove = result.filter { it.second != NodeStatus.RUNNING }.map { it.first }
-        if (LOG.isInfoEnabled) {
-            toRemove.forEach { LOG.info("Removed $it") }
+        var abort = false
+        var overallResult : NodeStatus = NodeStatus.RUNNING
+        childArray.forEach{
+            if (abort) {
+                it.aborted()
+            } else {
+                val result = it.tick()
+                if (result != NodeStatus.RUNNING) {
+                    abort = true
+                    overallResult = result
+                }
+            }
         }
-        children.removeAll(toRemove)
-        if (result.any { it.second == NodeStatus.SUCCEEDED }) return NodeStatus.SUCCEEDED
-        if (result.any { it.second == NodeStatus.RUNNING }) return NodeStatus.RUNNING
-        return NodeStatus.FAILED
-    }
-}
-
-class Multiplex<T : Any>(val childrenResolver: () -> Collection<T>, val nodeGen: (T) -> Node) : Node {
-    private val LOG = LogManager.getLogger()
-    private val children = HashMap<T, Node>()
-    override fun tick(): NodeStatus {
-        val toTransform = childrenResolver()
-        val toDelete = toTransform.mapNotNull {
-            val result = children.computeIfAbsent(it, nodeGen)
-                    .tick()
-            if (result != NodeStatus.RUNNING)
-                it
-            else
-                null
-        }
-        if (LOG.isInfoEnabled) {
-            toDelete.forEach { LOG.info("Removed $it") }
-        }
-        children.keys.removeAll(toDelete)
-        val changed = children.keys.removeIf { !toTransform.contains(it) }
-        if (changed) {
-            LOG.info("Removed missing children")
-        }
-        return if (children.isEmpty()) return NodeStatus.SUCCEEDED else NodeStatus.RUNNING
+        return overallResult
     }
 }
 
@@ -138,46 +120,10 @@ class ToNodes<T : Any>(val childrenResolver: () -> Collection<T>, val nodeGen: (
 }
 
 
-class Loop<T : Any>(val nextItem: () -> T?, val nodeGen: (T) -> Node) : Node {
-    var currentNode: Node? = null
-
-    override fun tick(): NodeStatus {
-        while (true) {
-            val toProcess = currentNode ?: nextItem()?.let { nodeGen(it) } ?: return NodeStatus.SUCCEEDED
-
-            when (toProcess.tick()) {
-                NodeStatus.FAILED -> return NodeStatus.FAILED
-                NodeStatus.RUNNING -> {
-                    currentNode = toProcess
-                    return NodeStatus.RUNNING
-                }
-                else -> currentNode = null
-            }
-        }
-    }
-
-    override fun aborted() {
-        currentNode?.aborted()
-        currentNode = null
-    }
-}
-
 infix fun <T : Node> T.by(utility: () -> Double) = UtilityTask(this) { utility() }
 
 class BTree(val root: Node) {
     fun tick(): NodeStatus = root.tick()
-}
-
-class Repeat(val node: Node, val times: Int = 20) : Node {
-    override fun tick(): NodeStatus {
-        for (i in 1..times) {
-            val result = node.tick()
-            if (result != NodeStatus.SUCCEEDED) {
-                return result
-            }
-        }
-        return NodeStatus.FAILED
-    }
 }
 
 class UtilityFallback(vararg val childArray: UtilityTask, val taskProviders: List<() -> List<UtilityTask>> = emptyList()) : FallbackBase() {

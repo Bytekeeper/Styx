@@ -40,25 +40,29 @@ class GatherGas(worker: Worker, gasPatch: GasMiningFacility) : Order<Worker>(wor
 class Repair(worker: SCV, target: Mechanical) : Order<SCV>(worker, { repair(target) })
 class Heal(medic: Medic, target: Organic) : Order<Medic>(medic, { healing(target as PlayerUnit) })
 
-class ArriveAt(val unit: MobileUnit, val position: Position, val threshold: Int = 32) : Node {
+class ArriveAt(val unit: MobileUnit, val position: Position, val tolerance: Int = 32) : Node {
     override fun tick(): NodeStatus {
-        if (unit.getDistance(position) < threshold)
+        if (unit.getDistance(position) < tolerance)
             return NodeStatus.SUCCEEDED
         return NodeStatus.RUNNING
     }
 }
 
-class ConstructionFinished(val worker: Worker, val at: TilePosition) : Node {
+class ConstructionStarted(val worker: Worker, val type: UnitType, val at: TilePosition) : Node {
     var started = false
 
     override fun tick(): NodeStatus {
-        if (started && UnitQuery.myUnits.any { it is Building && it.tilePosition == at }) {
-            return NodeStatus.SUCCEEDED
+        if (started) {
+            val candidate = UnitQuery.myUnits.firstOrNull { it is Building && it.tilePosition == at }
+                    ?: return NodeStatus.RUNNING
+            if (candidate.isA(type))
+                return NodeStatus.SUCCEEDED
+            return NodeStatus.FAILED
         }
         if (worker.buildType != UnitType.None) {
             started = true;
         }
-        return NodeStatus.FAILED
+        return NodeStatus.RUNNING
     }
 
 }
@@ -91,26 +95,31 @@ class BlockResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) :
 
 object CompoundActions {
     fun build(worker: Worker, at: TilePosition, building: UnitType): Node {
-        return Fallback(
-                ConstructionFinished(worker, at),
+        return AtLeastOne(
+                ConstructionStarted(worker, building, at),
                 Sequence(
                         ReserveUnit(worker),
                         ReserveResources(building.mineralPrice(), building.gasPrice()),
                         MSequence(
-                                reach(worker, at.toPosition()),
+                                reach(worker, at.toPosition(), 96),
                                 Build(worker, at, building),
                                 Sleep)
                 ))
     }
 
-    private fun reach(unit: MobileUnit, position: Position): Node {
+    private fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node {
         // TODO: "Search" for a way
-        return MSequence(Move(unit, position), ArriveAt(unit, position))
+        return MSequence(Move(unit, position), ArriveAt(unit, position, tolerance))
     }
 
     fun selectTrainer(currentTrainer: PlayerUnit?, unit: UnitType, near: Position?): PlayerUnit? {
         if (currentTrainer?.exists() == true) return currentTrainer
-        return Board.resources.units.firstOrNull { it.isA(unit.whatBuilds().first) }
+        return Board.resources.units
+                .filter {
+                    it.isA(unit.whatBuilds().first)
+                            && (it !is TrainingFacility || !it.isTraining)
+                }
+                .minBy { near?.getDistance(it.position) ?: 0 }
     }
 
     fun build(type: UnitType, at: Position? = null): Node {
@@ -119,9 +128,9 @@ object CompoundActions {
         return Retry(3, MSequence(
                 Sequence(
                         BlockResources(type.mineralPrice(), type.gasPrice()),
-                        Select {
-                            targetPosition = ConstructionPosition.findPositionFor(type) ?: return@Select NodeStatus.FAILED
-                            builder = findWorker(targetPosition!!.toPosition(), candidates = resources.units.filterIsInstance(Worker::class.java)) ?: return@Select NodeStatus.FAILED
+                        Inline {
+                            targetPosition = ConstructionPosition.findPositionFor(type) ?: return@Inline NodeStatus.FAILED
+                            builder = findWorker(targetPosition!!.toPosition(), candidates = resources.units.filterIsInstance(Worker::class.java)) ?: return@Inline NodeStatus.FAILED
                             NodeStatus.SUCCEEDED
                         }
                 ),
@@ -138,15 +147,10 @@ object CompoundActions {
         return MSequence(
                 Sequence(
                         ReserveResources(unit.mineralPrice(), unit.gasPrice(), supplyUsed),
-                        Select {
-                            if (FTTBot.self.canMake(unit))
-                                NodeStatus.SUCCEEDED
-                            else
-                                NodeStatus.RUNNING
-                        },
-                        Select {
+                        Await { FTTBot.self.canMake(unit) },
+                        Inline {
                             trainer = selectTrainer(trainer, unit, near)
-                                    ?: return@Select NodeStatus.RUNNING
+                                    ?: return@Inline NodeStatus.RUNNING
                             NodeStatus.SUCCEEDED
                         },
                         Delegate { ReserveUnit(trainer as PlayerUnit) },
@@ -157,12 +161,12 @@ object CompoundActions {
                             }
                         }
                 ),
-                Select {
+                Inline {
                     if (!trainer!!.exists()) {
-                        trainer = UnitQuery.myUnits.firstOrNull { it.id == trainer!!.id } ?: return@Select NodeStatus.FAILED
+                        trainer = UnitQuery.myUnits.firstOrNull { it.id == trainer!!.id } ?: return@Inline NodeStatus.FAILED
                     }
                     if (trainer?.isA(unit) == true)
-                        return@Select NodeStatus.SUCCEEDED
+                        return@Inline NodeStatus.SUCCEEDED
                     NodeStatus.RUNNING
                 }
         )

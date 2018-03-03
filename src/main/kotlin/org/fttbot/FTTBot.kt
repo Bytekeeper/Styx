@@ -102,6 +102,7 @@ object FTTBot : BWEventListener {
                 BOUnit(UnitType.Zerg_Drone),
                 BOUnit(UnitType.Zerg_Drone),
                 BOUnit(UnitType.Zerg_Overlord),
+                BOUnit(UnitType.Zerg_Extractor),
                 BOUnit(UnitType.Zerg_Zergling),
                 BOUnit(UnitType.Zerg_Zergling),
                 BOUnit(UnitType.Zerg_Drone),
