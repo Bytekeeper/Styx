@@ -48,7 +48,7 @@ object FTTBot : BWEventListener {
     val bwtaAvailable get() = bwtaInitializer.isDone
 
     val bot = BTree(
-            AtLeastOne(Fallback(ToNodes({ ProductionQueue.queue }, {
+            All(Fallback(ToNodes({ ProductionQueue.queue }, {
                         ProductionQueue.setInProgress(it)
                         when (it) {
                             is BOUnit -> if (it.type.isAddon) throw UnsupportedOperationException()
@@ -92,11 +92,22 @@ object FTTBot : BWEventListener {
         }
 
         ProductionQueue.enqueue(listOf(
-//                BOUnit(UnitType.Zerg_Drone),
-//                BOUnit(UnitType.Zerg_Drone),
-//                BOUnit(UnitType.Zerg_Drone),
-//                BOUnit(UnitType.Zerg_Drone),
+                BOUnit(UnitType.Zerg_Drone),
+                BOUnit(UnitType.Zerg_Drone),
+                BOUnit(UnitType.Zerg_Drone),
+                BOUnit(UnitType.Zerg_Drone),
+                BOUnit(UnitType.Zerg_Hatchery),
                 BOUnit(UnitType.Zerg_Spawning_Pool),
+                BOUnit(UnitType.Zerg_Drone),
+                BOUnit(UnitType.Zerg_Drone),
+                BOUnit(UnitType.Zerg_Drone),
+                BOUnit(UnitType.Zerg_Overlord),
+                BOUnit(UnitType.Zerg_Zergling),
+                BOUnit(UnitType.Zerg_Zergling),
+                BOUnit(UnitType.Zerg_Drone),
+                BOUnit(UnitType.Zerg_Drone),
+                BOUnit(UnitType.Zerg_Drone),
+                BOUnit(UnitType.Zerg_Drone),
                 BOUnit(UnitType.Zerg_Zergling),
                 BOUnit(UnitType.Zerg_Zergling)
         ))

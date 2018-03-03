@@ -22,24 +22,19 @@ class Resources {
         return this
     }
 
-    fun reserveMinerals(toReserve: Int): Resources {
-        minerals -= toReserve
-        return this
-    }
+    fun isAvailable(mineralPrice: Int, gasPrice: Int, supply: Int = 0): Boolean =
+            mineralPrice <= minerals && gasPrice <= gas && (supply == 0 || supply <= this.supply)
 
-    fun reserveGas(toReserve: Int): Resources {
-        gas -= toReserve
+    fun reserve(minerals: Int = 0, gas: Int = 0, supply: Int = 0): Resources {
+        this.minerals -= minerals
+        this.gas -= gas
+        this.supply -= supply
         return this
     }
 
     fun reserveUnit(unit: PlayerUnit): Resources {
         require(_units.contains(unit))
         _units.remove(unit)
-        return this
-    }
-
-    fun reserveSupply(toReserve: Int) : Resources {
-        supply -= toReserve
         return this
     }
 

@@ -20,7 +20,8 @@ open class Order<E : Any>(val unit: E, val order: E.() -> Boolean, val tolerance
         if (orderFrame < 0) {
             orderFrame = FTTBot.frameCount
         }
-        if (FTTBot.frameCount - orderFrame > toleranceFrames) return NodeStatus.FAILED
+        if (FTTBot.frameCount - orderFrame > toleranceFrames)
+            return NodeStatus.FAILED
         if (order(unit)) {
             return NodeStatus.SUCCEEDED
         }
@@ -32,7 +33,7 @@ open class Order<E : Any>(val unit: E, val order: E.() -> Boolean, val tolerance
 class Move(unit: MobileUnit, position: Position) : Order<MobileUnit>(unit, { move(position) })
 class Build(worker: Worker, position: TilePosition, building: UnitType) : Order<Worker>(worker, { build(position, building) })
 class TrainCommand(trainer: TrainingFacility, unit: UnitType) : Order<TrainingFacility>(trainer, { train(unit) })
-class MorphCommand(larva: Larva, unit: UnitType) : Order<Larva>(larva, { morph(unit) })
+class MorphCommand(morphable: Morphable, unit: UnitType) : Order<Morphable>(morphable, { morph(unit) })
 class Attack(unit: PlayerUnit, target: Unit) : Order<PlayerUnit>(unit, { (this as Armed).attack(target) })
 class GatherMinerals(worker: Worker, mineralPatch: MineralPatch) : Order<Worker>(worker, { gather(mineralPatch) })
 class GatherGas(worker: Worker, gasPatch: GasMiningFacility) : Order<Worker>(worker, { gather(gasPatch) })
@@ -47,11 +48,11 @@ class ArriveAt(val unit: MobileUnit, val position: Position, val threshold: Int 
     }
 }
 
-class ConstructionFinished(val worker: Worker) : Node {
+class ConstructionFinished(val worker: Worker, val at: TilePosition) : Node {
     var started = false
 
     override fun tick(): NodeStatus {
-        if (started && worker.buildType == UnitType.None) {
+        if (started && UnitQuery.myUnits.any { it is Building && it.tilePosition == at }) {
             return NodeStatus.SUCCEEDED
         }
         if (worker.buildType != UnitType.None) {
@@ -74,24 +75,30 @@ class ReserveUnit(val unit: PlayerUnit) : Node {
 
 class ReserveResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) : Node {
     override fun tick(): NodeStatus {
-        Board.resources.reserveMinerals(minerals)
-                .reserveGas(gas)
-                .reserveSupply(supply)
+        Board.resources.reserve(minerals, gas, supply)
         if (Board.resources.enough()) return NodeStatus.SUCCEEDED
         return NodeStatus.RUNNING
     }
 }
 
+class BlockResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) : Node {
+    override fun tick(): NodeStatus {
+        if (Board.resources.isAvailable(minerals, gas, supply)) return NodeStatus.SUCCEEDED
+        Board.resources.reserve(minerals, gas, supply)
+        return NodeStatus.RUNNING
+    }
+}
+
 object CompoundActions {
-    fun build(worker: Worker, at: Position, building: UnitType): Node {
+    fun build(worker: Worker, at: TilePosition, building: UnitType): Node {
         return Fallback(
-                ConstructionFinished(worker),
+                ConstructionFinished(worker, at),
                 Sequence(
-                        ReserveResources(building.mineralPrice(), building.gasPrice()),
                         ReserveUnit(worker),
+                        ReserveResources(building.mineralPrice(), building.gasPrice()),
                         MSequence(
-                                reach(worker, at),
-                                Build(worker, at.toTilePosition(), building),
+                                reach(worker, at.toPosition()),
+                                Build(worker, at, building),
                                 Sleep)
                 ))
     }
@@ -109,23 +116,28 @@ object CompoundActions {
     fun build(type: UnitType, at: Position? = null): Node {
         var targetPosition = at?.toTilePosition()
         var builder: Worker? = null
-        return Sequence(
-                Select {
-                    targetPosition = targetPosition ?: ConstructionPosition.findPositionFor(type) ?: return@Select NodeStatus.FAILED
-                    builder = findWorker(targetPosition!!.toPosition(), candidates = resources.units.filterIsInstance(Worker::class.java)) ?: return@Select NodeStatus.FAILED
-                    NodeStatus.SUCCEEDED
-                },
-                Then {
-                    build(builder!!, targetPosition!!.toPosition(), type)
+        return Retry(3, MSequence(
+                Sequence(
+                        BlockResources(type.mineralPrice(), type.gasPrice()),
+                        Select {
+                            targetPosition = ConstructionPosition.findPositionFor(type) ?: return@Select NodeStatus.FAILED
+                            builder = findWorker(targetPosition!!.toPosition(), candidates = resources.units.filterIsInstance(Worker::class.java)) ?: return@Select NodeStatus.FAILED
+                            NodeStatus.SUCCEEDED
+                        }
+                ),
+                MDelegate
+                {
+                    build(builder!!, targetPosition!!, type)
                 }
-        )
+        ))
     }
 
     fun train(unit: UnitType, near: Position? = null): Node {
         var trainer: PlayerUnit? = null
+        val supplyUsed = if (unit == UnitType.Zerg_Zergling) 2 * unit.supplyRequired() else unit.supplyRequired()
         return MSequence(
                 Sequence(
-                        ReserveResources(unit.mineralPrice(), unit.gasPrice(), unit.supplyRequired()),
+                        ReserveResources(unit.mineralPrice(), unit.gasPrice(), supplyUsed),
                         Select {
                             if (FTTBot.self.canMake(unit))
                                 NodeStatus.SUCCEEDED
@@ -133,13 +145,12 @@ object CompoundActions {
                                 NodeStatus.RUNNING
                         },
                         Select {
-                            trainer = selectTrainer(trainer, unit, near) ?: return@Select NodeStatus.FAILED
+                            trainer = selectTrainer(trainer, unit, near)
+                                    ?: return@Select NodeStatus.RUNNING
                             NodeStatus.SUCCEEDED
                         },
-                        Then {
-                            ReserveUnit(trainer as PlayerUnit)
-                        },
-                        Then {
+                        Delegate { ReserveUnit(trainer as PlayerUnit) },
+                        MDelegate {
                             when (trainer) {
                                 is Larva -> MorphCommand(trainer as Larva, unit)
                                 else -> TrainCommand(trainer as TrainingFacility, unit)

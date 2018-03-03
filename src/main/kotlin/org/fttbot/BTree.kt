@@ -1,5 +1,8 @@
 package org.fttbot
 
+import org.apache.logging.log4j.LogManager
+import org.apache.logging.log4j.Logger
+
 enum class NodeStatus {
     FAILED,
     SUCCEEDED,
@@ -19,16 +22,48 @@ interface Node {
     }
 }
 
-class Then(val delegate: () -> Node) : Node {
-    private val actualDelegate: Node by lazy { delegate() }
-    override fun tick(): NodeStatus = actualDelegate.tick()
+class MDelegate(val delegate: () -> Node) : Node {
+    private var actualDelegate: Node? = null
+    override fun tick(): NodeStatus {
+        if (actualDelegate == null) {
+            actualDelegate = delegate()
+        }
+        var result = actualDelegate!!.tick()
+        if (result != NodeStatus.RUNNING) {
+            actualDelegate = null
+        }
+        return result
+    }
+
+    override fun aborted() {
+        actualDelegate = null
+    }
+}
+
+class Delegate(val delegate: () -> Node) : Node {
+    override fun tick(): NodeStatus = delegate().tick()
 }
 
 class Select(val delegate: () -> NodeStatus) : Node {
     override fun tick(): NodeStatus = delegate()
 }
 
-class All<E>(val children: List<Node>) : Node {
+class Retry(var times: Int, val node: Node) : Node {
+    override fun tick(): NodeStatus {
+        if (times > 0) {
+            var result = node.tick()
+            if (result == NodeStatus.FAILED) {
+                times--
+                return NodeStatus.RUNNING
+            }
+            return result
+        }
+        return NodeStatus.FAILED
+    }
+
+}
+
+class All(val children: List<Node>) : Node {
     constructor(vararg children: Node) : this(children.toList())
 
     override fun tick(): NodeStatus {
@@ -40,10 +75,15 @@ class All<E>(val children: List<Node>) : Node {
 }
 
 class AtLeastOne(vararg val childArray: Node) : Node {
-    val children = childArray.toMutableList()
+    private val LOG = LogManager.getLogger()
+    private val children = childArray.toMutableList()
     override fun tick(): NodeStatus {
         val result = children.map { it to it.tick() }
-        children.removeAll(result.filter { it.second != NodeStatus.RUNNING }.map { it.first }.toList())
+        val toRemove = result.filter { it.second != NodeStatus.RUNNING }.map { it.first }
+        if (LOG.isInfoEnabled) {
+            toRemove.forEach { LOG.info("Removed $it") }
+        }
+        children.removeAll(toRemove)
         if (result.any { it.second == NodeStatus.SUCCEEDED }) return NodeStatus.SUCCEEDED
         if (result.any { it.second == NodeStatus.RUNNING }) return NodeStatus.RUNNING
         return NodeStatus.FAILED
@@ -51,10 +91,11 @@ class AtLeastOne(vararg val childArray: Node) : Node {
 }
 
 class Multiplex<T : Any>(val childrenResolver: () -> Collection<T>, val nodeGen: (T) -> Node) : Node {
-    val children = HashMap<T, Node>()
+    private val LOG = LogManager.getLogger()
+    private val children = HashMap<T, Node>()
     override fun tick(): NodeStatus {
-        val subBoards = childrenResolver()
-        val toDelete = subBoards.mapNotNull {
+        val toTransform = childrenResolver()
+        val toDelete = toTransform.mapNotNull {
             val result = children.computeIfAbsent(it, nodeGen)
                     .tick()
             if (result != NodeStatus.RUNNING)
@@ -62,14 +103,21 @@ class Multiplex<T : Any>(val childrenResolver: () -> Collection<T>, val nodeGen:
             else
                 null
         }
+        if (LOG.isInfoEnabled) {
+            toDelete.forEach { LOG.info("Removed $it") }
+        }
         children.keys.removeAll(toDelete)
-        children.keys.removeIf { !subBoards.contains(it) }
+        val changed = children.keys.removeIf { !toTransform.contains(it) }
+        if (changed) {
+            LOG.info("Removed missing children")
+        }
         return if (children.isEmpty()) return NodeStatus.SUCCEEDED else NodeStatus.RUNNING
     }
 }
 
 class ToNodes<T : Any>(val childrenResolver: () -> Collection<T>, val nodeGen: (T) -> Node) : Node {
-    val children = ArrayList<Node>()
+    private val LOG = LogManager.getLogger()
+    private val children = ArrayList<Node>()
     override fun tick(): NodeStatus {
         val newItems = childrenResolver()
         children.addAll(newItems.map(nodeGen))
@@ -80,6 +128,9 @@ class ToNodes<T : Any>(val childrenResolver: () -> Collection<T>, val nodeGen: (
                 it
             else
                 null
+        }
+        if (LOG.isInfoEnabled) {
+            toDelete.forEach { LOG.info("Removed $it") }
         }
         children.removeAll(toDelete)
         return if (children.isEmpty()) return NodeStatus.SUCCEEDED else NodeStatus.RUNNING
@@ -234,7 +285,7 @@ class Sequence(vararg childArray: Node) : SequenceBase() {
 
     override fun children(): List<Node> = _children
 
-    override fun toString(): String = "Sequence(${_children.size})"
+    override fun toString(): String = "Sequence(${_children.joinToString(",")})"
 }
 
 class MSequence(vararg val children: Node) : Node {
@@ -262,6 +313,8 @@ class MSequence(vararg val children: Node) : Node {
         }
         childIndex = -1
     }
+
+    override fun toString(): String = "MSequence@$childIndex(${children.joinToString(",")})"
 }
 
 class MSelector<E>(vararg val children: Node) : Node {
