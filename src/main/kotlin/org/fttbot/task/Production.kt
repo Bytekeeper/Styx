@@ -112,7 +112,7 @@ object BoSearch : Node {
             }
             return NodeStatus.RUNNING
         } catch (e: IllegalStateException) {
-            LOG.log(Level.SEVERE, "Couldn't determine build order, guess it's over", e)
+            LOG.log(Level.SEVERE, "Couldn't determine buildWithWorker order, guess it's over", e)
         }
         return NodeStatus.FAILED
     }

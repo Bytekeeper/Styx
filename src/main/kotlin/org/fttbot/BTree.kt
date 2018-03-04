@@ -21,7 +21,7 @@ interface Node {
     }
 }
 
-class MDelegate(val delegate: () -> Node) : Node {
+class MDelegate(val name: String? = "", val delegate: () -> Node) : Node {
     private var actualDelegate: Node? = null
     override fun tick(): NodeStatus {
         if (actualDelegate == null) {
@@ -37,6 +37,8 @@ class MDelegate(val delegate: () -> Node) : Node {
     override fun aborted() {
         actualDelegate = null
     }
+
+    override fun toString(): String = "$name@mdel"
 }
 
 class Delegate(val delegate: () -> Node) : Node {
@@ -48,8 +50,12 @@ class Inline(val delegate: () -> NodeStatus) : Node {
 }
 
 
-class Await(val condition: () -> Boolean) : Node {
-    override fun tick(): NodeStatus = if (condition()) NodeStatus.SUCCEEDED else NodeStatus.RUNNING
+class Await(var frames: Int = Int.MAX_VALUE, val condition: () -> Boolean) : Node {
+    override fun tick(): NodeStatus {
+        frames--
+        if (frames <= 0) return NodeStatus.FAILED
+        return if (condition()) NodeStatus.SUCCEEDED else NodeStatus.RUNNING
+    }
 }
 
 class Require(val condition: () -> Boolean) : Node {
@@ -62,6 +68,7 @@ class Retry(var times: Int, val node: Node) : Node {
             var result = node.tick()
             if (result == NodeStatus.FAILED) {
                 times--
+                node.aborted()
                 return NodeStatus.RUNNING
             }
             return result
@@ -87,7 +94,7 @@ class MAll(var children: MutableList<Node>) : Node {
     override fun tick(): NodeStatus {
         var abort = false
         var overallResult: NodeStatus = NodeStatus.SUCCEEDED
-        val remaining = children.mapNotNull{
+        val remaining = children.mapNotNull {
             if (abort) {
                 it.aborted()
                 it
@@ -127,6 +134,30 @@ class AtLeastOne(vararg val children: Node) : Node {
         }
         return overallResult
     }
+}
+
+class Synced<T : Any>(val childrenResolver: () -> Collection<T>, val name: String? = "", val nodeGen: (T) -> Node) : Node {
+    private val LOG = LogManager.getLogger()
+    private val children = HashMap<T, Node>()
+    override fun tick(): NodeStatus {
+        val toTransform = childrenResolver()
+        val result = toTransform.map {
+            val result = children.computeIfAbsent(it, nodeGen)
+                    .tick()
+            if (result == NodeStatus.SUCCEEDED) {
+                children.remove(it)
+            }
+            result
+        }
+        children.keys.removeIf { !toTransform.contains(it) }
+        return if (result.contains(NodeStatus.FAILED))
+            return NodeStatus.FAILED
+        else if (result.contains(NodeStatus.RUNNING))
+            NodeStatus.RUNNING
+        else NodeStatus.SUCCEEDED
+    }
+
+    override fun toString(): String = "$name@mplex(${children.values.joinToString(", ")})"
 }
 
 class ToNodes<T : Any>(val childrenResolver: () -> Collection<T>, val nodeGen: (T) -> Node) : Node {
@@ -267,7 +298,7 @@ class Sequence(vararg childArray: Node) : SequenceBase() {
     override fun toString(): String = "Sequence(${_children.joinToString(",")})"
 }
 
-class MSequence(vararg val children: Node) : Node {
+class MSequence(val name: String, vararg val children: Node) : Node {
     var childIndex = -1
 
     override fun tick(): NodeStatus {
@@ -293,7 +324,7 @@ class MSequence(vararg val children: Node) : Node {
         childIndex = -1
     }
 
-    override fun toString(): String = "MSequence@$childIndex(${children.joinToString(",")})"
+    override fun toString(): String = "$name@MSequence@$childIndex(${children.joinToString(",")})"
 }
 
 class MSelector<E>(vararg val children: Node) : Node {

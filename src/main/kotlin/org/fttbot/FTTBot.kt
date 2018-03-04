@@ -1,7 +1,10 @@
 package org.fttbot
 
+import bwapi4j.org.apache.commons.lang3.mutable.MutableInt
 import bwem.BWEM
+import bwem.map.MapImpl
 import bwta.BWTA
+import org.fttbot.CompoundActions.produce
 import org.fttbot.CompoundActions.trainWorker
 import org.fttbot.estimation.BOPrediction
 import org.fttbot.info.*
@@ -9,6 +12,7 @@ import org.fttbot.task.BoSearch
 import org.fttbot.task.GatherResources
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Race
+import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Unit
 import java.util.concurrent.CompletableFuture
@@ -82,17 +86,15 @@ object FTTBot : BWEventListener {
                 trainWorker(),
                 trainWorker(),
                 trainWorker(),
-                trainWorker(),
-                trainWorker(),
-                trainWorker(),
-                trainWorker()
-//                build(UnitType.Zerg_Hatchery),
-//                build(UnitType.Zerg_Spawning_Pool),
+                produce(UnitType.Zerg_Extractor),
+                produce(UnitType.Zerg_Lurker)
+//                buildWithWorker(UnitType.Zerg_Hatchery),
+//                buildWithWorker(UnitType.Zerg_Spawning_Pool),
 //                trainWorker(),
 //                trainWorker(),
 //                trainWorker(),
 //                buildOrTrainSupply(),
-//                build(UnitType.Zerg_Extractor),
+//                buildWithWorker(UnitType.Zerg_Extractor),
 //                train(UnitType.Zerg_Zergling),
 //                train(UnitType.Zerg_Zergling),
 //                trainWorker(),
