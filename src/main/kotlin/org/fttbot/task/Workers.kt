@@ -24,8 +24,8 @@ object GatherResources : Node {
             if (gasMissing > 0) {
                 val refinery = refineries.first()
                 repeat(gasMissing) {
-                    val worker = workersToAssign.firstOrNull { it.isIdle || it.isGatheringMinerals && !it.isCarryingMinerals }
-                            ?: workersToAssign.firstOrNull { it.isGatheringMinerals } ?: return@repeat
+                    val worker = workersToAssign.firstOrNull { !it.isCarryingMinerals }
+                            ?: workersToAssign.firstOrNull() ?: return@repeat
                     worker.gather(refinery)
                     workersToAssign.remove(worker)
                 }

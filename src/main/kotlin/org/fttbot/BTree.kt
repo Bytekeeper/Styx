@@ -52,6 +52,10 @@ class Await(val condition: () -> Boolean) : Node {
     override fun tick(): NodeStatus = if (condition()) NodeStatus.SUCCEEDED else NodeStatus.RUNNING
 }
 
+class Require(val condition: () -> Boolean) : Node {
+    override fun tick(): NodeStatus = if (condition()) NodeStatus.SUCCEEDED else NodeStatus.FAILED
+}
+
 class Retry(var times: Int, val node: Node) : Node {
     override fun tick(): NodeStatus {
         if (times > 0) {
@@ -67,7 +71,17 @@ class Retry(var times: Int, val node: Node) : Node {
 
 }
 
-class All(var children: MutableList<Node>) : Node {
+class All(vararg val children: Node) : Node {
+    override fun tick(): NodeStatus {
+        var result = children.map { it.tick() }
+        if (result.contains(NodeStatus.FAILED)) return NodeStatus.FAILED
+        if (result.contains(NodeStatus.RUNNING)) return NodeStatus.RUNNING
+        return NodeStatus.SUCCEEDED
+    }
+
+}
+
+class MAll(var children: MutableList<Node>) : Node {
     constructor(vararg children: Node) : this(children.toMutableList())
 
     override fun tick(): NodeStatus {
@@ -164,9 +178,14 @@ object Fail : Node {
     override fun toString(): String = "FAIL"
 }
 
-object Sleep : Node {
-    override fun tick(): NodeStatus = NodeStatus.RUNNING
-    override fun toString(): String = "RUNNING"
+class Sleep(val condition: () -> Boolean) : Node {
+    override fun tick(): NodeStatus = if (condition()) NodeStatus.RUNNING else NodeStatus.SUCCEEDED
+    override fun toString(): String = "RUNNING while $condition"
+
+    companion object : Node {
+        override fun tick(): NodeStatus = NodeStatus.RUNNING
+        override fun toString(): String = "RUNNING"
+    }
 }
 
 abstract class FallbackBase : Node {

@@ -2,9 +2,6 @@ package org.fttbot
 
 import bwem.BWEM
 import bwta.BWTA
-import org.fttbot.CompoundActions.build
-import org.fttbot.CompoundActions.buildOrTrainSupply
-import org.fttbot.CompoundActions.train
 import org.fttbot.CompoundActions.trainWorker
 import org.fttbot.estimation.BOPrediction
 import org.fttbot.info.*
@@ -12,7 +9,6 @@ import org.fttbot.task.BoSearch
 import org.fttbot.task.GatherResources
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Race
-import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Unit
 import java.util.concurrent.CompletableFuture
@@ -81,28 +77,32 @@ object FTTBot : BWEventListener {
             else -> throw IllegalStateException("Can't handle race ${racePlayed}")
         }
 
-        buildQueue = All(
+        buildQueue = MAll(
                 trainWorker(),
                 trainWorker(),
                 trainWorker(),
                 trainWorker(),
-                build(UnitType.Zerg_Hatchery),
-                build(UnitType.Zerg_Spawning_Pool),
                 trainWorker(),
                 trainWorker(),
                 trainWorker(),
-                buildOrTrainSupply(),
-                build(UnitType.Zerg_Extractor),
-                train(UnitType.Zerg_Zergling),
-                train(UnitType.Zerg_Zergling),
-                trainWorker(),
-                trainWorker(),
-                trainWorker(),
-                trainWorker(),
-                train(UnitType.Zerg_Zergling),
-                train(UnitType.Zerg_Zergling)
+                trainWorker()
+//                build(UnitType.Zerg_Hatchery),
+//                build(UnitType.Zerg_Spawning_Pool),
+//                trainWorker(),
+//                trainWorker(),
+//                trainWorker(),
+//                buildOrTrainSupply(),
+//                build(UnitType.Zerg_Extractor),
+//                train(UnitType.Zerg_Zergling),
+//                train(UnitType.Zerg_Zergling),
+//                trainWorker(),
+//                trainWorker(),
+//                trainWorker(),
+//                trainWorker(),
+//                train(UnitType.Zerg_Zergling),
+//                train(UnitType.Zerg_Zergling)
         )
-        bot = All(buildQueue, Sequence(GatherResources, Sleep))
+        bot = MAll(buildQueue, Sequence(GatherResources, Sleep))
         UnitQuery.update(emptyList())
     }
 

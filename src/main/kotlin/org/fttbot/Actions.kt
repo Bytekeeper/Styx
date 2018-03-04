@@ -73,12 +73,19 @@ class ReserveUnit(val unit: PlayerUnit) : Node {
     }
 }
 
-class ReserveResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) : Node {
+class ReserveResources(val minerals: Int, val gas: Int = 0) : Node {
     override fun tick(): NodeStatus {
-        Board.resources.reserve(minerals, gas, supply)
-        if (Board.resources.enough()) return NodeStatus.SUCCEEDED
-        return NodeStatus.RUNNING
+        Board.resources.reserve(minerals, gas)
+        if (Board.resources.enoughMineralsAndGas()) return NodeStatus.SUCCEEDED
+        return NodeStatus.FAILED
     }
+}
+
+class ReserveSupply(val supply: Int) : Node {
+    override fun tick(): NodeStatus =
+            if (supply == 0 || Board.resources.reserve(supply = supply).supply >= 0)
+                NodeStatus.SUCCEEDED
+            else NodeStatus.FAILED
 }
 
 class BlockResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) : Node {
@@ -95,7 +102,7 @@ object CompoundActions {
                 ConstructionStarted(worker, building, at),
                 Sequence(
                         ReserveUnit(worker),
-                        ReserveResources(building.mineralPrice(), building.gasPrice()),
+                        Fallback(ReserveResources(building.mineralPrice(), building.gasPrice()), Sleep),
                         MSequence(
                                 reach(worker, at.toPosition(), 96),
                                 Build(worker, at, building),
@@ -144,7 +151,18 @@ object CompoundActions {
         val supplyUsed = if (unit == UnitType.Zerg_Zergling) 2 * unit.supplyRequired() else unit.supplyRequired()
         return MSequence(
                 Sequence(
-                        ReserveResources(unit.mineralPrice(), unit.gasPrice(), supplyUsed),
+                        All(
+                                Fallback(
+                                        ReserveSupply(supplyUsed),
+                                        Require {
+                                            UnitQuery.myUnits.any {
+                                                !it.isCompleted && it is SupplyProvider
+                                                        || it is Egg && it.buildType.supplyProvided() > 0
+                                            }
+                                        },
+                                        MDelegate { buildOrTrainSupply() }
+                                ),
+                                Fallback(ReserveResources(unit.mineralPrice(), unit.gasPrice()), Sleep)),
                         Await { FTTBot.self.canMake(unit) },
                         Inline {
                             trainer = selectTrainer(trainer, unit, near()?.toPosition())
@@ -171,9 +189,10 @@ object CompoundActions {
     }
 
     fun buildOrTrainSupply(near: () -> TilePosition? = { null }): Node =
-            if (FTTConfig.SUPPLY.isBuilding) build(FTTConfig.SUPPLY, near)
+            if (FTTConfig.SUPPLY.isBuilding)
+                build(FTTConfig.SUPPLY, near)
             else
                 train(FTTConfig.SUPPLY, near)
 
-    fun trainWorker(near: () -> TilePosition? = { null }) : Node = train(FTTConfig.WORKER, near)
+    fun trainWorker(near: () -> TilePosition? = { null }): Node = train(FTTConfig.WORKER, near)
 }
