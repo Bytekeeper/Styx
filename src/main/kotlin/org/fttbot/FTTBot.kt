@@ -3,11 +3,12 @@ package org.fttbot
 import bwem.BWEM
 import bwta.BWTA
 import org.fttbot.CompoundActions.build
+import org.fttbot.CompoundActions.buildOrTrainSupply
 import org.fttbot.CompoundActions.train
+import org.fttbot.CompoundActions.trainWorker
 import org.fttbot.estimation.BOPrediction
 import org.fttbot.info.*
 import org.fttbot.task.BoSearch
-import org.fttbot.task.ConstructBuilding
 import org.fttbot.task.GatherResources
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Race
@@ -47,20 +48,9 @@ object FTTBot : BWEventListener {
 
     val bwtaAvailable get() = bwtaInitializer.isDone
 
-    val bot = BTree(
-            All(Fallback(ToNodes({ ProductionQueue.queue }, {
-                        ProductionQueue.setInProgress(it)
-                        when (it) {
-                            is BOUnit -> if (it.type.isAddon) throw UnsupportedOperationException()
-                            else if (it.type.isBuilding)
-                                build(it.type, it.position)
-                            else
-                                train(it.type)
-                            else -> throw UnsupportedOperationException()
-                        }
-                    })),
-                    GatherResources)
-    )
+    lateinit var bot : Node
+
+    private lateinit var buildQueue: Node
 
     override fun onStart() {
         bwtaInitializer = CompletableFuture.supplyAsync {
@@ -91,27 +81,28 @@ object FTTBot : BWEventListener {
             else -> throw IllegalStateException("Can't handle race ${racePlayed}")
         }
 
-        ProductionQueue.enqueue(listOf(
-                BOUnit(UnitType.Zerg_Drone),
-                BOUnit(UnitType.Zerg_Drone),
-                BOUnit(UnitType.Zerg_Drone),
-                BOUnit(UnitType.Zerg_Drone),
-                BOUnit(UnitType.Zerg_Hatchery),
-                BOUnit(UnitType.Zerg_Spawning_Pool),
-                BOUnit(UnitType.Zerg_Drone),
-                BOUnit(UnitType.Zerg_Drone),
-                BOUnit(UnitType.Zerg_Drone),
-                BOUnit(UnitType.Zerg_Overlord),
-                BOUnit(UnitType.Zerg_Extractor),
-                BOUnit(UnitType.Zerg_Zergling),
-                BOUnit(UnitType.Zerg_Zergling),
-                BOUnit(UnitType.Zerg_Drone),
-                BOUnit(UnitType.Zerg_Drone),
-                BOUnit(UnitType.Zerg_Drone),
-                BOUnit(UnitType.Zerg_Drone),
-                BOUnit(UnitType.Zerg_Zergling),
-                BOUnit(UnitType.Zerg_Zergling)
-        ))
+        buildQueue = All(
+                trainWorker(),
+                trainWorker(),
+                trainWorker(),
+                trainWorker(),
+                build(UnitType.Zerg_Hatchery),
+                build(UnitType.Zerg_Spawning_Pool),
+                trainWorker(),
+                trainWorker(),
+                trainWorker(),
+                buildOrTrainSupply(),
+                build(UnitType.Zerg_Extractor),
+                train(UnitType.Zerg_Zergling),
+                train(UnitType.Zerg_Zergling),
+                trainWorker(),
+                trainWorker(),
+                trainWorker(),
+                trainWorker(),
+                train(UnitType.Zerg_Zergling),
+                train(UnitType.Zerg_Zergling)
+        )
+        bot = All(buildQueue, Sequence(GatherResources, Sleep))
         UnitQuery.update(emptyList())
     }
 
@@ -125,7 +116,6 @@ object FTTBot : BWEventListener {
         if (game.interactionHandler.frameCount % latency_frames == 0) {
             UnitQuery.update(game.allUnits)
 //        Exporter.export()
-            ProductionQueue.onFrame()
             EnemyState.step()
             Cluster.step()
             ClusterUnitInfo.step()
@@ -144,19 +134,10 @@ object FTTBot : BWEventListener {
 
     override fun onUnitCreate(unit: Unit) {
         if (unit !is PlayerUnit) return
-        checkForStartedConstruction(unit)
         BoSearch.onUnitCreate(unit)
     }
 
-    private fun checkForStartedConstruction(unit: PlayerUnit) {
-        if (unit.isMyUnit) {
-            ProductionQueue.onStarted(unit)
-        }
-    }
-
     override fun onUnitMorph(unit: Unit) {
-        if (unit !is PlayerUnit) return
-        checkForStartedConstruction(unit)
     }
 
     override fun onUnitComplete(unit: Unit) {

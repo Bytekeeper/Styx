@@ -67,22 +67,40 @@ class Retry(var times: Int, val node: Node) : Node {
 
 }
 
-class All(val children: List<Node>) : Node {
-    constructor(vararg children: Node) : this(children.toList())
+class All(var children: MutableList<Node>) : Node {
+    constructor(vararg children: Node) : this(children.toMutableList())
 
     override fun tick(): NodeStatus {
-        val result = children.map { it.tick() }
-        if (result.any { it == NodeStatus.FAILED }) return NodeStatus.FAILED
-        if (result.any { it == NodeStatus.RUNNING }) return NodeStatus.RUNNING
-        return NodeStatus.SUCCEEDED
+        var abort = false
+        var overallResult: NodeStatus = NodeStatus.SUCCEEDED
+        val remaining = children.mapNotNull{
+            if (abort) {
+                it.aborted()
+                it
+            } else {
+                val result = it.tick()
+                if (result == NodeStatus.FAILED) {
+                    abort = true
+                    overallResult = result
+                    null
+                } else if (result == NodeStatus.RUNNING) {
+                    overallResult = NodeStatus.RUNNING
+                    it
+                } else {
+                    null
+                }
+            }
+        }
+        children = remaining.toMutableList()
+        return overallResult
     }
 }
 
-class AtLeastOne(vararg val childArray: Node) : Node {
+class AtLeastOne(vararg val children: Node) : Node {
     override fun tick(): NodeStatus {
         var abort = false
-        var overallResult : NodeStatus = NodeStatus.RUNNING
-        childArray.forEach{
+        var overallResult: NodeStatus = NodeStatus.RUNNING
+        children.forEach {
             if (abort) {
                 it.aborted()
             } else {
@@ -121,10 +139,6 @@ class ToNodes<T : Any>(val childrenResolver: () -> Collection<T>, val nodeGen: (
 
 
 infix fun <T : Node> T.by(utility: () -> Double) = UtilityTask(this) { utility() }
-
-class BTree(val root: Node) {
-    fun tick(): NodeStatus = root.tick()
-}
 
 class UtilityFallback(vararg val childArray: UtilityTask, val taskProviders: List<() -> List<UtilityTask>> = emptyList()) : FallbackBase() {
     override fun children(): List<Node> =

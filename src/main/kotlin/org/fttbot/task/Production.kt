@@ -16,22 +16,6 @@ import org.openbw.bwapi4j.unit.*
 import java.util.logging.Level
 import java.util.logging.Logger
 
-object ConstructBuilding : Node {
-    override fun tick(): NodeStatus {
-        val next = ProductionQueue.nextItem as? BOUnit ?: return NodeStatus.FAILED
-        val resources = Board.resources
-        if (!next.type.isBuilding || next.type.isAddon) return NodeStatus.FAILED
-        if (!next.canProcess) return NodeStatus.FAILED
-        if (resources.minerals < next.mineralPrice || resources.gas < next.gasPrice) return NodeStatus.FAILED
-
-        val targetPosition = ConstructionPosition.findPositionFor(next.type) ?: return NodeStatus.FAILED
-        val worker = findWorker(targetPosition.toPosition(), candidates = resources.units.filterIsInstance(Worker::class.java))
-                ?: return NodeStatus.FAILED
-        ProductionQueue.setInProgress(next, worker, targetPosition)
-        return NodeStatus.SUCCEEDED
-    }
-}
-
 
 object BoSearch : Node {
     override fun tick(): NodeStatus {
@@ -47,7 +31,7 @@ object BoSearch : Node {
         if (mcts == null) {
             mcts = MCTS(mapOf(UnitType.Terran_Marine to 1, UnitType.Terran_Vulture to 1, UnitType.Terran_Goliath to 1), setOf(), mapOf(UpgradeType.Ion_Thrusters to 1), Race.Terran)
         }
-        if (ProductionQueue.hasItems) return NodeStatus.RUNNING
+//        if (ProductionQueue.hasItems) return NodeStatus.RUNNING
 
         val searcher = mcts ?: throw IllegalStateException()
         if (PlayerUnit.getMissingUnits(UnitQuery.myUnits, UnitType.Terran_Marine.requiredUnits() + UnitType.Terran_Vulture.requiredUnits())

@@ -9,10 +9,6 @@ import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 
-interface PlanAction {
-    fun cost(state: World): Int
-}
-
 open class Order<E : Any>(val unit: E, val order: E.() -> Boolean, val toleranceFrames: Int = 10) : Node {
     var orderFrame: Int = -1
 
@@ -122,14 +118,15 @@ object CompoundActions {
                 .minBy { near?.getDistance(it.position) ?: 0 }
     }
 
-    fun build(type: UnitType, at: Position? = null): Node {
-        var targetPosition = at?.toTilePosition()
+    fun build(type: UnitType, at: () -> TilePosition? = { null }): Node {
+        require(type.isBuilding && !type.isAddon)
+        var targetPosition: TilePosition? = null
         var builder: Worker? = null
         return Retry(3, MSequence(
                 Sequence(
                         BlockResources(type.mineralPrice(), type.gasPrice()),
                         Inline {
-                            targetPosition = ConstructionPosition.findPositionFor(type) ?: return@Inline NodeStatus.FAILED
+                            targetPosition = at() ?: ConstructionPosition.findPositionFor(type) ?: return@Inline NodeStatus.FAILED
                             builder = findWorker(targetPosition!!.toPosition(), candidates = resources.units.filterIsInstance(Worker::class.java)) ?: return@Inline NodeStatus.FAILED
                             NodeStatus.SUCCEEDED
                         }
@@ -141,7 +138,8 @@ object CompoundActions {
         ))
     }
 
-    fun train(unit: UnitType, near: Position? = null): Node {
+    fun train(unit: UnitType, near: () -> TilePosition? = { null }): Node {
+        require(!unit.isBuilding || unit.isAddon)
         var trainer: PlayerUnit? = null
         val supplyUsed = if (unit == UnitType.Zerg_Zergling) 2 * unit.supplyRequired() else unit.supplyRequired()
         return MSequence(
@@ -149,7 +147,7 @@ object CompoundActions {
                         ReserveResources(unit.mineralPrice(), unit.gasPrice(), supplyUsed),
                         Await { FTTBot.self.canMake(unit) },
                         Inline {
-                            trainer = selectTrainer(trainer, unit, near)
+                            trainer = selectTrainer(trainer, unit, near()?.toPosition())
                                     ?: return@Inline NodeStatus.RUNNING
                             NodeStatus.SUCCEEDED
                         },
@@ -171,4 +169,11 @@ object CompoundActions {
                 }
         )
     }
+
+    fun buildOrTrainSupply(near: () -> TilePosition? = { null }): Node =
+            if (FTTConfig.SUPPLY.isBuilding) build(FTTConfig.SUPPLY, near)
+            else
+                train(FTTConfig.SUPPLY, near)
+
+    fun trainWorker(near: () -> TilePosition? = { null }) : Node = train(FTTConfig.WORKER, near)
 }
