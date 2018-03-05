@@ -93,6 +93,13 @@ object FTTBot : BWEventListener {
                 trainWorker(),
                 trainWorker(),
                 trainWorker(),
+                produce(UnitType.Zerg_Sunken_Colony),
+                trainWorker(),
+                trainWorker(),
+                trainWorker(),
+                trainWorker(),
+                produce(UnitType.Zerg_Ultralisk),
+                produce(UnitType.Zerg_Ultralisk),
                 produce(UnitType.Zerg_Ultralisk)
 //                buildWithWorker(UnitType.Zerg_Hatchery),
 //                buildWithWorker(UnitType.Zerg_Spawning_Pool),
@@ -128,7 +135,7 @@ object FTTBot : BWEventListener {
             Cluster.step()
             ClusterUnitInfo.step()
 
-            Board.resources.reset(self.minerals(), self.gas(), self.supplyTotal() - self.supplyUsed(), UnitQuery.myUnits)
+            Board.reset()
             bot.tick()
         }
         bwem.map.neutralData.minerals.filter { mineral -> bwem.map.areas.none { area -> area.minerals.contains(mineral) } }

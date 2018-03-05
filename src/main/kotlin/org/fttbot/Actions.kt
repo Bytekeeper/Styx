@@ -109,7 +109,7 @@ object CompoundActions {
                                 reach(worker, at.toPosition(), 128),
                                 Build(worker, at, building),
                                 Await(48) { worker.isConstructing },
-                                Sleep)
+                                Sleep(48))
                 ))
     }
 
@@ -145,21 +145,31 @@ object CompoundActions {
         var targetPosition: TilePosition? = null
         var builder: PlayerUnit? = null
         return Retry(3, MSequence("build",
+                Inline {
+                    targetPosition = null
+                    builder = null
+                    NodeStatus.SUCCEEDED
+                },
                 ensureDependencies(type),
                 Sequence(
                         BlockResources(type.mineralPrice(), type.gasPrice()),
                         Await { FTTBot.self.canMake(type) },
                         Inline {
-                            targetPosition = at() ?: ConstructionPosition.findPositionFor(type)
+                            targetPosition = targetPosition ?: at() ?: ConstructionPosition.findPositionFor(type)
                                     ?: return@Inline NodeStatus.FAILED
-                            builder = if (type.whatBuilds().first.isWorker)
-                                findWorker(targetPosition!!.toPosition(), candidates = resources.units.filterIsInstance(Worker::class.java))
-                            else
-                                Board.resources.units.firstOrNull { it.isA(type.whatBuilds().first) && it is Building && it.remainingBuildTime == 0 }
-                                        ?: return@Inline NodeStatus.FAILED
+                            builder = if (builder != null && resources.units.contains(builder!!)) builder else
+                                if (type.whatBuilds().first.isWorker)
+                                    findWorker(targetPosition!!.toPosition(), candidates = resources.units.filterIsInstance(Worker::class.java))
+                                else
+                                    Board.resources.units.firstOrNull { it.isA(type.whatBuilds().first) && it is Building && it.remainingBuildTime == 0 }
+                                            ?: return@Inline NodeStatus.FAILED
                             NodeStatus.SUCCEEDED
                         }
                 ),
+                Inline {
+                    Board.pendingUnits += type
+                    NodeStatus.SUCCEEDED
+                },
                 MDelegate
                 {
                     if (builder is Worker)
@@ -200,6 +210,10 @@ object CompoundActions {
                             NodeStatus.SUCCEEDED
                         },
                         Delegate { ReserveUnit(trainer!!) },
+                        Inline {
+                            Board.pendingUnits.add(unit)
+                            NodeStatus.SUCCEEDED
+                        },
                         MDelegate {
                             when (trainer) {
                                 is Morphable -> MorphCommand(trainer as Morphable, unit)
@@ -221,7 +235,9 @@ object CompoundActions {
     fun ensureUnitDependencies(dependencies: List<UnitType>): Node {
         return Synced({
             val missing = PlayerUnit.getMissingUnits(UnitQuery.myUnits, dependencies)
-            if (dependencies.any { it.gasPrice() > 0 }) missing += FTTConfig.GAS_BUILDING
+            if (dependencies.any { it != UnitType.Zerg_Larva && it.gasPrice() > 0 })
+                missing += FTTConfig.GAS_BUILDING
+            missing -= Board.pendingUnits
             missing.removeIf { type -> UnitQuery.myUnits.any { it.isA(type) } }
             missing
 

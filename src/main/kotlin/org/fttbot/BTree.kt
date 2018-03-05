@@ -134,6 +134,8 @@ class AtLeastOne(vararg val children: Node) : Node {
         }
         return overallResult
     }
+
+    override fun toString(): String = "one(${children.joinToString(", ")})"
 }
 
 class Synced<T : Any>(val childrenResolver: () -> Collection<T>, val name: String? = "", val nodeGen: (T) -> Node) : Node {
@@ -253,6 +255,7 @@ abstract class FallbackBase : Node {
         lastRunningChild = null
     }
 
+    override fun toString(): String = "fback(${children().joinToString(", ")})"
 }
 
 open class Fallback(vararg childArray: Node) : FallbackBase() {
@@ -292,6 +295,8 @@ abstract class SequenceBase : Node {
         lastRunningChild?.aborted()
         lastRunningChild = null
     }
+
+    override fun toString(): String = "seq(${children().joinToString(", ")})"
 }
 
 class Sequence(vararg childArray: Node) : SequenceBase() {
