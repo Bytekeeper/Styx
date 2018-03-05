@@ -209,8 +209,12 @@ object Fail : Node {
     override fun toString(): String = "FAIL"
 }
 
-class Sleep(val condition: () -> Boolean) : Node {
-    override fun tick(): NodeStatus = if (condition()) NodeStatus.RUNNING else NodeStatus.SUCCEEDED
+class Sleep(var timeOut: Int = Int.MAX_VALUE, val condition: () -> Boolean = { true }) : Node {
+    override fun tick(): NodeStatus =
+            if (--timeOut <= 0) NodeStatus.FAILED
+            else if (condition()) NodeStatus.RUNNING
+            else NodeStatus.SUCCEEDED
+
     override fun toString(): String = "RUNNING while $condition"
 
     companion object : Node {

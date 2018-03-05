@@ -40,7 +40,7 @@ class Heal(medic: Medic, target: Organic) : Order<Medic>(medic, { healing(target
 
 class ArriveAt(val unit: MobileUnit, val position: Position, val tolerance: Int = 32) : Node {
     override fun tick(): NodeStatus {
-        if (unit.getDistance(position) < tolerance)
+        if (unit.getDistance(position) <= tolerance)
             return NodeStatus.SUCCEEDED
         return NodeStatus.RUNNING
     }
@@ -106,7 +106,7 @@ object CompoundActions {
                         ReserveUnit(worker),
                         Fallback(ReserveResources(building.mineralPrice(), building.gasPrice()), Sleep),
                         MSequence("executeBuild",
-                                reach(worker, at.toPosition(), 96),
+                                reach(worker, at.toPosition(), 128),
                                 Build(worker, at, building),
                                 Await(48) { worker.isConstructing },
                                 Sleep)
@@ -221,6 +221,7 @@ object CompoundActions {
     fun ensureUnitDependencies(dependencies: List<UnitType>): Node {
         return Synced({
             val missing = PlayerUnit.getMissingUnits(UnitQuery.myUnits, dependencies)
+            if (dependencies.any { it.gasPrice() > 0 }) missing += FTTConfig.GAS_BUILDING
             missing.removeIf { type -> UnitQuery.myUnits.any { it.isA(type) } }
             missing
 

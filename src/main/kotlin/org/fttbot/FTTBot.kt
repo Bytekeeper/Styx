@@ -19,6 +19,7 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
 import java.util.logging.Level
 import java.util.logging.Logger
+import kotlin.math.min
 
 object FTTBot : BWEventListener {
 
@@ -70,6 +71,8 @@ object FTTBot : BWEventListener {
         Thread.sleep(100)
         game.interactionHandler.setLocalSpeed(0)
         game.interactionHandler.enableLatCom(false)
+        game.interactionHandler.sendText("black sheep wall")
+        game.interactionHandler.sendText("power overwhelming")
 
         Logger.getLogger("").level = Level.INFO
 
@@ -86,8 +89,11 @@ object FTTBot : BWEventListener {
                 trainWorker(),
                 trainWorker(),
                 trainWorker(),
-                produce(UnitType.Zerg_Extractor),
-                produce(UnitType.Zerg_Lurker)
+                trainWorker(),
+                trainWorker(),
+                trainWorker(),
+                trainWorker(),
+                produce(UnitType.Zerg_Ultralisk)
 //                buildWithWorker(UnitType.Zerg_Hatchery),
 //                buildWithWorker(UnitType.Zerg_Spawning_Pool),
 //                trainWorker(),
@@ -124,6 +130,11 @@ object FTTBot : BWEventListener {
 
             Board.resources.reset(self.minerals(), self.gas(), self.supplyTotal() - self.supplyUsed(), UnitQuery.myUnits)
             bot.tick()
+        }
+        bwem.map.neutralData.minerals.filter { mineral -> bwem.map.areas.none { area -> area.minerals.contains(mineral) } }
+                .forEach {
+            val pos = it.bottomRight.add(it.topLeft).div(2)
+            game.mapDrawer.drawTextMap(pos.toPosition(), "${it.unit.position}")
         }
 
     }
