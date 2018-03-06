@@ -6,6 +6,7 @@ import bwem.map.MapImpl
 import bwta.BWTA
 import org.fttbot.CompoundActions.produce
 import org.fttbot.CompoundActions.trainWorker
+import org.fttbot.Scouting.scout
 import org.fttbot.estimation.BOPrediction
 import org.fttbot.info.*
 import org.fttbot.task.BoSearch
@@ -90,17 +91,16 @@ object FTTBot : BWEventListener {
                 trainWorker(),
                 trainWorker(),
                 trainWorker(),
-                trainWorker(),
-                trainWorker(),
-                trainWorker(),
                 produce(UnitType.Zerg_Sunken_Colony),
                 trainWorker(),
                 trainWorker(),
                 trainWorker(),
                 trainWorker(),
-                produce(UnitType.Zerg_Ultralisk),
-                produce(UnitType.Zerg_Ultralisk),
-                produce(UnitType.Zerg_Ultralisk)
+                trainWorker(),
+                trainWorker(),
+                trainWorker(),
+                produce(UnitType.Zerg_Mutalisk),
+                produce(UnitType.Zerg_Guardian)
 //                buildWithWorker(UnitType.Zerg_Hatchery),
 //                buildWithWorker(UnitType.Zerg_Spawning_Pool),
 //                trainWorker(),
@@ -117,7 +117,9 @@ object FTTBot : BWEventListener {
 //                train(UnitType.Zerg_Zergling),
 //                train(UnitType.Zerg_Zergling)
         )
-        bot = MAll(buildQueue, Sequence(GatherResources, Sleep))
+        bot = MAll(buildQueue,
+                scout(),
+                Sequence(GatherResources, Sleep))
         UnitQuery.update(emptyList())
     }
 

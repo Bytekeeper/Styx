@@ -10,7 +10,7 @@ import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 
-open class Order<E : Any>(val unit: E, val order: E.() -> Boolean, val toleranceFrames: Int = 10) : Node {
+open class Order<E : kotlin.Any>(val unit: E, val order: E.() -> Boolean, val toleranceFrames: Int = 10) : Node {
     var orderFrame: Int = -1
 
     override fun tick(): NodeStatus {
@@ -100,7 +100,7 @@ class BlockResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) :
 
 object CompoundActions {
     fun buildWithWorker(worker: Worker, at: TilePosition, building: UnitType): Node {
-        return AtLeastOne(
+        return OneOf(
                 ConstructionStarted(worker, building, at),
                 Sequence(
                         ReserveUnit(worker),
@@ -113,7 +113,7 @@ object CompoundActions {
                 ))
     }
 
-    private fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node {
+    fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node {
         // TODO: "Search" for a way
         return MSequence("reach", Move(unit, position), ArriveAt(unit, position, tolerance))
     }
@@ -199,7 +199,7 @@ object CompoundActions {
         return MSequence("train",
                 ensureDependencies(unit),
                 Sequence(
-                        All(
+                        All("ensureResources",
                                 ensureSupply(supplyUsed),
                                 Fallback(ReserveResources(unit.mineralPrice(), unit.gasPrice()), Sleep)
                         ),
@@ -233,10 +233,10 @@ object CompoundActions {
     }
 
     fun ensureUnitDependencies(dependencies: List<UnitType>): Node {
-        return Synced({
-            val missing = PlayerUnit.getMissingUnits(UnitQuery.myUnits, dependencies)
-            if (dependencies.any { it != UnitType.Zerg_Larva && it.gasPrice() > 0 })
-                missing += FTTConfig.GAS_BUILDING
+        return MMapAll({
+            val missing = PlayerUnit.getMissingUnits(UnitQuery.myUnits, dependencies).toMutableList()
+            if (dependencies.any { it != UnitType.Zerg_Larva && it.gasPrice() > 0 && it.gasPrice() > Board.resources.gas })
+                missing.add(0, FTTConfig.GAS_BUILDING)
             missing -= Board.pendingUnits
             missing.removeIf { type -> UnitQuery.myUnits.any { it.isA(type) } }
             missing
@@ -255,7 +255,7 @@ object CompoundActions {
 
     fun ensureDependencies(unit: UnitType): Node {
         if (unit == UnitType.None) return Success
-        return All(
+        return All("ensureDependencies",
                 MDelegate { ensureUnitDependencies(unit.requiredUnits()) },
                 ensureResearchDependencies(unit.requiredTech())
         )

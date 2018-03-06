@@ -1,6 +1,7 @@
 package org.fttbot
 
 import org.apache.logging.log4j.LogManager
+import kotlin.Any
 
 enum class NodeStatus {
     FAILED,
@@ -78,7 +79,7 @@ class Retry(var times: Int, val node: Node) : Node {
 
 }
 
-class All(vararg val children: Node) : Node {
+class All(val name : String, vararg val children: Node) : Node {
     override fun tick(): NodeStatus {
         var result = children.map { it.tick() }
         if (result.contains(NodeStatus.FAILED)) return NodeStatus.FAILED
@@ -86,6 +87,7 @@ class All(vararg val children: Node) : Node {
         return NodeStatus.SUCCEEDED
     }
 
+    override fun toString(): String = "$name@all(${children.joinToString(",")})"
 }
 
 class MAll(var children: MutableList<Node>) : Node {
@@ -117,7 +119,7 @@ class MAll(var children: MutableList<Node>) : Node {
     }
 }
 
-class AtLeastOne(vararg val children: Node) : Node {
+class OneOf(vararg val children: Node) : Node {
     override fun tick(): NodeStatus {
         var abort = false
         var overallResult: NodeStatus = NodeStatus.RUNNING
@@ -138,7 +140,7 @@ class AtLeastOne(vararg val children: Node) : Node {
     override fun toString(): String = "one(${children.joinToString(", ")})"
 }
 
-class Synced<T : Any>(val childrenResolver: () -> Collection<T>, val name: String? = "", val nodeGen: (T) -> Node) : Node {
+class MMapAll<T : Any>(val childrenResolver: () -> Collection<T>, val name: String? = "", val nodeGen: (T) -> Node) : Node {
     private val LOG = LogManager.getLogger()
     private val children = HashMap<T, Node>()
     override fun tick(): NodeStatus {
