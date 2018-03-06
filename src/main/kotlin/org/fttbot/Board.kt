@@ -17,8 +17,8 @@ object Board {
 }
 
 class Resources {
-    private val _units: MutableCollection<PlayerUnit> = ArrayList()
-    val units: Collection<PlayerUnit> get() = _units
+    private val _units: MutableList<PlayerUnit> = ArrayList()
+    val units: List<PlayerUnit> get() = _units
     var minerals: Int = 0
         private set
     var gas: Int = 0

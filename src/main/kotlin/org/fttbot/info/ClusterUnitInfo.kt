@@ -19,7 +19,7 @@ object ClusterUnitInfo {
 
 class ClusterInfo(private val cluster: Cluster<*>) {
     val unitsInArea by lazy {
-        (UnitQuery.unitsInRadius(cluster.position, 600) +
+        (UnitQuery.inRadius(cluster.position, 600) +
                 EnemyState.seenUnits.filter { it.getDistance(cluster.position) < 600 })
                 .filter { it is PlayerUnit && (it is Armed || it is Bunker) && it.isCompleted }
                 .map { it as PlayerUnit }

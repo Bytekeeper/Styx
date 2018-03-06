@@ -2,6 +2,8 @@ package org.fttbot.task
 
 import org.fttbot.*
 import org.fttbot.info.UnitQuery
+import org.fttbot.info.UnitQuery.minerals
+import org.fttbot.info.inRadius
 import org.fttbot.info.isMyUnit
 import org.openbw.bwapi4j.unit.*
 
@@ -14,11 +16,11 @@ object GatherResources : Node {
         val units = available.units
 
         val workerUnits = myBases.flatMap { base ->
-            val relevantUnits = UnitQuery.unitsInRadius(base.position, RESOURCE_RANGE)
+            val relevantUnits = UnitQuery.inRadius(base.position, RESOURCE_RANGE)
             val refineries = relevantUnits.filter { it is GasMiningFacility && it.isMyUnit && it.isCompleted }.map { it as GasMiningFacility }
             val remainingWorkers = units.filter { it.getDistance(base) < RESOURCE_RANGE && it is Worker && it.isMyUnit && it.isCompleted }.map { it as Worker }
             val workersToAssign = remainingWorkers.toMutableList()
-            val minerals = relevantUnits.filter { it is MineralPatch }.map { it as MineralPatch }.toMutableList()
+            val minerals = relevantUnits.filterIsInstance(MineralPatch::class.java).toMutableList()
 
             val gasMissing = refineries.size * 3 - workersToAssign.count { it.isGatheringGas }
             if (gasMissing > 0) {

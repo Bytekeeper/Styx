@@ -7,6 +7,7 @@ import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
+import sun.management.snmp.jvminstr.JvmThreadInstanceEntryImpl.ThreadStateMap.Byte1.other
 
 const val MAX_MELEE_RANGE = 64
 
@@ -19,6 +20,7 @@ fun WeaponType.inRange(distance: Int, safety: Int): Boolean =
         minRange() <= distance && maxRange() >= distance - safety
 
 fun <T : Unit> List<T>.inRadius(other: Unit, maxRadius: Int) = filter { other.getDistance(it) < maxRadius }
+fun <T : Unit> List<T>.inRadius(position: Position, maxRadius: Int) = filter { it.getDistance(position) < maxRadius }
 
 // From https://docs.google.com/spreadsheets/d/1bsvPvFil-kpvEUfSG74U3E5PLSTC02JxSkiR8QdLMuw/edit#gid=0 resp. PurpleWave
 val Armed.stopFrames get() = when (this) {
@@ -73,7 +75,7 @@ fun PlayerUnit.canAttack(target: Unit, safety: Int = 0): Boolean {
 }
 
 fun Unit.potentialAttackers(safety: Int = 16): List<PlayerUnit> =
-        (UnitQuery.unitsInRadius(position, 300).filterIsInstance(PlayerUnit::class.java) + EnemyState.seenUnits.filter { it.getDistance(this) < 300 })
+        (UnitQuery.allUnits().inRadius(position, 300).filterIsInstance(PlayerUnit::class.java) + EnemyState.seenUnits.filter { it.getDistance(this) < 300 })
                 .filter { it.isEnemyUnit && it.canAttack(this, safety + (it.topSpeed() * MAX_FRAMES_TO_ATTACK).toInt()) }
 
 fun PlayerUnit.canBeAttacked(safety: Int = 16) = !potentialAttackers(safety).isEmpty()
@@ -100,28 +102,22 @@ fun UnitType.whatNeedsToBeBuild(): List<UnitType> {
 
 
 object UnitQuery {
-    lateinit private var allUnits: Collection<Unit>
+    lateinit var allUnits: List<Unit> private set
+    lateinit var myUnits: List<PlayerUnit> private set
+
 
     fun update(allUnits: Collection<Unit>) {
-        UnitQuery.allUnits = allUnits.filter { it.isVisible }
+        this.allUnits = allUnits.filter { it.isVisible }
+        myUnits = ownedUnits.filter { it.player == FTTBot.self }
     }
 
     val minerals get() = allUnits.filterIsInstance(MineralPatch::class.java)
     val geysers get() = allUnits.filter { it is VespeneGeyser }
     val ownedUnits get() = allUnits.filterIsInstance(PlayerUnit::class.java)
-    val myUnits get() = ownedUnits.filter { it.player == FTTBot.self }
     val enemyUnits get() = ownedUnits.filter { it.player == FTTBot.enemy }
     val myBases get() = myUnits.filter { it is Base }
     val myWorkers get() = myUnits.filterIsInstance(Worker::class.java).filter { it.isCompleted }
 
-    fun allUnits(): Collection<Unit> = allUnits
-    fun unitsInRadius(position: Position, radius: Int) = allUnits.filter { it.getDistance(position) <= radius }
-}
-
-object UnitTypes {
-    val trainables : Set<UnitType> get() = UnitQuery.myUnits.filterIsInstance(TrainingFacility::class.java)
-            .flatMap { it.trains() }
-            .filter { FTTBot.self.canMake(it) }
-            .toSet()
-
+    fun allUnits(): List<Unit> = allUnits
+    fun inRadius(position: Position, radius: Int) = allUnits.inRadius(position, radius)
 }

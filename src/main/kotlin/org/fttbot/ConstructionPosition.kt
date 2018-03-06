@@ -45,7 +45,7 @@ object ConstructionPosition {
 
     private fun willNotBlockOtherAddon(unitType: UnitType, pos: TilePosition): Boolean {
         val building = Rectangle(pos.x.toFloat(), pos.y.toFloat(), unitType.tileWidth().toFloat(), unitType.tileHeight().toFloat())
-        return !UnitQuery.unitsInRadius(pos.toPosition() + Position(0, unitType.height()), 100)
+        return !UnitQuery.inRadius(pos.toPosition() + Position(0, unitType.height()), 100)
                 .any {
                     it is ExtendibleByAddon && building.overlaps(
                             Rectangle(it.tilePosition.x.toFloat() + it.tileWidth().toFloat(), it.tilePosition.y.toFloat(), 2f, it.tileHeight().toFloat()))
@@ -57,14 +57,14 @@ object ConstructionPosition {
         val addonRect = Rectangle((pos.x + unitType.tileWidth()).toFloat(), pos.y.toFloat(), 2f, unitType.tileHeight().toFloat())
 
         return FTTBot.game.bwMap.canBuildHere(TilePosition(pos.x + unitType.tileWidth(), pos.y + 1), unitType)
-                && !UnitQuery.unitsInRadius(pos.toPosition() + Position(unitType.width(), unitType.height()), 100)
+                && !UnitQuery.inRadius(pos.toPosition() + Position(unitType.width(), unitType.height()), 100)
                 .any { it is Building && addonRect.overlaps(Rectangle(it.tilePosition.x.toFloat(), it.tilePosition.y.toFloat(), it.tileWidth().toFloat(), it.tileHeight().toFloat())) }
     }
 
     private fun outsideOfResourceLines(pos: TilePosition, unitType: UnitType): Boolean {
         val base = UnitQuery.myBases.minBy { it.tilePosition.getDistance(pos) } ?: return true
         val poly = resourcePolygons.computeIfAbsent(base) {
-            val relevantUnits = UnitQuery.unitsInRadius(base.position, RESOURCE_RANGE)
+            val relevantUnits = UnitQuery.inRadius(base.position, RESOURCE_RANGE)
                     .filter { it is MineralPatch || it is VespeneGeyser || it is Refinery }
                     .toMutableList()
             relevantUnits.add(base)

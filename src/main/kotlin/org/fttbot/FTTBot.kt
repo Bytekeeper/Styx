@@ -1,26 +1,28 @@
 package org.fttbot
 
-import bwapi4j.org.apache.commons.lang3.mutable.MutableInt
 import bwem.BWEM
-import bwem.map.MapImpl
 import bwta.BWTA
-import org.fttbot.CompoundActions.produce
-import org.fttbot.CompoundActions.trainWorker
 import org.fttbot.Scouting.scout
 import org.fttbot.estimation.BOPrediction
 import org.fttbot.info.*
 import org.fttbot.task.BoSearch
+import org.fttbot.task.Combat
 import org.fttbot.task.GatherResources
+import org.fttbot.task.Production.produce
+import org.fttbot.task.Production.research
+import org.fttbot.task.Production.train
+import org.fttbot.task.Production.trainWorker
+import org.fttbot.task.Production.upgrade
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.UnitType
-import org.openbw.bwapi4j.unit.PlayerUnit
+import org.openbw.bwapi4j.type.UpgradeType
+import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
 import java.util.logging.Level
 import java.util.logging.Logger
-import kotlin.math.min
 
 object FTTBot : BWEventListener {
 
@@ -50,7 +52,7 @@ object FTTBot : BWEventListener {
 
     val bwtaAvailable get() = bwtaInitializer.isDone
 
-    lateinit var bot : Node
+    lateinit var bot: Node
 
     private lateinit var buildQueue: Node
 
@@ -91,33 +93,14 @@ object FTTBot : BWEventListener {
                 trainWorker(),
                 trainWorker(),
                 trainWorker(),
-                produce(UnitType.Zerg_Sunken_Colony),
-                trainWorker(),
-                trainWorker(),
-                trainWorker(),
-                trainWorker(),
-                trainWorker(),
-                trainWorker(),
-                trainWorker(),
-                produce(UnitType.Zerg_Mutalisk),
-                produce(UnitType.Zerg_Guardian)
-//                buildWithWorker(UnitType.Zerg_Hatchery),
-//                buildWithWorker(UnitType.Zerg_Spawning_Pool),
-//                trainWorker(),
-//                trainWorker(),
-//                trainWorker(),
-//                buildOrTrainSupply(),
-//                buildWithWorker(UnitType.Zerg_Extractor),
-//                train(UnitType.Zerg_Zergling),
-//                train(UnitType.Zerg_Zergling),
-//                trainWorker(),
-//                trainWorker(),
-//                trainWorker(),
-//                trainWorker(),
-//                train(UnitType.Zerg_Zergling),
-//                train(UnitType.Zerg_Zergling)
+                produce(FTTConfig.GAS_BUILDING),
+                upgrade(UpgradeType.Adrenal_Glands)
         )
         bot = MAll(buildQueue,
+                Delegate {
+                    Combat.attack(UnitQuery.myUnits.filter { it is MobileUnit && it !is Worker && it is Armed },
+                            UnitQuery.enemyUnits)
+                },
                 scout(),
                 Sequence(GatherResources, Sleep))
         UnitQuery.update(emptyList())
@@ -142,9 +125,9 @@ object FTTBot : BWEventListener {
         }
         bwem.map.neutralData.minerals.filter { mineral -> bwem.map.areas.none { area -> area.minerals.contains(mineral) } }
                 .forEach {
-            val pos = it.bottomRight.add(it.topLeft).div(2)
-            game.mapDrawer.drawTextMap(pos.toPosition(), "${it.unit.position}")
-        }
+                    val pos = it.bottomRight.add(it.topLeft).div(2)
+                    game.mapDrawer.drawTextMap(pos.toPosition(), "${it.unit.position}")
+                }
 
     }
 
