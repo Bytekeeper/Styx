@@ -29,8 +29,8 @@ internal class DFSTest {
                         GameState.UnitState(0, 0, 0)
                 ), UnitType.Terran_Command_Center to mutableListOf(GameState.UnitState(0, 0, 0))),
                 mutableMapOf(TechType.None to 0), mutableMapOf(UpgradeType.None to GameState.UpgradeState(0, 0, 0)))
-        val search = DFS(state, mapOf(UnitType.Terran_Marine to 10))
-        val result = search.run(100)
+        val search = DFS(state, mapOf(UnitType.Terran_Vulture to 10))
+        val result = search.run(10000)
         println(result)
     }
 

@@ -1,7 +1,6 @@
 package org.fttbot
 
 import org.apache.logging.log4j.LogManager
-import kotlin.Any
 
 enum class NodeStatus {
     FAILED,
@@ -39,7 +38,7 @@ class MDelegate(val name: String? = "", val delegate: () -> Node) : Node {
         actualDelegate = null
     }
 
-    override fun toString(): String = "$name@mdel"
+    override fun toString(): String = "$name($actualDelegate)"
 }
 
 class Delegate(val delegate: () -> Node) : Node {
@@ -64,22 +63,53 @@ class Require(val condition: () -> Boolean) : Node {
 }
 
 class Retry(var times: Int, val node: Node) : Node {
+    private var remaining = times
     override fun tick(): NodeStatus {
-        if (times > 0) {
-            var result = node.tick()
+        if (remaining > 0) {
+            val result = node.tick()
             if (result == NodeStatus.FAILED) {
-                times--
+                remaining--
                 node.aborted()
                 return NodeStatus.RUNNING
             }
+            if (result == NodeStatus.SUCCEEDED) {
+                remaining = times
+            }
             return result
         }
+        remaining = times
         return NodeStatus.FAILED
     }
 
+    override fun aborted() {
+        remaining = times
+    }
 }
 
-class All(val name : String, vararg val children: Node) : Node {
+class Repeat(var times: Int = Int.MAX_VALUE, val node: Node) : Node {
+    private var remaining = times
+    override fun tick(): NodeStatus {
+        if (remaining > 0) {
+            var result = node.tick()
+            if (result == NodeStatus.SUCCEEDED) {
+                remaining--
+                return NodeStatus.RUNNING
+            }
+            if (result == NodeStatus.FAILED) {
+                remaining = times
+            }
+            return result
+        }
+        remaining = times
+        return NodeStatus.SUCCEEDED
+    }
+
+    override fun aborted() {
+        remaining = times
+    }
+}
+
+class All(val name: String, vararg val children: Node) : Node {
     override fun tick(): NodeStatus {
         var result = children.map { it.tick() }
         if (result.contains(NodeStatus.FAILED)) return NodeStatus.FAILED
@@ -87,16 +117,17 @@ class All(val name : String, vararg val children: Node) : Node {
         return NodeStatus.SUCCEEDED
     }
 
-    override fun toString(): String = "$name@all(${children.joinToString(",")})"
+    override fun toString(): String = "$name(${children.joinToString(",")})"
 }
 
-class MAll(var children: MutableList<Node>) : Node {
-    constructor(vararg children: Node) : this(children.toMutableList())
+class MAll(var children: List<Node>) : Node {
+    private var left = children
+    constructor(vararg children: Node) : this(children.toList())
 
     override fun tick(): NodeStatus {
         var abort = false
         var overallResult: NodeStatus = NodeStatus.SUCCEEDED
-        val remaining = children.mapNotNull {
+        left = left.mapNotNull {
             if (abort) {
                 it.aborted()
                 it
@@ -114,8 +145,14 @@ class MAll(var children: MutableList<Node>) : Node {
                 }
             }
         }
-        children = remaining.toMutableList()
+        if (overallResult != NodeStatus.RUNNING) {
+            left = children
+        }
         return overallResult
+    }
+
+    override fun aborted() {
+        left = children
     }
 }
 
@@ -161,7 +198,7 @@ class MMapAll<T : Any>(val childrenResolver: () -> Collection<T>, val name: Stri
         else NodeStatus.SUCCEEDED
     }
 
-    override fun toString(): String = "$name@mplex(${children.values.joinToString(", ")})"
+    override fun toString(): String = "$name(${children.values.joinToString(", ")})"
 }
 
 class ToNodes<T : Any>(val childrenResolver: () -> Collection<T>, val nodeGen: (T) -> Node) : Node {
@@ -213,11 +250,36 @@ object Fail : Node {
     override fun toString(): String = "FAIL"
 }
 
-class Sleep(var timeOut: Int = Int.MAX_VALUE, val condition: () -> Boolean = { true }) : Node {
+class Retain(val timeOut: Int = 24, val delegate: Node) : Node {
+    private var remaining = 0
+    private var retainedStatus : NodeStatus? = null
+
+    override fun tick(): NodeStatus {
+        if (remaining <= 0 || retainedStatus == NodeStatus.RUNNING) {
+            retainedStatus = delegate.tick()
+            remaining = timeOut
+        }
+        return retainedStatus!!
+    }
+
+    override fun aborted() {
+        remaining = 0
+        retainedStatus = null
+    }
+}
+
+class Sleep(val timeOut: Int = Int.MAX_VALUE, val condition: () -> Boolean = { true }) : Node {
+    var remaining: Int = timeOut
     override fun tick(): NodeStatus =
-            if (--timeOut <= 0) NodeStatus.FAILED
-            else if (condition()) NodeStatus.RUNNING
+            if (--remaining <= 0) {
+                remaining = timeOut
+                NodeStatus.FAILED
+            } else if (condition()) NodeStatus.RUNNING
             else NodeStatus.SUCCEEDED
+
+    override fun aborted() {
+        remaining = timeOut
+    }
 
     override fun toString(): String = "RUNNING while $condition"
 
@@ -298,7 +360,7 @@ abstract class SequenceBase : Node {
         lastRunningChild = null
     }
 
-    override fun toString(): String = "seq(${children().joinToString(", ")})"
+    override fun toString(): String = "SEQBASE(${children().joinToString(", ")})"
 }
 
 class Sequence(vararg childArray: Node) : SequenceBase() {
@@ -335,7 +397,7 @@ class MSequence(val name: String, vararg val children: Node) : Node {
         childIndex = -1
     }
 
-    override fun toString(): String = "$name@MSequence@$childIndex(${children.joinToString(",")})"
+    override fun toString(): String = "$name@$childIndex(${children.joinToString(",")})"
 }
 
 class MSelector<E>(vararg val children: Node) : Node {

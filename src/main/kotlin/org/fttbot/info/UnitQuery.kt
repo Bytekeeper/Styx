@@ -1,13 +1,14 @@
 package org.fttbot.info
 
+import org.fttbot.Board
 import org.fttbot.FTTBot
+import org.fttbot.LazyOnFrame
 import org.fttbot.estimation.MAX_FRAMES_TO_ATTACK
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
-import sun.management.snmp.jvminstr.JvmThreadInstanceEntryImpl.ThreadStateMap.Byte1.other
 
 const val MAX_MELEE_RANGE = 64
 
@@ -23,21 +24,22 @@ fun <T : Unit> List<T>.inRadius(other: Unit, maxRadius: Int) = filter { other.ge
 fun <T : Unit> List<T>.inRadius(position: Position, maxRadius: Int) = filter { it.getDistance(position) < maxRadius }
 
 // From https://docs.google.com/spreadsheets/d/1bsvPvFil-kpvEUfSG74U3E5PLSTC02JxSkiR8QdLMuw/edit#gid=0 resp. PurpleWave
-val Armed.stopFrames get() = when (this) {
-    is Goliath, is SiegeTank, is Reaver -> 1
-    is Worker, is Vulture, is Wraith, is BattleCruiser, is Scout, is Lurker -> 2
-    is Ghost, is Hydralisk -> 3
-    is Arbiter, is Zergling -> 4
-    is Zealot, is Dragoon -> 7
-    is Marine, is Firebat, is Corsair -> 8
-    is DarkTemplar, is Devourer -> 9
-    is Ultralisk -> 14
-    is Archon -> 15
-    is Valkyrie -> 40
-    else -> 2
-}
+val Armed.stopFrames
+    get() = when (this) {
+        is Goliath, is SiegeTank, is Reaver -> 1
+        is Worker, is Vulture, is Wraith, is BattleCruiser, is Scout, is Lurker -> 2
+        is Ghost, is Hydralisk -> 3
+        is Arbiter, is Zergling -> 4
+        is Zealot, is Dragoon -> 7
+        is Marine, is Firebat, is Corsair -> 8
+        is DarkTemplar, is Devourer -> 9
+        is Ultralisk -> 14
+        is Archon -> 15
+        is Valkyrie -> 40
+        else -> 2
+    }
 
-fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidates: List<Worker> = UnitQuery.myWorkers): Worker? {
+fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidates: List<Worker> = Board.resources.units.filterIsInstance(Worker::class.java)): Worker? {
     val selection =
             if (forPosition != null) {
                 candidates.filter { it.getDistance(forPosition) <= maxRange }
@@ -104,19 +106,24 @@ fun UnitType.whatNeedsToBeBuild(): List<UnitType> {
 object UnitQuery {
     lateinit var allUnits: List<Unit> private set
     lateinit var myUnits: List<PlayerUnit> private set
-
+    lateinit var ownedUnits: List<PlayerUnit> private set
+    lateinit var enemyUnits: List<PlayerUnit> private set
+    lateinit var myWorkers: List<PlayerUnit> private set
 
     fun update(allUnits: Collection<Unit>) {
         this.allUnits = allUnits.filter { it.isVisible }
+        ownedUnits = allUnits.filterIsInstance(PlayerUnit::class.java)
         myUnits = ownedUnits.filter { it.player == FTTBot.self }
+        enemyUnits = ownedUnits.filter { it.player == FTTBot.enemy }
+        myWorkers = myUnits.filterIsInstance(Worker::class.java).filter { it.isCompleted }
     }
 
     val minerals get() = allUnits.filterIsInstance(MineralPatch::class.java)
     val geysers get() = allUnits.filter { it is VespeneGeyser }
-    val ownedUnits get() = allUnits.filterIsInstance(PlayerUnit::class.java)
-    val enemyUnits get() = ownedUnits.filter { it.player == FTTBot.enemy }
     val myBases get() = myUnits.filter { it is Base }
-    val myWorkers get() = myUnits.filterIsInstance(Worker::class.java).filter { it.isCompleted }
+    val myMobileCombatUnits by LazyOnFrame {
+        myUnits.filter { it !is Worker && it is Armed && it.isCompleted }.filterIsInstance(MobileUnit::class.java)
+    }
 
     fun allUnits(): List<Unit> = allUnits
     fun inRadius(position: Position, radius: Int) = allUnits.inRadius(position, radius)

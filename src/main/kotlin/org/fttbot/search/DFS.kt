@@ -8,8 +8,8 @@ import kotlin.math.max
 class DFS(val initialState: GameState, val units: Map<UnitType, Int>) {
     private var requiredSet: Set<UnitType>
     private val visited = HashMap<Key, Key>()
-    var best : GameState? = null
-    var end : Long = 0
+    var best: GameState? = null
+    var end: Long = 0
 
     init {
         requiredSet = units.keys.map { it.allRequiredUnits() }.flatten().toSet()
@@ -38,12 +38,18 @@ class DFS(val initialState: GameState, val units: Map<UnitType, Int>) {
         val supplyNeeded = units.map { (u, s) -> max(s - state.unitsOfType(u).size, 0) * u.supplyRequired() }.sum()
         val canBuildSupply = state.supplyTotal + state.pendingSupply < state.supplyUsed + supplyNeeded
 
-        (requiredSet + state.race.supplyProvider).filter { (!it.isRefinery || state.refineries == 0)
-                && (it.supplyProvided() == 0 || canBuildSupply)
-                && (state.unitsOfType(it).size < units[it] ?: Int.MAX_VALUE)
-                && state.isValid(it) }
-                .shuffled()
-                .sortedBy {units[it] ?: 1 <= state.unitsOfType(it).size }
+        if (state.finishedAt > state.frame) {
+            var cpy = state.copy()
+            cpy.finish()
+            searchAndCompare(cpy)
+        }
+        (requiredSet + state.race.supplyProvider).filter {
+            (!it.isRefinery || state.refineries == 0)
+                    && (it.supplyProvided() == 0 || canBuildSupply)
+                    && (state.unitsOfType(it).size < units[it] ?: Int.MAX_VALUE)
+                    && state.isValid(it)
+        }
+                .sortedBy { state.unitsOfType(it).size - (units[it] ?: 0) + (if (it.isWorker) -1 else 0) }
                 .forEach { ut ->
                     val cpy = state.copy()
                     if (ut.isBuilding) cpy.build(ut) else cpy.train(ut)
@@ -59,7 +65,7 @@ class DFS(val initialState: GameState, val units: Map<UnitType, Int>) {
         }
     }
 
-    class Key(state: GameState, val endFrame : Int) {
+    class Key(state: GameState, val endFrame: Int) {
         val units = state.units.map { (k, v) -> k to v.size }.toMap()
         val minerals = state.minerals
         val gas = state.gas

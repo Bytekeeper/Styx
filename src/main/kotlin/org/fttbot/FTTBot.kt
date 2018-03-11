@@ -1,18 +1,20 @@
 package org.fttbot
 
 import bwem.BWEM
+import bwem.map.Map
 import bwta.BWTA
-import org.fttbot.Scouting.scout
 import org.fttbot.estimation.BOPrediction
+import org.fttbot.estimation.CombatEval
+import org.fttbot.estimation.SimUnit
 import org.fttbot.info.*
+import org.fttbot.strategies.ZvP
 import org.fttbot.task.BoSearch
 import org.fttbot.task.Combat
 import org.fttbot.task.GatherResources
 import org.fttbot.task.Production.produce
-import org.fttbot.task.Production.research
-import org.fttbot.task.Production.train
 import org.fttbot.task.Production.trainWorker
 import org.fttbot.task.Production.upgrade
+import org.fttbot.task.Scouting.scout
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.UnitType
@@ -36,8 +38,8 @@ object FTTBot : BWEventListener {
     val bwta: BWTA by lazy(LazyThreadSafetyMode.NONE) {
         bwtaInitializer.get()
     }
-    val bwem: BWEM by lazy(LazyThreadSafetyMode.NONE) {
-        bwemInitializer.get()
+    val bwem: Map by lazy(LazyThreadSafetyMode.NONE) {
+        bwemInitializer.get().map
     }
     lateinit var render: MapDrawer
     var latency_frames = 0
@@ -46,15 +48,13 @@ object FTTBot : BWEventListener {
 
 //    private val combatManager = BehaviorTree(AttackEnemyBase())
 
+    private lateinit var bot: Node
+
+    private lateinit var buildQueue: Node
+
     fun start() {
         game.startGame()
     }
-
-    val bwtaAvailable get() = bwtaInitializer.isDone
-
-    lateinit var bot: Node
-
-    private lateinit var buildQueue: Node
 
     override fun onStart() {
         bwtaInitializer = CompletableFuture.supplyAsync {
@@ -75,7 +75,7 @@ object FTTBot : BWEventListener {
         game.interactionHandler.setLocalSpeed(0)
         game.interactionHandler.enableLatCom(false)
         game.interactionHandler.sendText("black sheep wall")
-        game.interactionHandler.sendText("power overwhelming")
+//        game.interactionHandler.sendText("power overwhelming")
 
         Logger.getLogger("").level = Level.INFO
 
@@ -87,21 +87,53 @@ object FTTBot : BWEventListener {
             else -> throw IllegalStateException("Can't handle race ${racePlayed}")
         }
 
-        buildQueue = MAll(
-                trainWorker(),
-                trainWorker(),
-                trainWorker(),
-                trainWorker(),
-                trainWorker(),
-                produce(FTTConfig.GAS_BUILDING),
-                upgrade(UpgradeType.Adrenal_Glands)
+        buildQueue = MSequence("buildQueue",
+                ZvP._12Hatch()
         )
-        bot = MAll(buildQueue,
-                Delegate {
-                    Combat.attack(UnitQuery.myUnits.filter { it is MobileUnit && it !is Worker && it is Armed },
-                            UnitQuery.enemyUnits)
-                },
+        bot = All("main", buildQueue,
+//                Delegate {
+//                    Combat.attack(UnitQuery.myUnits.filter { it is MobileUnit && it !is Worker && it is Armed },
+//                            UnitQuery.enemyUnits)
+//                },
                 scout(),
+                MSequence("Consider Attacking",
+                        Require {
+                            val myUnits = UnitQuery.myMobileCombatUnits
+                                    .map { SimUnit.of(it) }
+                            val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Armed }
+                                    .map { SimUnit.of(it) }
+                            val eval = CombatEval.probabilityToWin(myUnits, enemies)
+                            eval > 0.55
+                        },
+                        Sequence(
+                                Require {
+                                    val myUnits = UnitQuery.myMobileCombatUnits
+                                            .map { SimUnit.of(it) }
+                                    val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Armed }
+                                            .map { SimUnit.of(it) }
+                                    val eval = CombatEval.probabilityToWin(myUnits, enemies)
+                                    eval > 0.45
+                                },
+                                Delegate {
+                                    Combat.attack(UnitQuery.myMobileCombatUnits, UnitQuery.enemyUnits)
+                                }
+                        )
+                ),
+                Fallback(
+                        Sleep(24),
+                        MDelegate {
+                            Combat.defendPosition(UnitQuery.myUnits.filter { it !is Worker && it is Armed }.filterIsInstance(MobileUnit::class.java),
+                                    self.startLocation.toPosition(), (game.bwMap.startPositions - self.startLocation)[0].toPosition())
+                        }
+//                        MSequence("",
+//                                Require { !EnemyState.enemyBases.isEmpty() },
+//
+//                                MDelegate
+//                                {
+//                                    Combat.moveToStandOffPosition(UnitQuery.myUnits.filter { it !is Worker && it is Armed }.filterIsInstance(MobileUnit::class.java),
+//                                            EnemyState.enemyBases[0].position)
+//                                })
+                ),
                 Sequence(GatherResources, Sleep))
         UnitQuery.update(emptyList())
     }
@@ -123,12 +155,11 @@ object FTTBot : BWEventListener {
             Board.reset()
             bot.tick()
         }
-        bwem.map.neutralData.minerals.filter { mineral -> bwem.map.areas.none { area -> area.minerals.contains(mineral) } }
+        bwem.neutralData.minerals.filter { mineral -> bwem.areas.none { area -> area.minerals.contains(mineral) } }
                 .forEach {
                     val pos = it.bottomRight.add(it.topLeft).div(2)
                     game.mapDrawer.drawTextMap(pos.toPosition(), "${it.unit.position}")
                 }
-
     }
 
     override fun onUnitDestroy(unit: Unit) {

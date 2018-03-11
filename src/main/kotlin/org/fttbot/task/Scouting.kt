@@ -1,5 +1,6 @@
-package org.fttbot
+package org.fttbot.task
 
+import org.fttbot.*
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.Overlord
@@ -26,10 +27,5 @@ object Scouting {
                     scout(it as MobileUnit, FTTBot.game.bwMap.startPositions[rnd.nextInt(FTTBot.game.bwMap.startPositions.size)].toPosition())
                 }
         )
-    }
-
-    private fun findScout(scout: PlayerUnit?): PlayerUnit? {
-        if (scout != null && Board.resources.units.contains(scout)) return scout
-        return Board.resources.units.firstOrNull { it is Overlord }
     }
 }

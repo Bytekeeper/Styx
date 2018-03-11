@@ -1,9 +1,12 @@
 package org.fttbot
 
+import org.fttbot.info.UnitQuery
+import org.fttbot.task.BoSearch
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.UpgradeType
+import org.openbw.bwapi4j.unit.*
 import kotlin.math.max
 import kotlin.math.min
 
@@ -22,7 +25,7 @@ data class GameState(var frame: Int,
     val freeSupply get() = max(0, supplyTotal - supplyUsed)
     val hasRefinery get() = units[race.refinery]?.isEmpty() == false
     val refineries get() = amountOf(race.refinery)
-    val workers get() = units[race.worker] ?: emptyList<UnitState>()
+    val workers get() = units[race.worker] ?: mutableListOf()
     val finishedAt get() = units.values.flatten().map { it.availableAt }.max() ?: frame
 
     init {
@@ -100,6 +103,8 @@ data class GameState(var frame: Int,
             availableAt = frame + unit.buildTime() + WORKER_MOVE_TIME
             if (race == Race.Terran) {
                 worker.availableAt = availableAt
+            } else if (race == Race.Zerg) {
+                workers -= worker
             }
         }
         payForAndStartUnit(unit, availableAt)
@@ -201,4 +206,39 @@ data class GameState(var frame: Int,
     data class UnitState(val startedAt: Int = -1, var availableAt: Int = 0, var supplyProvided: Int = 0, var addon: UnitType = UnitType.None)
 
     data class UpgradeState(val startedAt: Int = -1, var availableAt: Int = 0, var level: Int = 0)
+
+    companion object {
+        fun fromCurrent() : GameState {
+            val myRace = FTTConfig.MY_RACE
+            val researchFacilities = UnitQuery.myUnits.filterIsInstance(ResearchingFacility::class.java)
+            val upgradesInProgress = researchFacilities.map {
+                val upgrade = it.upgradeInProgress
+                upgrade.upgradeType to GameState.UpgradeState(-1, upgrade.remainingUpgradeTime, FTTBot.self.getUpgradeLevel(upgrade.upgradeType) + 1)
+            }.toMap()
+            val upgrades = UpgradeType.values()
+                    .filter { it.race == myRace }
+                    .map {
+                        Pair(it, upgradesInProgress[it] ?: GameState.UpgradeState(-1, 0, FTTBot.self.getUpgradeLevel(it)))
+                    }.toMap().toMutableMap()
+            val units = UnitQuery.myUnits.map {
+                it.initialType to GameState.UnitState(-1,
+                        if (!it.isCompleted && it is Building) it.remainingBuildTime
+                        else if (it is TrainingFacility) it.remainingTrainTime
+                        else 0)
+            }.groupBy { (k, v) -> k }
+                    .mapValues { it.value.map { it.second }.toMutableList() }.toMutableMap()
+            val supplyUsed = UnitQuery.myUnits.filterIsInstance(MobileUnit::class.java).sumBy { it.supplyRequired }
+            val supplyTotal = UnitQuery.myUnits.filterIsInstance(SupplyProvider::class.java).sumBy { it.supplyProvided() }
+            val researchInProgress = researchFacilities.map {
+                val research = it.researchInProgress
+                research.researchType to research.remainingResearchTime
+            }
+            val tech = (TechType.values()
+                    .filter { it.race == myRace && FTTBot.self.hasResearched(it) }
+                    .map { it to 0 } + Pair(TechType.None, 0) + researchInProgress).toMap().toMutableMap()
+
+            return GameState(0, FTTBot.self.race, supplyUsed, supplyTotal, FTTBot.self.minerals(), FTTBot.self.gas(),
+                    units, tech, upgrades)
+        }
+    }
 }

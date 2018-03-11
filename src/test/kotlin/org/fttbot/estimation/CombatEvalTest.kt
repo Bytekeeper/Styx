@@ -83,9 +83,21 @@ class CombatEvalTest {
         )
         val b = listOf(
                 SimUnit.of(UnitType.Terran_Marine),
-                SimUnit.of(UnitType.Terran_Marine),
                 SimUnit.of(UnitType.Terran_Medic)
         )
+        System.err.println(CombatEval.probabilityToWin(a, b))
+    }
+
+    @Test
+    fun evalG() {
+        val a = listOf(
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Zerg_Hydralisk)
+        )
+
         System.err.println(CombatEval.probabilityToWin(a, b))
     }
 }

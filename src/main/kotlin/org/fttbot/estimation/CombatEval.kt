@@ -31,13 +31,15 @@ object CombatEval {
         val mobilityB = (unitsOfPlayerB.map { it.topSpeed } + 0.01).average()
 
         val amountOfUnits = max(1, unitsOfPlayerA.size + unitsOfPlayerB.size)
-        val center = (unitsOfPlayerA + unitsOfPlayerB).map { it.position }.fold(Position(0,0)) { s, t -> s.add(t) }?.divide(Position(amountOfUnits, amountOfUnits))
-        val distA = unitsOfPlayerA.sumBy { max(0, it.position?.getDistance(center) ?: 0 - max(it.airWeapon.maxRange(), it.groundWeapon.maxRange()))  } / max(unitsOfPlayerA.size, 1)
-        val distB = unitsOfPlayerB.sumBy { max(0, it.position?.getDistance(center) ?: 0 - max(it.airWeapon.maxRange(), it.groundWeapon.maxRange()))  } / max(unitsOfPlayerB.size, 1)
+//        val center = (unitsOfPlayerA + unitsOfPlayerB).map { it.position }.fold(Position(0,0)) { s, t -> s.add(t) }?.divide(Position(amountOfUnits, amountOfUnits))
+//        val distA = unitsOfPlayerA.sumBy { max(0, it.position?.getDistance(center) ?: 0 - max(it.airWeapon.maxRange(), it.groundWeapon.maxRange()))  } / max(unitsOfPlayerA.size, 1)
+//        val distB = unitsOfPlayerB.sumBy { max(0, it.position?.getDistance(center) ?: 0 - max(it.airWeapon.maxRange(), it.groundWeapon.maxRange()))  } / max(unitsOfPlayerB.size, 1)
 
         // Lanchester's Law
-        val agg = 0.1 * ((distB / 100.0 + mobilityA / 100.0 + rangeA / 1000.0 + 4000.0 *  damageA / hpB) * unitsOfPlayerA.size * unitsOfPlayerA.size -
-                (distA / 100.0 + mobilityB / 100.0 + rangeB / 1000.0 + 4000.0 * damageB / hpA) * unitsOfPlayerB.size * unitsOfPlayerB.size)
+//        val agg = 0.1 * ((distB / 100.0 + mobilityA / 100.0 + rangeA / 1000.0 + 4000.0 *  damageA / hpB) * unitsOfPlayerA.size * unitsOfPlayerA.size -
+//                (distA / 100.0 + mobilityB / 100.0 + rangeB / 1000.0 + 4000.0 * damageB / hpA) * unitsOfPlayerB.size * unitsOfPlayerB.size)
+        val agg = 0.1 * ((mobilityA / 100.0 + rangeA / 1000.0 + 4000.0 *  damageA / hpB) * unitsOfPlayerA.size * unitsOfPlayerA.size -
+                (mobilityB / 100.0 + rangeB / 1000.0 + 4000.0 * damageB / hpA) * unitsOfPlayerB.size * unitsOfPlayerB.size)
         return 1.0 / (exp(-agg) + 1)
     }
 
@@ -64,7 +66,8 @@ class SimUnit(val name: String = "Unknown",
               val size: UnitSizeType = UnitSizeType.None,
               val hidden: Boolean = false,
               val detected: Boolean = false,
-              val isPowered: Boolean = true) {
+              val isPowered: Boolean = true,
+              val type: UnitType) {
     val isArmed = groundWeapon.type() != WeaponType.None || airWeapon.type() != WeaponType.None
 
     companion object {
@@ -84,7 +87,8 @@ class SimUnit(val name: String = "Unknown",
                 topSpeed = unit.topSpeed(),
                 hidden = unit.isCloaked || unit is Burrowable && unit.isBurrowed,
                 detected = unit.isDetected,
-                isPowered = unit.isPowered)
+                isPowered = unit.isPowered,
+                type = UnitType.None)
 
         fun of(type: UnitType) : SimUnit = SimUnit(
                 name = type.name,
@@ -93,7 +97,8 @@ class SimUnit(val name: String = "Unknown",
                 groundWeapon =  Weapon(type.groundWeapon(), 0),
                 isAir = type.isFlyer,
                 size = type.size(),
-                topSpeed = type.topSpeed()
+                topSpeed = type.topSpeed(),
+                type = type
         )
     }
 

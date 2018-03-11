@@ -1,7 +1,6 @@
 package org.fttbot.task
 
 import org.fttbot.*
-import org.fttbot.FTTBot.frameCount
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.findWorker
 import org.fttbot.info.isMyUnit
@@ -52,10 +51,13 @@ object Production {
     }
 
     fun selectTrainer(currentTrainer: PlayerUnit?, unit: UnitType, near: Position?): PlayerUnit? {
-        if (currentTrainer?.exists() == true && (currentTrainer !is TrainingFacility || !currentTrainer.isTraining)) return currentTrainer
+        val trainerType = unit.whatBuilds().first
+        if (currentTrainer?.exists() == true
+                && currentTrainer.isA(trainerType)
+                && (currentTrainer !is TrainingFacility || !currentTrainer.isTraining)) return currentTrainer
         return Board.resources.units
                 .filter {
-                    it.isA(unit.whatBuilds().first)
+                    it.isA(trainerType)
                             && (it !is TrainingFacility || !it.isTraining)
                 }
                 .minBy { near?.getDistance(it.position) ?: 0 }
@@ -89,25 +91,25 @@ object Production {
         require(type.isBuilding && !type.isAddon)
         var targetPosition: TilePosition? = null
         var builder: PlayerUnit? = null
-        return Retry(3, MSequence("build",
+        return Retry(3, MSequence("build $type",
                 Inline {
                     targetPosition = null
                     builder = null
                     NodeStatus.SUCCEEDED
                 },
-                ensureDependencies(type),
                 Sequence(
+                        ensureDependencies(type),
                         BlockResources(type.mineralPrice(), type.gasPrice()),
                         Await { FTTBot.self.canMake(type) },
                         Inline {
-                            targetPosition = targetPosition ?: at() ?: ConstructionPosition.findPositionFor(type)
+                            targetPosition = targetPosition ?: ConstructionPosition.findPositionFor(type, at()?.toPosition()) ?: ConstructionPosition.findPositionFor(type)
                                     ?: return@Inline NodeStatus.FAILED
                             builder = if (builder != null && Board.resources.units.contains(builder!!)) builder else
                                 if (type.whatBuilds().first.isWorker)
-                                    findWorker(targetPosition!!.toPosition(), candidates = Board.resources.units.filterIsInstance(Worker::class.java))
+                                    findWorker(targetPosition!!.toPosition(), 10000.0)
                                 else
                                     Board.resources.units.firstOrNull { it.isA(type.whatBuilds().first) && it is Building && it.remainingBuildTime == 0 }
-                                            ?: return@Inline NodeStatus.FAILED
+                                            ?: return@Inline NodeStatus.RUNNING
                             NodeStatus.SUCCEEDED
                         }
                 ),
@@ -126,7 +128,7 @@ object Production {
     }
 
     fun morph(unit: Morphable, to: UnitType): Node {
-        return MSequence("morph",
+        return MSequence("morph $to",
                 Sequence(
                         ReserveUnit(unit as PlayerUnit),
                         Fallback(ReserveResources(to.mineralPrice(), to.gasPrice()), Sleep)
@@ -141,7 +143,7 @@ object Production {
         require(!unit.isBuilding || unit.isAddon)
         var trainer: PlayerUnit? = null
         val supplyUsed = if (unit == UnitType.Zerg_Zergling) 2 * unit.supplyRequired() else unit.supplyRequired()
-        return MSequence("train",
+        return MSequence("train $unit",
                 ensureDependencies(unit),
                 Sequence(
                         All("ensureResources",
@@ -211,14 +213,21 @@ object Production {
     fun ensureSupply(supplyDemand: Int): Fallback {
         return Fallback(
                 ReserveSupply(supplyDemand),
-                Require {
-                    UnitQuery.myUnits.any {
-                        !it.isCompleted && it is SupplyProvider
-                                || it is Egg && it.buildType.supplyProvided() > 0
-                    }
-                },
+                Require { enoughSupplyInConstruction() },
                 MDelegate { buildOrTrainSupply() }
         )
+    }
+
+    private fun enoughSupplyInConstruction(): Boolean {
+        return (UnitQuery.myUnits
+                .filter {
+                    !it.isCompleted && it is SupplyProvider
+                            || it is Egg && it.buildType.supplyProvided() > 0
+                }
+                .sumBy {
+                    ((it as? SupplyProvider)?.supplyProvided() ?: 0) +
+                            ((it as? Egg)?.buildType?.supplyProvided() ?: 0)
+                } + Board.resources.supply) >= 0
     }
 
     fun research(tech: TechType): Node {
@@ -272,7 +281,15 @@ object Production {
 
     fun buildOrTrainSupply(near: () -> TilePosition? = { null }): Node = produce(FTTConfig.SUPPLY)
 
-    fun trainWorker(near: () -> TilePosition? = { null }): Node = train(FTTConfig.WORKER, near)
+    fun trainWorker(near: () -> TilePosition? = { bestPositionForNewWorker() }): Node = train(FTTConfig.WORKER, near)
+
+    fun bestPositionForNewWorker(): TilePosition =
+            (Info.myBases.minBy {
+                it as PlayerUnit
+                it.getUnitsInRadius(300, UnitQuery.myWorkers).size
+            } as PlayerUnit).tilePosition
+
+    fun buildGas(near: () -> TilePosition? = { null }): Node = build(FTTConfig.GAS_BUILDING)
 }
 
 object BoSearch : Node {
@@ -294,50 +311,8 @@ object BoSearch : Node {
         val searcher = mcts ?: throw IllegalStateException()
         if (PlayerUnit.getMissingUnits(UnitQuery.myUnits, UnitType.Terran_Marine.requiredUnits() + UnitType.Terran_Vulture.requiredUnits())
                         .isEmpty() && FTTBot.self.getUpgradeLevel(UpgradeType.Ion_Thrusters) > 0) return NodeStatus.SUCCEEDED
-        val researchFacilities = UnitQuery.myUnits.filterIsInstance(ResearchingFacility::class.java)
-        val upgradesInProgress = researchFacilities.map {
-            val upgrade = it.upgradeInProgress
-            upgrade.upgradeType to GameState.UpgradeState(-1, upgrade.remainingUpgradeTime, FTTBot.self.getUpgradeLevel(upgrade.upgradeType) + 1)
-        }.toMap()
-        val upgrades = UpgradeType.values()
-                .filter { it.race == searcher.race }
-                .map {
-                    Pair(it, upgradesInProgress[it] ?: GameState.UpgradeState(-1, 0, FTTBot.self.getUpgradeLevel(it)))
-                }.toMap().toMutableMap()
-        val units = UnitQuery.myUnits.map {
-            it.initialType to GameState.UnitState(-1,
-                    if (!it.isCompleted && it is Building) it.remainingBuildTime
-                    else if (it is TrainingFacility) it.remainingTrainTime
-                    else 0)
-        }.groupBy { (k, v) -> k }
-                .mapValues { it.value.map { it.second }.toMutableList() }.toMutableMap()
-        if (FTTBot.self.supplyUsed() != units.map { (k, v) -> k.supplyRequired() * v.size }.sum()) {
-            LOG.warning("Supply used differs from supply actually used!")
-            return NodeStatus.RUNNING
-        }
-        val researchInProgress = researchFacilities.map {
-            val research = it.researchInProgress
-            research.researchType to research.remainingResearchTime
-        }
-        val tech = (TechType.values()
-                .filter { it.race == searcher.race && FTTBot.self.hasResearched(it) }
-                .map { it to 0 } + Pair(TechType.None, 0) + researchInProgress).toMap().toMutableMap()
 
-        val state = GameState(0, FTTBot.self.race, FTTBot.self.supplyUsed(), FTTBot.self.supplyTotal(), FTTBot.self.minerals(), FTTBot.self.gas(),
-                units, tech, upgrades)
-
-        val researchMove = searcher.root.children?.firstOrNull {
-            if (it.move !is MCTS.UpgradeMove) return@firstOrNull false
-            val upgrade = upgrades[it.move.upgrade] ?: return@firstOrNull false
-            upgrade.level > 0 || upgrade.availableAt > 0
-        }
-        if (researchMove != null) {
-            searcher.relocateTo(researchMove)
-        }
-        if (relocateTo != null && frameCount > 10) {
-            searcher.relocateTo(relocateTo!!)
-        }
-        relocateTo = null
+        val state = GameState.fromCurrent()
 
         try {
             searcher.restart()

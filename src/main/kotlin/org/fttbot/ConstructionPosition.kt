@@ -27,6 +27,8 @@ object ConstructionPosition {
             for (j in -15..15) {
                 val dist = i * i + j * j
                 val pos = target.translated(i, j);
+                if (!FTTBot.game.bwMap.isValidPosition(pos))
+                    continue
                 // Simple way to leave gaps
                 if (pos.x % 3 < 1 || pos.y % 5 < 2)
                     continue

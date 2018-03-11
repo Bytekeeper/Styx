@@ -17,10 +17,17 @@ import org.openbw.bwapi4j.unit.Armed
 import org.openbw.bwapi4j.unit.Bunker
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.PlayerUnit
+import org.openbw.bwapi4j.unit.Unit
 import kotlin.math.max
 import kotlin.math.min
 
 object Potential {
+    fun joinAttraction(unit: MobileUnit, others: List<Unit>, tolerance: Int = 32) : Vector2 {
+        val closeInOn = others.filter { it.getDistance(unit) > tolerance }
+        val center = closeInOn.map { it.position }.fold(Position(0, 0)) { acc, position -> acc.add(position) }.div(closeInOn.size)
+        return center.minus(unit.position).toVector().nor()
+    }
+
     fun threatsRepulsion(unit: MobileUnit): Vector2 {
         val threatCluster = Cluster.enemyClusters.minBy { unit.getDistance(it.position) } ?: return Vector2.Zero.cpy()
         return threatCluster.units.map { threatRepulsion(unit, it) }.reduce(Vector2::add).nor()
@@ -52,7 +59,7 @@ object Potential {
             for (j in -3..3) {
                 val wp = WalkPosition(pos.x + i * 2, pos.y + j * 2)
                 if ((i != 0 || j != 0) && FTTBot.game.bwMap.isValidPosition(wp)) {
-                    val miniTile = FTTBot.bwem.map.data.getMiniTile(wp, CheckMode.NO_CHECK)
+                    val miniTile = FTTBot.bwem.data.getMiniTile(wp, CheckMode.NO_CHECK)
                     val altitude = miniTile.altitude
                     if (altitude.intValue() > bestAltitude) {
                         bestAltitude = altitude.intValue()
@@ -65,7 +72,7 @@ object Potential {
     }
 
     fun safeAreaAttraction(unit: MobileUnit) : Vector2 {
-        val map = FTTBot.bwem.map
+        val map = FTTBot.bwem
         val homePath = map.getPath(unit.position, UnitQuery.myBases.firstOrNull()?.position ?: return Vector2.Zero)
         val targetChoke = if (homePath.isEmpty) return Vector2.Zero else homePath[0]
         return (targetChoke.center.toPosition() - unit.position).toVector().nor()

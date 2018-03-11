@@ -1,10 +1,5 @@
 package org.fttbot
 
-import org.fttbot.Board.resources
-import org.fttbot.info.UnitQuery
-import org.fttbot.info.findWorker
-import org.fttbot.task.ConstructionStarted
-import org.fttbot.task.Production.buildWithWorker
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.TechType
@@ -30,11 +25,24 @@ open class Order<E : kotlin.Any>(val unit: E, val order: E.() -> Boolean, val to
 
 }
 
-class Move(unit: MobileUnit, position: Position) : Order<MobileUnit>(unit, { move(position) })
-class Build(worker: Worker, position: TilePosition, building: UnitType) : Order<Worker>(worker, { build(position, building) })
+class MoveCommand(unit: MobileUnit, position: Position) : Order<MobileUnit>(unit, { move(position) })
+class Build(worker: Worker, position: TilePosition, building: UnitType) : Order<Worker>(worker, {
+    require(building.gasPrice() <= FTTBot.self.gas())
+    require(building.mineralPrice() <= FTTBot.self.minerals())
+    build(position, building)
+})
 class TrainCommand(trainer: TrainingFacility, unit: UnitType) : Order<TrainingFacility>(trainer, { train(unit) })
-class MorphCommand(morphable: Morphable, unit: UnitType) : Order<Morphable>(morphable, { morph(unit) })
-class ResearchCommand(researcher: ResearchingFacility, tech: TechType) : Order<ResearchingFacility>(researcher, { research(tech) })
+class MorphCommand(morphable: Morphable, unit: UnitType) : Order<Morphable>(morphable, {
+    require(unit.gasPrice() <= FTTBot.self.gas())
+    require(unit.mineralPrice() <= FTTBot.self.minerals())
+    require(unit.supplyRequired() == 0 || unit.supplyRequired() <= FTTBot.self.supplyTotal() - FTTBot.self.supplyUsed())
+    morph(unit)
+})
+class ResearchCommand(researcher: ResearchingFacility, tech: TechType) : Order<ResearchingFacility>(researcher,
+        { require(tech.gasPrice() <= FTTBot.self.gas())
+            require(tech.mineralPrice() <= FTTBot.self.minerals())
+            research(tech)
+        })
 class UpgradeCommand(researcher: ResearchingFacility, upgrade: UpgradeType) : Order<ResearchingFacility>(researcher, { upgrade(upgrade) })
 class Attack(unit: PlayerUnit, target: Unit) : Order<PlayerUnit>(unit, { (this as Armed).attack(target) })
 class GatherMinerals(worker: Worker, mineralPatch: MineralPatch) : Order<Worker>(worker, { gather(mineralPatch) })
@@ -86,7 +94,7 @@ class BlockResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) :
 object CompoundActions {
     fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node {
         // TODO: "Search" for a way
-        return MSequence("reach", Move(unit, position), ArriveAt(unit, position, tolerance))
+        return MSequence("reach", MoveCommand(unit, position), ArriveAt(unit, position, tolerance))
     }
 
 }

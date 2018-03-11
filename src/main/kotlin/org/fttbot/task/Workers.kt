@@ -12,7 +12,7 @@ const val RESOURCE_RANGE = 300
 object GatherResources : Node {
     override fun tick(): NodeStatus {
         val available = Board.resources
-        val myBases = UnitQuery.ownedUnits.filter { it.isMyUnit && it is Base }
+        val myBases = Info.myBases.map { it as PlayerUnit }
         val units = available.units
 
         val workerUnits = myBases.flatMap { base ->
@@ -26,8 +26,8 @@ object GatherResources : Node {
             if (gasMissing > 0) {
                 val refinery = refineries.first()
                 repeat(gasMissing) {
-                    val worker = workersToAssign.firstOrNull { !it.isCarryingMinerals }
-                            ?: workersToAssign.firstOrNull() ?: return@repeat
+                    val worker = workersToAssign.firstOrNull { !it.isCarryingMinerals && !it.isGatheringGas}
+                            ?: workersToAssign.firstOrNull { !it.isGatheringGas } ?: return@repeat
                     worker.gather(refinery)
                     workersToAssign.remove(worker)
                 }
