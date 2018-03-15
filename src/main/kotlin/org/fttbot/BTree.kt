@@ -53,7 +53,8 @@ class Inline(val delegate: () -> NodeStatus) : Node {
 class Await(var frames: Int = Int.MAX_VALUE, val condition: () -> Boolean) : Node {
     override fun tick(): NodeStatus {
         frames--
-        if (frames <= 0) return NodeStatus.FAILED
+        if (frames <= 0)
+            return NodeStatus.FAILED
         return if (condition()) NodeStatus.SUCCEEDED else NodeStatus.RUNNING
     }
 }
@@ -120,9 +121,9 @@ class All(val name: String, vararg val children: Node) : Node {
     override fun toString(): String = "$name(${children.joinToString(",")})"
 }
 
-class MAll(var children: List<Node>) : Node {
+class MAll(val name : String, var children: List<Node>) : Node {
     private var left = children
-    constructor(vararg children: Node) : this(children.toList())
+    constructor(name: String, vararg children: Node) : this(name, children.toList())
 
     override fun tick(): NodeStatus {
         var abort = false
@@ -154,6 +155,8 @@ class MAll(var children: List<Node>) : Node {
     override fun aborted() {
         left = children
     }
+
+    override fun toString(): String = "$name(${children.joinToString(", ")})"
 }
 
 class OneOf(vararg val children: Node) : Node {

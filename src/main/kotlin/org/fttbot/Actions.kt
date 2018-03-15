@@ -8,7 +8,7 @@ import org.openbw.bwapi4j.type.UpgradeType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 
-open class Order<E : kotlin.Any>(val unit: E, val order: E.() -> Boolean, val toleranceFrames: Int = 10) : Node {
+open class Order<E : kotlin.Any>(val unit: E, val order: E.() -> Boolean, val toleranceFrames: Int = 30) : Node {
     var orderFrame: Int = -1
 
     override fun tick(): NodeStatus {
@@ -31,6 +31,8 @@ class Build(worker: Worker, position: TilePosition, building: UnitType) : Order<
     require(building.mineralPrice() <= FTTBot.self.minerals())
     build(position, building)
 })
+
+class CancelCommand(building: Building) : Order<Building>(building, { cancelConstruction() })
 class TrainCommand(trainer: TrainingFacility, unit: UnitType) : Order<TrainingFacility>(trainer, { train(unit) })
 class MorphCommand(morphable: Morphable, unit: UnitType) : Order<Morphable>(morphable, {
     require(unit.gasPrice() <= FTTBot.self.gas())
@@ -38,11 +40,14 @@ class MorphCommand(morphable: Morphable, unit: UnitType) : Order<Morphable>(morp
     require(unit.supplyRequired() == 0 || unit.supplyRequired() <= FTTBot.self.supplyTotal() - FTTBot.self.supplyUsed())
     morph(unit)
 })
+
 class ResearchCommand(researcher: ResearchingFacility, tech: TechType) : Order<ResearchingFacility>(researcher,
-        { require(tech.gasPrice() <= FTTBot.self.gas())
+        {
+            require(tech.gasPrice() <= FTTBot.self.gas())
             require(tech.mineralPrice() <= FTTBot.self.minerals())
             research(tech)
         })
+
 class UpgradeCommand(researcher: ResearchingFacility, upgrade: UpgradeType) : Order<ResearchingFacility>(researcher, { upgrade(upgrade) })
 class Attack(unit: PlayerUnit, target: Unit) : Order<PlayerUnit>(unit, { (this as Armed).attack(target) })
 class GatherMinerals(worker: Worker, mineralPatch: MineralPatch) : Order<Worker>(worker, { gather(mineralPatch) })

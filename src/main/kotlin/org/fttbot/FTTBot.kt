@@ -88,7 +88,7 @@ object FTTBot : BWEventListener {
         }
 
         buildQueue = MSequence("buildQueue",
-                ZvP._12Hatch()
+                ZvP._massZergling()
         )
         bot = All("main", buildQueue,
 //                Delegate {
@@ -119,21 +119,21 @@ object FTTBot : BWEventListener {
                                 }
                         )
                 ),
-                Fallback(
-                        Sleep(24),
-                        MDelegate {
-                            Combat.defendPosition(UnitQuery.myUnits.filter { it !is Worker && it is Armed }.filterIsInstance(MobileUnit::class.java),
-                                    self.startLocation.toPosition(), (game.bwMap.startPositions - self.startLocation)[0].toPosition())
-                        }
-//                        MSequence("",
-//                                Require { !EnemyState.enemyBases.isEmpty() },
-//
-//                                MDelegate
-//                                {
-//                                    Combat.moveToStandOffPosition(UnitQuery.myUnits.filter { it !is Worker && it is Armed }.filterIsInstance(MobileUnit::class.java),
-//                                            EnemyState.enemyBases[0].position)
-//                                })
-                ),
+//                Fallback(
+//                        Sleep(24),
+//                        MDelegate {
+//                            Combat.defendPosition(UnitQuery.myUnits.filter { it !is Worker && it is Armed }.filterIsInstance(MobileUnit::class.java),
+//                                    self.startLocation.toPosition(), (game.bwMap.startPositions - self.startLocation)[0].toPosition())
+//                        }
+////                        MSequence("",
+////                                Require { !EnemyState.enemyBases.isEmpty() },
+////
+////                                MDelegate
+////                                {
+////                                    Combat.moveToStandOffPosition(UnitQuery.myUnits.filter { it !is Worker && it is Armed }.filterIsInstance(MobileUnit::class.java),
+////                                            EnemyState.enemyBases[0].position)
+////                                })
+//                ),
                 Sequence(GatherResources, Sleep))
         UnitQuery.update(emptyList())
     }

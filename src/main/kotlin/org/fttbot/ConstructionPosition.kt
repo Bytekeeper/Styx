@@ -20,7 +20,7 @@ object ConstructionPosition {
             return findPositionForGas(unitType);
         }
 
-        val target = if (near != null) near.toTilePosition() else UnitQuery.myBases[0].tilePosition
+        val target = if (near != null) near.toTilePosition() else (Info.myBases[0] as Unit).tilePosition
         var bestBuildPosition: TilePosition? = null
         var bestDistance: Int = Int.MAX_VALUE
         for (i in -15..15) {

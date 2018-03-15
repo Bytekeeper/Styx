@@ -45,7 +45,7 @@ object Production {
                         MSequence("executeBuild",
                                 CompoundActions.reach(worker, at.toPosition(), 150),
                                 Build(worker, at, building),
-                                Await(48) { worker.isConstructing },
+                                Await(150) { worker.isConstructing },
                                 Sleep(48))
                 ))
     }
@@ -91,7 +91,7 @@ object Production {
         require(type.isBuilding && !type.isAddon)
         var targetPosition: TilePosition? = null
         var builder: PlayerUnit? = null
-        return Retry(3, MSequence("build $type",
+        return Retry(5, MSequence("build $type",
                 Inline {
                     targetPosition = null
                     builder = null
@@ -156,11 +156,13 @@ object Production {
                                     ?: return@Inline NodeStatus.RUNNING
                             NodeStatus.SUCCEEDED
                         },
-                        Delegate { ReserveUnit(trainer!!) },
                         Inline {
                             Board.pendingUnits.add(unit)
                             NodeStatus.SUCCEEDED
-                        },
+                        }
+                ),
+                Sequence(
+                        MDelegate { ReserveUnit(trainer!!) },
                         MDelegate {
                             when (trainer) {
                                 is Morphable -> MorphCommand(trainer as Morphable, unit)
@@ -168,13 +170,14 @@ object Production {
                             }
                         }
                 ),
-                Inline {
+                Await(48) {
                     if (!trainer!!.exists()) {
-                        trainer = UnitQuery.myUnits.firstOrNull { it.id == trainer!!.id } ?: return@Inline NodeStatus.FAILED
+                        trainer = UnitQuery.myUnits.firstOrNull { it.id == trainer!!.id } ?: return@Await false
                     }
-                    if (trainer?.isA(unit) == true)
-                        return@Inline NodeStatus.SUCCEEDED
-                    NodeStatus.RUNNING
+                    if (trainer?.isA(unit) == true || (trainer as? Egg)?.buildType == unit)
+                        true
+                    else
+                        false
                 }
         )
     }
@@ -282,6 +285,22 @@ object Production {
     fun buildOrTrainSupply(near: () -> TilePosition? = { null }): Node = produce(FTTConfig.SUPPLY)
 
     fun trainWorker(near: () -> TilePosition? = { bestPositionForNewWorker() }): Node = train(FTTConfig.WORKER, near)
+
+    fun cancel(type: UnitType): Node {
+        require(type.isBuilding)
+        var target: Building? = null
+        return Sequence(
+                Inline {
+                    target = UnitQuery.myUnits.filterIsInstance(Building::class.java)
+                            .firstOrNull { it.isA(type) && !it.isCompleted }
+                            ?: return@Inline NodeStatus.FAILED
+                    NodeStatus.SUCCEEDED
+                },
+                MDelegate { CancelCommand(target!!) }
+        )
+    }
+
+    fun cancelGas() = cancel(FTTConfig.GAS_BUILDING)
 
     fun bestPositionForNewWorker(): TilePosition =
             (Info.myBases.minBy {
