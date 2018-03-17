@@ -122,8 +122,9 @@ class All(val name: String, vararg val children: Node) : Node {
     override fun toString(): String = "$name(${children.joinToString(",")})"
 }
 
-class MAll(val name : String, var children: List<Node>) : Node {
+class MAll(val name: String, var children: List<Node>) : Node {
     private var left = children
+
     constructor(name: String, vararg children: Node) : this(name, children.toList())
 
     override fun tick(): NodeStatus {
@@ -256,7 +257,7 @@ object Fail : Node {
 
 class Retain(val timeOut: Int = 24, val delegate: Node) : Node {
     private var remaining = 0
-    private var retainedStatus : NodeStatus? = null
+    private var retainedStatus: NodeStatus? = null
 
     override fun tick(): NodeStatus {
         if (remaining <= 0 || retainedStatus == NodeStatus.RUNNING) {
@@ -272,20 +273,20 @@ class Retain(val timeOut: Int = 24, val delegate: Node) : Node {
     }
 }
 
-class Sleep(val timeOut: Int = Int.MAX_VALUE, val condition: () -> Boolean = { true }) : Node {
+class Sleep(val timeOut: Int = Int.MAX_VALUE) : Node {
     var remaining: Int = timeOut
     override fun tick(): NodeStatus =
             if (--remaining <= 0) {
                 remaining = timeOut
-                NodeStatus.FAILED
-            } else if (condition()) NodeStatus.RUNNING
-            else NodeStatus.SUCCEEDED
+                NodeStatus.SUCCEEDED
+            } else
+                NodeStatus.RUNNING
 
     override fun aborted() {
         remaining = timeOut
     }
 
-    override fun toString(): String = "RUNNING while $condition"
+    override fun toString(): String = "RUNNING $remaining frames"
 
     companion object : Node {
         override fun tick(): NodeStatus = NodeStatus.RUNNING

@@ -48,7 +48,9 @@ object Production {
                                 CompoundActions.reach(worker, at.toPosition(), 150),
                                 BuildCommand(worker, at, building),
                                 Await(150) { worker.isConstructing },
-                                Sleep(48))
+                                Sleep(48),
+                                Fail
+                        )
                 ))
     }
 

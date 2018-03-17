@@ -52,8 +52,8 @@ object Combat {
                     cpCenter
                 else {
                     val adjacentAreas = path[cpIndex - 2].areas
-                    val aa = adjacentAreas.left.walkPositionWithHighestAltitude
-                    val ab = adjacentAreas.right.walkPositionWithHighestAltitude
+                    val aa = adjacentAreas.first.walkPositionWithHighestAltitude
+                    val ab = adjacentAreas.second.walkPositionWithHighestAltitude
                     if (aa.toPosition().getDistance(targetPosition) < ab.toPosition().getDistance(targetPosition))
                         cpCenter.add(aa).divide(WalkPosition(2, 2))
                     else

@@ -11,14 +11,9 @@ import org.fttbot.strategies.ZvP
 import org.fttbot.task.BoSearch
 import org.fttbot.task.Combat
 import org.fttbot.task.GatherResources
-import org.fttbot.task.Production.produce
-import org.fttbot.task.Production.trainWorker
-import org.fttbot.task.Production.upgrade
 import org.fttbot.task.Scouting.scout
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Race
-import org.openbw.bwapi4j.type.UnitType
-import org.openbw.bwapi4j.type.UpgradeType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 import java.util.concurrent.CompletableFuture
@@ -119,21 +114,21 @@ object FTTBot : BWEventListener {
                                 }
                         )
                 ),
-//                Fallback(
-//                        Sleep(24),
-//                        MDelegate {
-//                            Combat.defendPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
-//                                    self.startLocation.toPosition(), (game.bwMap.startPositions - self.startLocation)[0].toPosition())
-//                        }
-////                        MSequence("",
-////                                Require { !EnemyState.enemyBases.isEmpty() },
-////
-////                                MDelegate
-////                                {
-////                                    Combat.moveToStandOffPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
-////                                            EnemyState.enemyBases[0].position)
-////                                })
-//                ),
+                Sequence(
+                        Sleep(24),
+                        MDelegate {
+                            Combat.defendPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
+                                    self.startLocation.toPosition(), (game.bwMap.startPositions - self.startLocation)[0].toPosition())
+                        }
+//                        MSequence("",
+//                                Require { !EnemyState.enemyBases.isEmpty() },
+//
+//                                MDelegate
+//                                {
+//                                    Combat.moveToStandOffPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
+//                                            EnemyState.enemyBases[0].position)
+//                                })
+                ),
                 Sequence(GatherResources, Sleep))
         UnitQuery.update(emptyList())
     }
