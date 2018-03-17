@@ -15,7 +15,9 @@ const val MAX_MELEE_RANGE = 64
 val Weapon.onCooldown get () = cooldown() >= FTTBot.latency_frames
 val PlayerUnit.isMyUnit get() = player == FTTBot.self
 val PlayerUnit.isEnemyUnit get() = player == FTTBot.enemy
-fun Armed.getWeaponAgainst(target: Unit) = if (target.isFlying) airWeapon else groundWeapon
+fun Attacker.getWeaponAgainst(target: Unit) = if (target.isFlying && this is AirAttacker) airWeapon else
+    if (!target.isFlying && this is GroundAttacker) groundWeapon else Weapon(WeaponType.None, -1)
+
 fun Weapon.isMelee() = this != WeaponType.None && type().maxRange() <= MAX_MELEE_RANGE
 fun WeaponType.inRange(distance: Int, safety: Int): Boolean =
         minRange() <= distance && maxRange() >= distance - safety
@@ -24,7 +26,7 @@ fun <T : Unit> List<T>.inRadius(other: Unit, maxRadius: Int) = filter { other.ge
 fun <T : Unit> List<T>.inRadius(position: Position, maxRadius: Int) = filter { it.getDistance(position) < maxRadius }
 
 // From https://docs.google.com/spreadsheets/d/1bsvPvFil-kpvEUfSG74U3E5PLSTC02JxSkiR8QdLMuw/edit#gid=0 resp. PurpleWave
-val Armed.stopFrames
+val Attacker.stopFrames
     get() = when (this) {
         is Goliath, is SiegeTank, is Reaver -> 1
         is Worker, is Vulture, is Wraith, is BattleCruiser, is Scout, is Lurker -> 2
@@ -65,20 +67,25 @@ fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidat
 
 
 //  + FTTBot.remaining_latency_frames
-fun Weapon.attackIsComplete(unit: Armed) = type().damageCooldown() == 0 || type().damageCooldown() - cooldown() >= unit.stopFrames
+fun Weapon.attackIsComplete(unit: Attacker) = type().damageCooldown() == 0 || type().damageCooldown() - cooldown() >= unit.stopFrames
 
-val Armed.canMoveWithoutBreakingAttack get() = groundWeapon.attackIsComplete(this) && airWeapon.attackIsComplete(this)
+val Attacker.canMoveWithoutBreakingAttack
+    get() = (this as? GroundAttacker)?.groundWeapon?.attackIsComplete(this) != false &&
+            (this as? AirAttacker)?.airWeapon?.attackIsComplete(this) != false
 
 fun PlayerUnit.canAttack(target: Unit, safety: Int = 0): Boolean {
     if (!isCompleted) return false
-    val weaponType = if (this is Bunker) UnitType.Terran_Marine.groundWeapon() else if (this is Armed) getWeaponAgainst(target).type() else return false
+    val weaponType = if (this is Bunker) UnitType.Terran_Marine.groundWeapon() else if (this is Attacker) getWeaponAgainst(target).type() else return false
     val distance = getDistance(target)
     return weaponType.inRange(distance, safety) && target.isVisible && (target !is Cloakable && target !is Burrowable || target is PlayerUnit && target.isDetected)
 }
 
 fun Unit.potentialAttackers(safety: Int = 16): List<PlayerUnit> =
         (UnitQuery.allUnits().inRadius(position, 300).filterIsInstance(PlayerUnit::class.java) + EnemyState.seenUnits.filter { it.getDistance(this) < 300 })
-                .filter { it.isEnemyUnit && it.canAttack(this, safety + (it.topSpeed() * MAX_FRAMES_TO_ATTACK).toInt()) }
+                .filter {
+                    it.isEnemyUnit && it.canAttack(this, safety + (((it as? MobileUnit)?.topSpeed
+                            ?: 0.0) * MAX_FRAMES_TO_ATTACK).toInt())
+                }
 
 fun PlayerUnit.canBeAttacked(safety: Int = 16) = !potentialAttackers(safety).isEmpty()
 fun TrainingFacility.trains() = UnitType.values().filter { (this as Unit).isA(it.whatBuilds().first) }
@@ -122,7 +129,7 @@ object UnitQuery {
     val geysers get() = allUnits.filter { it is VespeneGeyser }
     val myBases get() = myUnits.filter { it is Base }
     val myMobileCombatUnits by LazyOnFrame {
-        myUnits.filter { it !is Worker && it is Armed && it.isCompleted }.filterIsInstance(MobileUnit::class.java)
+        myUnits.filter { it !is Worker && it is Attacker && it.isCompleted }.filterIsInstance(MobileUnit::class.java)
     }
 
     fun allUnits(): List<Unit> = allUnits

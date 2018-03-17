@@ -21,7 +21,7 @@ class ClusterInfo(private val cluster: Cluster<*>) {
     val unitsInArea by lazy {
         (UnitQuery.inRadius(cluster.position, 600) +
                 EnemyState.seenUnits.filter { it.getDistance(cluster.position) < 600 })
-                .filter { it is PlayerUnit && (it is Armed || it is Bunker) && it.isCompleted }
+                .filter { it is PlayerUnit && (it is Attacker || it is Bunker) && it.isCompleted }
                 .map { it as PlayerUnit }
     }
 
@@ -40,7 +40,7 @@ class ClusterInfo(private val cluster: Cluster<*>) {
     }
 
     val needDetection: Double by lazy {
-        if (combatRelevantUnits.none { it.isEnemyUnit && (it is Armed && it is Cloakable && it.isCloaked || it is Lurker && it.isBurrowed) && !it.isDetected }) 0.0
+        if (combatRelevantUnits.none { it.isEnemyUnit && (it is Attacker && it is Cloakable && it.isCloaked || it is Lurker && it.isBurrowed) && !it.isDetected }) 0.0
         else combatEval
     }
 }

@@ -52,10 +52,11 @@ class Inline(val delegate: () -> NodeStatus) : Node {
 
 class Await(var frames: Int = Int.MAX_VALUE, val condition: () -> Boolean) : Node {
     override fun tick(): NodeStatus {
+        if (condition()) return NodeStatus.SUCCEEDED
         frames--
         if (frames <= 0)
             return NodeStatus.FAILED
-        return if (condition()) NodeStatus.SUCCEEDED else NodeStatus.RUNNING
+        return NodeStatus.RUNNING
     }
 }
 

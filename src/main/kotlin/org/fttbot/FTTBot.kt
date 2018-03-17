@@ -92,7 +92,7 @@ object FTTBot : BWEventListener {
         )
         bot = All("main", buildQueue,
 //                Delegate {
-//                    Combat.attack(UnitQuery.myUnits.filter { it is MobileUnit && it !is Worker && it is Armed },
+//                    Combat.attack(UnitQuery.myUnits.filter { it is MobileUnit && it !is Worker && it is Attacker },
 //                            UnitQuery.enemyUnits)
 //                },
                 scout(),
@@ -100,7 +100,7 @@ object FTTBot : BWEventListener {
                         Require {
                             val myUnits = UnitQuery.myMobileCombatUnits
                                     .map { SimUnit.of(it) }
-                            val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Armed }
+                            val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Attacker }
                                     .map { SimUnit.of(it) }
                             val eval = CombatEval.probabilityToWin(myUnits, enemies)
                             eval > 0.55
@@ -109,7 +109,7 @@ object FTTBot : BWEventListener {
                                 Require {
                                     val myUnits = UnitQuery.myMobileCombatUnits
                                             .map { SimUnit.of(it) }
-                                    val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Armed }
+                                    val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Attacker }
                                             .map { SimUnit.of(it) }
                                     val eval = CombatEval.probabilityToWin(myUnits, enemies)
                                     eval > 0.45
@@ -122,7 +122,7 @@ object FTTBot : BWEventListener {
 //                Fallback(
 //                        Sleep(24),
 //                        MDelegate {
-//                            Combat.defendPosition(UnitQuery.myUnits.filter { it !is Worker && it is Armed }.filterIsInstance(MobileUnit::class.java),
+//                            Combat.defendPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
 //                                    self.startLocation.toPosition(), (game.bwMap.startPositions - self.startLocation)[0].toPosition())
 //                        }
 ////                        MSequence("",
@@ -130,7 +130,7 @@ object FTTBot : BWEventListener {
 ////
 ////                                MDelegate
 ////                                {
-////                                    Combat.moveToStandOffPosition(UnitQuery.myUnits.filter { it !is Worker && it is Armed }.filterIsInstance(MobileUnit::class.java),
+////                                    Combat.moveToStandOffPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
 ////                                            EnemyState.enemyBases[0].position)
 ////                                })
 //                ),

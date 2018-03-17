@@ -20,9 +20,9 @@ object CombatEval {
     fun probabilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>): Double {
         val damageA = averageDamageOf(unitsOfPlayerA, unitsOfPlayerB)
         val damageB = averageDamageOf(unitsOfPlayerB, unitsOfPlayerA)
-        val hpA = unitsOfPlayerA.filter { it.isArmed }.map { it.hitPoints }.average().or(0.1) +
+        val hpA = unitsOfPlayerA.filter { it.isAttacker }.map { it.hitPoints }.average().or(0.1) +
                 unitsOfPlayerA.count { it.canHeal } * HEAL_PER_ENERGY
-        val hpB = unitsOfPlayerB.filter { it.isArmed }.map { it.hitPoints }.average().or(0.1) +
+        val hpB = unitsOfPlayerB.filter { it.isAttacker }.map { it.hitPoints }.average().or(0.1) +
                 unitsOfPlayerB.count { it.canHeal } * HEAL_PER_ENERGY
 
         val rangeA = (unitsOfPlayerA.map { max(it.groundWeapon.type().maxRange(), it.airWeapon.type().maxRange()) } + 1).average()
@@ -68,7 +68,7 @@ class SimUnit(val name: String = "Unknown",
               val detected: Boolean = false,
               val isPowered: Boolean = true,
               val type: UnitType) {
-    val isArmed = groundWeapon.type() != WeaponType.None || airWeapon.type() != WeaponType.None
+    val isAttacker = groundWeapon.type() != WeaponType.None || airWeapon.type() != WeaponType.None
 
     companion object {
         fun of(unit: PlayerUnit): SimUnit = SimUnit(
@@ -77,14 +77,14 @@ class SimUnit(val name: String = "Unknown",
                 isUnderDarkSwarm = unit is MobileUnit && unit.isUnderDarkSwarm,
                 hitPoints = unit.hitPoints,
                 position = unit.position,
-                airWeapon = (unit as? Armed)?.airWeapon
+                airWeapon = (unit as? AirAttacker)?.airWeapon
                         ?: if (unit is Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(WeaponType.None, 0),
-                groundWeapon = (unit as? Armed)?.groundWeapon
+                groundWeapon = (unit as? GroundAttacker)?.groundWeapon
                         ?: if (unit is Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(WeaponType.None, 0),
                 isAir = unit.isFlyer,
                 armor = 0,
                 size = unit.size,
-                topSpeed = unit.topSpeed(),
+                topSpeed = (unit as? MobileUnit)?.topSpeed ?: 0.0,
                 hidden = unit.isCloaked || unit is Burrowable && unit.isBurrowed,
                 detected = unit.isDetected,
                 isPowered = unit.isPowered,

@@ -9,13 +9,13 @@ import org.openbw.bwapi4j.unit.Worker
 
 class Cluster<U : Unit>(var position: Position, internal val units: MutableSet<U>, internal var aggPosition: Position = Position(0,0), internal var lastUnitCount: Int = 1) {
     companion object {
-        var mobileCombatUnits: List<Cluster<PlayerUnit>> = emptyList()
+        var mobileCombatUnits: List<Cluster<MobileUnit>> = emptyList()
         var enemyClusters: List<Cluster<PlayerUnit>> = emptyList()
 
         fun getClusterOf(unit: PlayerUnit) = mobileCombatUnits.firstOrNull { it.units.contains(unit) }
 
         fun step() {
-            mobileCombatUnits = buildClusters(UnitQuery.myUnits.filter { it.isCompleted && it is MobileUnit && it !is Worker })
+            mobileCombatUnits = buildClusters(UnitQuery.myUnits.filterIsInstance(MobileUnit::class.java).filter { it.isCompleted && it !is Worker })
             enemyClusters = buildClusters(UnitQuery.enemyUnits + EnemyState.seenUnits)
         }
 

@@ -16,11 +16,13 @@ import java.util.logging.Level
 import java.util.logging.Logger
 
 
-class ConstructionStarted(val worker: Worker, val type: UnitType, val at: TilePosition) : Node {
+class AwaitConstructionStart(val worker: Worker, val type: UnitType, val at: TilePosition) : Node {
     var started = false
 
     override fun tick(): NodeStatus {
         if (started) {
+            if (!worker.isConstructing)
+                return NodeStatus.FAILED
             val candidate = UnitQuery.myUnits.firstOrNull { it is Building && it.tilePosition == at }
                     ?: return NodeStatus.RUNNING
             if (candidate.isA(type))
@@ -38,13 +40,13 @@ class ConstructionStarted(val worker: Worker, val type: UnitType, val at: TilePo
 object Production {
     fun buildWithWorker(worker: Worker, at: TilePosition, building: UnitType): Node {
         return OneOf(
-                ConstructionStarted(worker, building, at),
+                AwaitConstructionStart(worker, building, at),
                 Sequence(
                         ReserveUnit(worker),
                         Fallback(ReserveResources(building.mineralPrice(), building.gasPrice()), Sleep),
                         MSequence("executeBuild",
                                 CompoundActions.reach(worker, at.toPosition(), 150),
-                                Build(worker, at, building),
+                                BuildCommand(worker, at, building),
                                 Await(150) { worker.isConstructing },
                                 Sleep(48))
                 ))
@@ -113,10 +115,6 @@ object Production {
                             NodeStatus.SUCCEEDED
                         }
                 ),
-                Inline {
-                    Board.pendingUnits += type
-                    NodeStatus.SUCCEEDED
-                },
                 MDelegate
                 {
                     if (builder is Worker)
@@ -146,6 +144,10 @@ object Production {
         return MSequence("train $unit",
                 ensureDependencies(unit),
                 Sequence(
+                        Inline {
+                            Board.pendingUnits.add(unit)
+                            NodeStatus.SUCCEEDED
+                        },
                         All("ensureResources",
                                 ensureSupply(supplyUsed),
                                 Fallback(ReserveResources(unit.mineralPrice(), unit.gasPrice()), Sleep)
@@ -154,10 +156,6 @@ object Production {
                         Inline {
                             trainer = selectTrainer(trainer, unit, near()?.toPosition())
                                     ?: return@Inline NodeStatus.RUNNING
-                            NodeStatus.SUCCEEDED
-                        },
-                        Inline {
-                            Board.pendingUnits.add(unit)
                             NodeStatus.SUCCEEDED
                         }
                 ),
@@ -174,10 +172,7 @@ object Production {
                     if (!trainer!!.exists()) {
                         trainer = UnitQuery.myUnits.firstOrNull { it.id == trainer!!.id } ?: return@Await false
                     }
-                    if (trainer?.isA(unit) == true || (trainer as? Egg)?.buildType == unit)
-                        true
-                    else
-                        false
+                    trainer?.isA(unit) == true || (trainer as? Egg)?.buildType == unit
                 }
         )
     }

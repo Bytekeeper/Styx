@@ -26,7 +26,7 @@ open class Order<E : kotlin.Any>(val unit: E, val order: E.() -> Boolean, val to
 }
 
 class MoveCommand(unit: MobileUnit, position: Position) : Order<MobileUnit>(unit, { move(position) })
-class Build(worker: Worker, position: TilePosition, building: UnitType) : Order<Worker>(worker, {
+class BuildCommand(worker: Worker, position: TilePosition, building: UnitType) : Order<Worker>(worker, {
     require(building.gasPrice() <= FTTBot.self.gas())
     require(building.mineralPrice() <= FTTBot.self.minerals())
     build(position, building)
@@ -49,7 +49,7 @@ class ResearchCommand(researcher: ResearchingFacility, tech: TechType) : Order<R
         })
 
 class UpgradeCommand(researcher: ResearchingFacility, upgrade: UpgradeType) : Order<ResearchingFacility>(researcher, { upgrade(upgrade) })
-class Attack(unit: PlayerUnit, target: Unit) : Order<PlayerUnit>(unit, { (this as Armed).attack(target) })
+class Attack(unit: PlayerUnit, target: Unit) : Order<PlayerUnit>(unit, { (this as Attacker).attack(target) })
 class GatherMinerals(worker: Worker, mineralPatch: MineralPatch) : Order<Worker>(worker, { gather(mineralPatch) })
 class GatherGas(worker: Worker, gasPatch: GasMiningFacility) : Order<Worker>(worker, { gather(gasPatch) })
 class Repair(worker: SCV, target: Mechanical) : Order<SCV>(worker, { repair(target) })
