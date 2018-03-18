@@ -23,7 +23,7 @@ object Combat {
             Sequence(
                     Inline {
                         bestTarget = targets.minBy {
-                            it.hitPoints / max(simUnit.damagePerFrameTo(SimUnit.of(it)), 0.01) +
+                            (it.hitPoints + it.shields) / max(simUnit.damagePerFrameTo(SimUnit.of(it)), 0.01) +
                                     (if (it is Larva) 5000 else 0) +
                                     it.getDistance(unit)
                         }

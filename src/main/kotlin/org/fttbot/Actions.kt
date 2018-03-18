@@ -15,9 +15,12 @@ open class Order<E : kotlin.Any>(val unit: E, val order: E.() -> Boolean, val to
         if (orderFrame < 0) {
             orderFrame = FTTBot.frameCount
         }
-        if (FTTBot.frameCount - orderFrame > toleranceFrames)
+        if (FTTBot.frameCount - orderFrame > toleranceFrames) {
+            orderFrame = -1
             return NodeStatus.FAILED
+        }
         if (order(unit)) {
+            orderFrame = -1
             return NodeStatus.SUCCEEDED
         }
         return NodeStatus.RUNNING

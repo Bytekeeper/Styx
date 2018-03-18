@@ -100,4 +100,17 @@ class CombatEvalTest {
 
         System.err.println(CombatEval.probabilityToWin(a, b))
     }
+
+    @Test
+    fun evalH() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Protoss_Zealot)
+        )
+
+        System.err.println(CombatEval.probabilityToWin(a, b))
+    }
 }

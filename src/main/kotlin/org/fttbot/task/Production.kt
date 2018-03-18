@@ -48,7 +48,7 @@ object Production {
                                 CompoundActions.reach(worker, at.toPosition(), 150),
                                 BuildCommand(worker, at, building),
                                 Await(150) { worker.isConstructing },
-                                Sleep(48),
+                                Sleep(100),
                                 Fail
                         )
                 ))
@@ -143,39 +143,45 @@ object Production {
         require(!unit.isBuilding || unit.isAddon)
         var trainer: PlayerUnit? = null
         val supplyUsed = if (unit == UnitType.Zerg_Zergling) 2 * unit.supplyRequired() else unit.supplyRequired()
-        return MSequence("train $unit",
-                ensureDependencies(unit),
-                Sequence(
+        return Retry(5,
+                MSequence("train $unit",
                         Inline {
-                            Board.pendingUnits.add(unit)
+                            trainer = null
                             NodeStatus.SUCCEEDED
                         },
-                        All("ensureResources",
-                                ensureSupply(supplyUsed),
-                                Fallback(ReserveResources(unit.mineralPrice(), unit.gasPrice()), Sleep)
+                        ensureDependencies(unit),
+                        Sequence(
+                                Inline {
+                                    Board.pendingUnits.add(unit)
+                                    NodeStatus.SUCCEEDED
+                                },
+                                All("ensureResources",
+                                        ensureSupply(supplyUsed),
+                                        Fallback(ReserveResources(unit.mineralPrice(), unit.gasPrice()), Sleep)
+                                ),
+                                Await { FTTBot.self.canMake(unit) },
+                                Inline {
+                                    trainer = selectTrainer(trainer, unit, near()?.toPosition())
+                                            ?: return@Inline NodeStatus.RUNNING
+                                    NodeStatus.SUCCEEDED
+                                }
                         ),
-                        Await { FTTBot.self.canMake(unit) },
-                        Inline {
-                            trainer = selectTrainer(trainer, unit, near()?.toPosition())
-                                    ?: return@Inline NodeStatus.RUNNING
-                            NodeStatus.SUCCEEDED
-                        }
-                ),
-                Sequence(
-                        MDelegate { ReserveUnit(trainer!!) },
-                        MDelegate {
-                            when (trainer) {
-                                is Morphable -> MorphCommand(trainer as Morphable, unit)
-                                else -> TrainCommand(trainer as TrainingFacility, unit)
+                        Sequence(
+                                MDelegate { ReserveUnit(trainer!!) },
+                                MDelegate {
+                                    when (trainer) {
+                                        is Morphable -> MorphCommand(trainer as Morphable, unit)
+                                        else -> TrainCommand(trainer as TrainingFacility, unit)
+                                    }
+                                }
+                        ),
+                        Await(48) {
+                            if (!trainer!!.exists()) {
+                                trainer = UnitQuery.myUnits.firstOrNull { it.id == trainer!!.id } ?: return@Await false
                             }
+                            trainer?.isA(unit) == true || (trainer as? Egg)?.buildType == unit
                         }
-                ),
-                Await(48) {
-                    if (!trainer!!.exists()) {
-                        trainer = UnitQuery.myUnits.firstOrNull { it.id == trainer!!.id } ?: return@Await false
-                    }
-                    trainer?.isA(unit) == true || (trainer as? Egg)?.buildType == unit
-                }
+                )
         )
     }
 
