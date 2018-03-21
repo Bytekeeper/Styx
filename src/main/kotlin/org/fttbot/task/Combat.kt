@@ -8,10 +8,7 @@ import org.fttbot.info.UnitQuery
 import org.fttbot.info.inRadius
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.WalkPosition
-import org.openbw.bwapi4j.unit.Larva
-import org.openbw.bwapi4j.unit.MobileUnit
-import org.openbw.bwapi4j.unit.PlayerUnit
-import org.openbw.bwapi4j.unit.Worker
+import org.openbw.bwapi4j.unit.*
 import kotlin.math.max
 
 object Combat {
@@ -24,7 +21,8 @@ object Combat {
                     Inline {
                         bestTarget = targets.minBy {
                             (it.hitPoints + it.shields) / max(simUnit.damagePerFrameTo(SimUnit.of(it)), 0.01) +
-                                    (if (it is Larva) 5000 else 0) +
+                                    (if (it is Larva || it is Egg) 5000 else 0) +
+                                    (if (!it.isDetected) 5000 else 0) +
                                     it.getDistance(unit)
                         }
                         if (bestTarget == null)

@@ -1,7 +1,7 @@
 package org.fttbot
 
 /**
- * Kills and starts processes, including Starcraft game itself and Chaoslauncher.
+ * Kills then starts processes, including Starcraft game itself then Chaoslauncher.
  */
 object ProcessHelper {
 

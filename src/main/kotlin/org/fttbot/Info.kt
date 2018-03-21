@@ -7,8 +7,7 @@ import org.openbw.bwapi4j.unit.PlayerUnit
 object Info {
     val myBases: List<Base> by LazyOnFrame {
         UnitQuery.myUnits
-                .filter { it.isCompleted }
                 .filterIsInstance(Base::class.java)
-                .filter { base -> FTTBot.bwem.bases.any { it.location.getDistance((base as PlayerUnit).tilePosition) <= 4 } }
+                .filter { base -> FTTBot.bwem.bases.any { it.location.getDistance((base as PlayerUnit).tilePosition) <= 2 } }
     }
 }

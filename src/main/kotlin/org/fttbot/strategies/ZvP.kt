@@ -7,9 +7,7 @@ import org.fttbot.task.Production.build
 import org.fttbot.task.Production.buildGas
 import org.fttbot.task.Production.train
 import org.fttbot.task.Production.trainWorker
-import org.fttbot.task.Production.upgrade
 import org.openbw.bwapi4j.type.UnitType
-import org.openbw.bwapi4j.type.UpgradeType
 
 object ZvP {
     fun _12Hatch(): Node =
@@ -34,11 +32,16 @@ object ZvP {
     fun _massZergling(): Node = MAll("10->mass",
             _10Hatch(),
             All("doit",
+                    Strategies.considerExpansion(),
                     MSequence("massZerg",
                             Repeat(6, MDelegate { train(UnitType.Zerg_Zergling) }),
                             MDelegate { build(UnitType.Zerg_Hatchery) },
-                            Repeat(node = MDelegate { train(UnitType.Zerg_Zergling) })),
-                    Strategies.buildWorkers()
+                            Repeat(node = MSequence("tillDawn",
+                                    Strategies.buildWorkers(),
+                                    MDelegate { train(UnitType.Zerg_Zergling) }
+                            )
+                            )
+                    )
             )
     )
 

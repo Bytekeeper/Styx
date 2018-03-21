@@ -12,7 +12,7 @@ const val RESOURCE_RANGE = 300
 object GatherResources : Node {
     override fun tick(): NodeStatus {
         val available = Board.resources
-        val myBases = Info.myBases.map { it as PlayerUnit }
+        val myBases = Info.myBases.filterIsInstance(PlayerUnit::class.java).filter { it.isCompleted }
         val units = available.units
 
         val workerUnits = myBases.flatMap { base ->

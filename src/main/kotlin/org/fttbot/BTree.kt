@@ -19,6 +19,18 @@ interface Node {
 
         override fun toString(): String = "${this@Node} only if ${condition}"
     }
+
+    companion object {
+        fun fromFlow(flow: Flow<*>): Node = Inline {
+            val get: Any = flow.get()
+            when (get) {
+                is RBusy<*> -> NodeStatus.RUNNING
+                is RFail<*> -> NodeStatus.FAILED
+                is RResult<*> -> NodeStatus.SUCCEEDED
+                else -> throw IllegalStateException()
+            }
+        }
+    }
 }
 
 class MDelegate(val name: String? = "", val delegate: () -> Node) : Node {
@@ -50,13 +62,23 @@ class Inline(val delegate: () -> NodeStatus) : Node {
 }
 
 
-class Await(var frames: Int = Int.MAX_VALUE, val condition: () -> Boolean) : Node {
+class Await(var toWait: Int = Int.MAX_VALUE, val condition: () -> Boolean) : Node {
+    private var remaining = toWait
     override fun tick(): NodeStatus {
-        if (condition()) return NodeStatus.SUCCEEDED
-        frames--
-        if (frames <= 0)
+        if (condition()) {
+            remaining = toWait
+            return NodeStatus.SUCCEEDED
+        }
+        remaining--
+        if (remaining <= 0) {
+            remaining = toWait
             return NodeStatus.FAILED
+        }
         return NodeStatus.RUNNING
+    }
+
+    override fun aborted() {
+        remaining = toWait
     }
 }
 
@@ -377,6 +399,7 @@ class Sequence(vararg childArray: Node) : SequenceBase() {
 }
 
 class MSequence(val name: String, vararg val children: Node) : Node {
+    val log = LogManager.getLogger()
     var childIndex = -1
 
     override fun tick(): NodeStatus {
@@ -384,6 +407,7 @@ class MSequence(val name: String, vararg val children: Node) : Node {
         do {
             val result = children[childIndex].tick()
             if (result == NodeStatus.FAILED) {
+                log.warn("Fail {}", this)
                 childIndex = -1
                 return NodeStatus.FAILED
             }

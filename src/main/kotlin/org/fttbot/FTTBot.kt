@@ -69,7 +69,7 @@ object FTTBot : BWEventListener {
         Thread.sleep(100)
         game.interactionHandler.setLocalSpeed(0)
         game.interactionHandler.enableLatCom(false)
-        game.interactionHandler.sendText("black sheep wall")
+//        game.interactionHandler.sendText("black sheep wall")
 //        game.interactionHandler.sendText("power overwhelming")
 
         Logger.getLogger("").level = Level.INFO
@@ -92,14 +92,6 @@ object FTTBot : BWEventListener {
 //                },
                 scout(),
                 MSequence("Consider Attacking",
-                        Require {
-                            val myUnits = UnitQuery.myMobileCombatUnits
-                                    .map { SimUnit.of(it) }
-                            val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Attacker }
-                                    .map { SimUnit.of(it) }
-                            val eval = CombatEval.probabilityToWin(myUnits, enemies)
-                            eval > 0.55
-                        },
                         Sequence(
                                 Require {
                                     val myUnits = UnitQuery.myMobileCombatUnits
@@ -113,7 +105,14 @@ object FTTBot : BWEventListener {
                                     Combat.attack(UnitQuery.myMobileCombatUnits, UnitQuery.enemyUnits)
                                 }
                         )
-                ),
+                ) onlyIf Require {
+                    val myUnits = UnitQuery.myMobileCombatUnits
+                            .map { SimUnit.of(it) }
+                    val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Attacker }
+                            .map { SimUnit.of(it) }
+                    val eval = CombatEval.probabilityToWin(myUnits, enemies)
+                    eval > 0.55
+                },
                 Sequence(
                         Sleep(24),
                         MDelegate {
