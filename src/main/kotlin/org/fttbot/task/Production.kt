@@ -1,7 +1,6 @@
 package org.fttbot.task
 
 import org.fttbot.*
-import org.fttbot.Flow.Companion.flow
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.findWorker
 import org.fttbot.info.isMyUnit
@@ -39,29 +38,6 @@ class AwaitConstructionStart(val worker: Worker, val type: UnitType, val at: Til
 
 data class BuildJob(val worker: Worker, val at: TilePosition, val building: UnitType)
 
-
-class HasConstructionStarted : (BuildJob) -> Result<Boolean> {
-    var started = false
-
-    override fun invoke(job: BuildJob): Result<Boolean> {
-        val (worker, at, type) = job
-        if (started) {
-            if (!worker.isConstructing)
-                return RFail("$worker build $type at $at triggered, but not started")
-            val candidate = UnitQuery.myUnits.firstOrNull { it is Building && it.tilePosition == at }
-                    ?: return RResult(false)
-            if (candidate.isA(type))
-                return RResult(true)
-            return RResult(false)
-        }
-        if (worker.buildType != UnitType.None) {
-            started = true
-        }
-        return RResult(false)
-    }
-}
-
-
 object Production {
     fun buildWithWorker(worker: Worker, at: TilePosition, building: UnitType): Node {
         return OneOf(
@@ -77,19 +53,6 @@ object Production {
                                 Fail
                         )
                 ))
-    }
-
-    fun buildWithWorker(inFlow: Flow<BuildJob>) = inFlow.retry {
-        _if(HasConstructionStarted(),
-                { then { RResult(it) } },
-                {
-                    reserveUnit { it.worker }
-                            .reserveResources { it.building }
-                            .once { waitFor { it.worker.build(it.at, it.building) } }
-                            .waitFor { it.worker.isConstructing }
-                            .waitFor { false }
-                }
-        )
     }
 
     fun selectTrainer(currentTrainer: PlayerUnit?, unit: UnitType, near: Position?): PlayerUnit? {
@@ -159,7 +122,7 @@ object Production {
                 {
                     if (builder is Worker)
 //                        buildWithWorker(builder as Worker, targetPosition!!, type)
-                        Node.fromFlow(buildWithWorker(flow { BuildJob(builder as Worker, targetPosition!!, type) }))
+                        buildWithWorker(builder as Worker, targetPosition!!, type)
                     else
                         morph(builder as Morphable, type)
                 }

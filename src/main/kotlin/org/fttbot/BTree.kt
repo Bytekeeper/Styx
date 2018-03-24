@@ -8,28 +8,19 @@ enum class NodeStatus {
     RUNNING
 }
 
-interface Node {
+interface Node<T> {
+    val model : T
     fun tick(): NodeStatus
     fun aborted() {}
-    infix fun onlyIf(condition: Node): Node = object : Node {
+    infix fun onlyIf(condition: Node<T>): Node<T> = object : Node<T> {
+        override val model: T get() = this@Node.model
+
         override fun tick(): NodeStatus =
                 if (condition.tick() == NodeStatus.SUCCEEDED)
                     this@Node.tick()
                 else NodeStatus.FAILED
 
         override fun toString(): String = "${this@Node} only if ${condition}"
-    }
-
-    companion object {
-        fun fromFlow(flow: Flow<*>): Node = Inline {
-            val get: Any = flow.get()
-            when (get) {
-                is RBusy<*> -> NodeStatus.RUNNING
-                is RFail<*> -> NodeStatus.FAILED
-                is RResult<*> -> NodeStatus.SUCCEEDED
-                else -> throw IllegalStateException()
-            }
-        }
     }
 }
 
