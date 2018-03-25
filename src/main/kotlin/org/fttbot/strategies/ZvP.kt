@@ -11,8 +11,8 @@ import org.openbw.bwapi4j.type.UnitType
 
 object ZvP {
     fun _12Hatch(): Node =
-            MAll("12Hatch",
-                    Repeat(5, MDelegate { Production.trainWorker() }),
+            MParallel(1000,
+                    Repeat(5, Delegate { Production.trainWorker() }),
                     train(UnitType.Zerg_Overlord),
                     trainWorker(),
                     trainWorker(),
@@ -23,35 +23,35 @@ object ZvP {
 
     fun _10Hatch(): Node =
             MSequence("10Hatch",
-                    Repeat(5, MDelegate { Production.trainWorker() }),
+                    Repeat(5, Delegate { Production.trainWorker() }),
                     Strategies.gasTrick(),
                     build(UnitType.Zerg_Hatchery),
                     build(UnitType.Zerg_Spawning_Pool)
             )
 
-    fun _massZergling(): Node = MAll("10->mass",
+    fun _massZergling(): Node = MParallel(1000,
             _10Hatch(),
-            All("doit",
+            MParallel(1000,
                     Strategies.considerExpansion(),
                     MSequence("massZerg",
-                            Repeat(6, MDelegate { train(UnitType.Zerg_Zergling) }),
-                            MDelegate { build(UnitType.Zerg_Hatchery) },
-                            Repeat(node = MSequence("tillDawn",
+                            Repeat(6, Delegate { train(UnitType.Zerg_Zergling) }),
+                            Delegate { build(UnitType.Zerg_Hatchery) },
+                            Repeat(child = MSequence("tillDawn",
                                     Strategies.buildWorkers(),
-                                    MDelegate { train(UnitType.Zerg_Zergling) }
+                                    Delegate { train(UnitType.Zerg_Zergling) }
                             )
                             )
                     )
             )
     )
 
-    fun xx(): Node = MAll("12->xx",
+    fun xx(): Node = MParallel(1000,
             _12Hatch(),
-            All("xx",
-                    Repeat(4, MDelegate { train(UnitType.Zerg_Zergling) }),
+            MParallel(1000,
+                    Repeat(4, Delegate { train(UnitType.Zerg_Zergling) }),
                     buildGas(),
                     build(UnitType.Zerg_Spire),
-                    Repeat(node = MAll("MutaZerg",
+                    Repeat(child = MParallel(1000,
                             train(UnitType.Zerg_Mutalisk),
                             train(UnitType.Zerg_Mutalisk),
                             train(UnitType.Zerg_Zergling))

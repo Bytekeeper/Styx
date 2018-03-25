@@ -85,15 +85,15 @@ object FTTBot : BWEventListener {
         buildQueue = MSequence("buildQueue",
                 ZvP._massZergling()
         )
-        bot = All("main", buildQueue,
+        bot = Parallel(100, buildQueue,
 //                Delegate {
 //                    Combat.attack(UnitQuery.myUnits.filter { it is MobileUnit && it !is Worker && it is Attacker },
 //                            UnitQuery.enemyUnits)
 //                },
                 scout(),
-                MSequence("Consider Attacking",
+                Fallback(
                         Sequence(
-                                Require {
+                                Condition("could still combat") {
                                     val myUnits = UnitQuery.myMobileCombatUnits
                                             .map { SimUnit.of(it) }
                                     val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Attacker }
@@ -104,30 +104,30 @@ object FTTBot : BWEventListener {
                                 Delegate {
                                     Combat.attack(UnitQuery.myMobileCombatUnits, UnitQuery.enemyUnits)
                                 }
-                        )
-                ) onlyIf Require {
-                    val myUnits = UnitQuery.myMobileCombatUnits
-                            .map { SimUnit.of(it) }
-                    val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Attacker }
-                            .map { SimUnit.of(it) }
-                    val eval = CombatEval.probabilityToWin(myUnits, enemies)
-                    eval > 0.55
-                },
-                Sequence(
+                        ) onlyIf Condition("could win combat") {
+                            val myUnits = UnitQuery.myMobileCombatUnits
+                                    .map { SimUnit.of(it) }
+                            val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Attacker }
+                                    .map { SimUnit.of(it) }
+                            val eval = CombatEval.probabilityToWin(myUnits, enemies)
+                            eval > 0.55
+                        }, Sleep),
+                Fallback(Sequence(
                         Sleep(24),
-                        MDelegate {
+                        Delegate {
                             Combat.defendPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
                                     self.startLocation.toPosition(), (game.bwMap.startPositions - self.startLocation)[0].toPosition())
                         }
+                ), Sleep),
 //                        MSequence("",
-//                                Require { !EnemyState.enemyBases.isEmpty() },
+//                                Condition { !EnemyState.enemyBases.isEmpty() },
 //
 //                                MDelegate
 //                                {
 //                                    Combat.moveToStandOffPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
 //                                            EnemyState.enemyBases[0].position)
 //                                })
-                ),
+//                ),
                 Sequence(GatherResources, Sleep))
         UnitQuery.update(emptyList())
     }

@@ -45,7 +45,7 @@ object GatherResources : Node {
                 }
             }
             workersToAssign
-                    .filter { !it.isGatheringMinerals && !it.isGatheringGas }
+                    .filter { !it.isGatheringMinerals && !it.isGatheringGas && it.isInterruptible}
                     .forEach { worker ->
                         if (worker.targetUnit !is MineralPatch) {
                             val targetMineral = (minerals.filter { !it.isBeingGathered }.minBy { it.getDistance(worker) }

@@ -28,11 +28,11 @@ object Macro {
     fun buildExpansion(): Node {
         var expansionPosition: Position? = null
         return Sequence(
-                Inline {
+                Inline("Find location to expand") {
                     expansionPosition = expansionPosition ?: findBestExpansionPosition() ?: return@Inline NodeStatus.FAILED
                     NodeStatus.SUCCEEDED
                 },
-                MDelegate {
+                Delegate {
                     build(FTTConfig.BASE) {
                         expansionPosition!!.toTilePosition()
                     }

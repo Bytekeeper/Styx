@@ -13,12 +13,12 @@ import kotlin.math.max
 
 object Combat {
     fun attack(units: List<PlayerUnit>, targets: List<PlayerUnit>): Node {
-        return Sequence(MMapAll({ units }, "attack") { unit ->
+        return Sequence(DispatchParallel({ units }, "attack") { unit ->
             val simUnit = SimUnit.of(unit)
             var bestTarget: PlayerUnit? = null
 
             Sequence(
-                    Inline {
+                    Inline("Determine best target") {
                         bestTarget = targets.minBy {
                             (it.hitPoints + it.shields) / max(simUnit.damagePerFrameTo(SimUnit.of(it)), 0.01) +
                                     (if (it is Larva || it is Egg) 5000 else 0) +
@@ -57,7 +57,7 @@ object Combat {
                     else
                         cpCenter.add(ab).divide(WalkPosition(2, 2))
                 }
-        return MMapAll({ units }, "moveToStandOff") {
+        return DispatchParallel({ units }, "moveToStandOff") {
             reach(it, actualTarget.toPosition(), 96)
         }
     }
@@ -71,15 +71,15 @@ object Combat {
         var enemies = emptyList<PlayerUnit>()
         return Fallback(
                 Sequence(
-                        Inline {
+                        Inline("Find enemies") {
                             enemies = UnitQuery.enemyUnits.inRadius(defensePosition, 300)
                             if (enemies.isEmpty()) NodeStatus.FAILED else NodeStatus.SUCCEEDED
                         },
-                        MDelegate("Fending off") {
+                        Delegate {
                             attack(units, enemies)
                         }
                 ),
-                MMapAll({ units }, "defendPosition") {
+                DispatchParallel({ units }, "defendPosition") {
                     reach(it, defensePosition, 64)
                 }
         )

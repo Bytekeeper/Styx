@@ -16,14 +16,14 @@ object Scouting {
     fun scout(): Node {
         var scouts: List<PlayerUnit> = emptyList()
         return Sequence(
-                Inline {
+                Inline("determine scout") {
                     scouts = Board.resources.units.filter { it is Overlord }
                     if (scouts.isEmpty())
                         NodeStatus.RUNNING
                     else
                         NodeStatus.SUCCEEDED
                 },
-                MMapAll({ scouts }) {
+                DispatchParallel({ scouts }) {
                     scout(it as MobileUnit, FTTBot.game.bwMap.startPositions[rnd.nextInt(FTTBot.game.bwMap.startPositions.size)].toPosition())
                 }
         )

@@ -12,10 +12,10 @@ import org.openbw.bwapi4j.unit.Worker
 
 object Strategies {
     fun buildWorkers() =
-            Fallback(Production.trainWorker() onlyIf Require {
+            Fallback(Production.trainWorker() onlyIf Condition("should build workers") {
                 UnitQuery.myUnits.count { it is Worker && !it.isCompleted || it is Egg && it.buildType.isWorker } <
                         Info.myBases.count { it is PlayerUnit && it.isCompleted }
-            }, Success)
+            }, Sleep)
 
     fun gasTrick() = MSequence("gasTrick",
             Production.buildGas(),
@@ -24,8 +24,8 @@ object Strategies {
     )
 
     fun considerExpansion() = Fallback(
-            MDelegate { Macro.buildExpansion() } onlyIf Require { UnitQuery.myWorkers.size / 11 >= Info.myBases.size },
-            Success
+            Delegate { Macro.buildExpansion() } onlyIf Condition("should build exe") { UnitQuery.myWorkers.size / 11 >= Info.myBases.size },
+            Sleep
     )
 
     fun moveSurplusWorkers() = Success

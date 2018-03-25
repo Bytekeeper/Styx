@@ -1,8 +1,8 @@
 package org.fttbot
 
-import jdk.nashorn.internal.runtime.regexp.joni.Config.log
 import org.apache.logging.log4j.LogManager
 import org.fttbot.info.UnitQuery
+import org.fttbot.info.UnitQuery.minerals
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.TechType
@@ -35,7 +35,7 @@ class MoveCommand(unit: MobileUnit, position: Position) : Order<MobileUnit>(unit
 class BuildCommand(worker: Worker, position: TilePosition, building: UnitType) : Order<Worker>(worker, {
     require(building.gasPrice() <= FTTBot.self.gas())
     require(building.mineralPrice() <= FTTBot.self.minerals())
-    if (building.supplyProvided() == 0 && UnitQuery.myUnits.any { it.isA(building)} ) {
+    if (building.supplyProvided() == 0 && UnitQuery.myUnits.any { it.isA(building) }) {
         LogManager.getLogger().warn("Building another {}", building)
     }
     build(position, building)
@@ -80,6 +80,8 @@ class ReserveUnit(val unit: PlayerUnit) : Node {
         }
         return NodeStatus.FAILED
     }
+
+    override fun toString(): String = "Reserving unit $unit"
 }
 
 class ReserveResources(val minerals: Int, val gas: Int = 0) : Node {

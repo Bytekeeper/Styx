@@ -5,6 +5,9 @@ import org.fttbot.info.UnitQuery
 import org.fttbot.info.findWorker
 import org.fttbot.info.isMyUnit
 import org.fttbot.search.MCTS
+import org.fttbot.task.Production.ensureUnitDependencies
+import org.fttbot.task.Production.selectResearcher
+import org.fttbot.task.Production.train
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.Race
@@ -34,13 +37,17 @@ class AwaitConstructionStart(val worker: Worker, val type: UnitType, val at: Til
         }
         return NodeStatus.RUNNING
     }
-}
 
-data class BuildJob(val worker: Worker, val at: TilePosition, val building: UnitType)
+    override fun parentFinished() {
+        started = false
+    }
+
+    override fun toString(): String = "Awaiting start of $type by $worker"
+}
 
 object Production {
     fun buildWithWorker(worker: Worker, at: TilePosition, building: UnitType): Node {
-        return OneOf(
+        return Parallel(1,
                 AwaitConstructionStart(worker, building, at),
                 Sequence(
                         ReserveUnit(worker),
@@ -48,7 +55,7 @@ object Production {
                         MSequence("executeBuild",
                                 CompoundActions.reach(worker, at.toPosition(), 150),
                                 BuildCommand(worker, at, building),
-                                Await(150) { worker.isConstructing },
+                                Await("worker constructing", 150) { worker.isConstructing },
                                 Sleep(100),
                                 Fail
                         )
@@ -97,7 +104,7 @@ object Production {
         var targetPosition: TilePosition? = null
         var builder: PlayerUnit? = null
         return Retry(5, MSequence("build $type",
-                Inline {
+                Inline("reset") {
                     targetPosition = null
                     builder = null
                     NodeStatus.SUCCEEDED
@@ -105,8 +112,8 @@ object Production {
                 Sequence(
                         ensureDependencies(type),
                         BlockResources(type.mineralPrice(), type.gasPrice()),
-                        Await { FTTBot.self.canMake(type) },
-                        Inline {
+                        Await("canMake $type") { FTTBot.self.canMake(type) },
+                        Inline("find build location and builder") {
                             targetPosition = targetPosition ?: ConstructionPosition.findPositionFor(type, at()?.toPosition()) ?: ConstructionPosition.findPositionFor(type)
                                     ?: return@Inline NodeStatus.FAILED
                             builder = if (builder != null && Board.resources.units.contains(builder!!)) builder else
@@ -118,7 +125,7 @@ object Production {
                             NodeStatus.SUCCEEDED
                         }
                 ),
-                MDelegate
+                Delegate
                 {
                     if (builder is Worker)
 //                        buildWithWorker(builder as Worker, targetPosition!!, type)
@@ -135,7 +142,7 @@ object Production {
                         ReserveUnit(unit as PlayerUnit),
                         Fallback(ReserveResources(to.mineralPrice(), to.gasPrice()), Sleep)
                 ),
-                MDelegate {
+                Delegate {
                     MorphCommand(unit, to)
                 }
         )
@@ -147,37 +154,37 @@ object Production {
         val supplyUsed = if (unit == UnitType.Zerg_Zergling) 2 * unit.supplyRequired() else unit.supplyRequired()
         return Retry(5,
                 MSequence("train $unit",
-                        Inline {
+                        Inline("reset") {
                             trainer = null
                             NodeStatus.SUCCEEDED
                         },
                         ensureDependencies(unit),
                         Sequence(
-                                Inline {
+                                Inline("Mark $unit as pending") {
                                     Board.pendingUnits.add(unit)
                                     NodeStatus.SUCCEEDED
                                 },
-                                All("ensureResources",
+                                Parallel(2,
                                         ensureSupply(supplyUsed),
                                         Fallback(ReserveResources(unit.mineralPrice(), unit.gasPrice()), Sleep)
                                 ),
-                                Await { FTTBot.self.canMake(unit) },
-                                Inline {
+                                Await("can make $unit") { FTTBot.self.canMake(unit) },
+                                Inline("Finding trainer for $unit") {
                                     trainer = selectTrainer(trainer, unit, near()?.toPosition())
                                             ?: return@Inline NodeStatus.RUNNING
                                     NodeStatus.SUCCEEDED
                                 }
                         ),
                         Sequence(
-                                MDelegate { ReserveUnit(trainer!!) },
-                                MDelegate {
+                                Delegate { ReserveUnit(trainer!!) },
+                                Delegate {
                                     when (trainer) {
                                         is Morphable -> MorphCommand(trainer as Morphable, unit)
                                         else -> TrainCommand(trainer as TrainingFacility, unit)
                                     }
                                 }
                         ),
-                        Await(48) {
+                        Await("trainer to train",48) {
                             if (!trainer!!.exists()) {
                                 trainer = UnitQuery.myUnits.firstOrNull { it.id == trainer!!.id } ?: return@Await false
                             }
@@ -188,7 +195,7 @@ object Production {
     }
 
     fun ensureUnitDependencies(dependencies: List<UnitType>): Node {
-        return MMapAll({
+        return DispatchParallel({
             val missing = PlayerUnit.getMissingUnits(UnitQuery.myUnits, dependencies).toMutableList()
             if (dependencies.any { it != UnitType.Zerg_Larva && it.gasPrice() > 0 && it.gasPrice() > Board.resources.gas })
                 missing.add(0, FTTConfig.GAS_BUILDING)
@@ -212,17 +219,17 @@ object Production {
 
     fun ensureDependencies(unit: UnitType): Node {
         if (unit == UnitType.None) return Success
-        return All("ensureDependencies",
-                MDelegate { ensureUnitDependencies(unit.requiredUnits()) },
-                ensureResearchDependencies(unit.requiredTech())
+        return Parallel(2,
+                Delegate { ensureUnitDependencies(unit.requiredUnits()) },
+                Delegate { ensureResearchDependencies(unit.requiredTech()) }
         )
     }
 
     fun ensureSupply(supplyDemand: Int): Fallback {
         return Fallback(
                 ReserveSupply(supplyDemand),
-                Require { enoughSupplyInConstruction() },
-                MDelegate { buildOrTrainSupply() }
+                Condition("enough supply pending") { enoughSupplyInConstruction() },
+                Delegate { buildOrTrainSupply() }
         )
     }
 
@@ -245,17 +252,15 @@ object Production {
                 ensureUnitDependencies(listOf(tech.requiredUnit())),
                 Sequence(
                         Fallback(ReserveResources(tech.mineralPrice(), tech.gasPrice()), Sleep),
-                        Await { FTTBot.self.canResearch(tech) }
+                        Await("can research $tech") { FTTBot.self.canResearch(tech) }
                 ),
-                Inline {
+                Inline("find researcher for $tech") {
                     researcher = selectResearcher(researcher, tech)
                             ?: return@Inline NodeStatus.RUNNING
                     NodeStatus.SUCCEEDED
                 },
                 Delegate { ReserveUnit(researcher!!) },
-                MDelegate {
-                    ResearchCommand(researcher as ResearchingFacility, tech)
-                }
+                Delegate { ResearchCommand(researcher as ResearchingFacility, tech) }
         )
     }
 
@@ -263,18 +268,18 @@ object Production {
         if (upgradeType == UpgradeType.None) return Success
         var researcher: PlayerUnit? = null
         val level = FTTBot.self.getUpgradeLevel(upgradeType)
-        return Fallback(Require { FTTBot.self.getUpgradeLevel(upgradeType) > level },
+        return Fallback(Condition("can upgrade $upgradeType") { FTTBot.self.getUpgradeLevel(upgradeType) > level },
                 Sequence(
-                        MDelegate { ensureUnitDependencies(listOf(upgradeType.whatsRequired(level), upgradeType.whatUpgrades())) },
-                        MDelegate { Fallback(ReserveResources(upgradeType.mineralPrice(level), upgradeType.gasPrice(level)), Sleep) },
-                        Await { FTTBot.self.canUpgrade(upgradeType) },
-                        Inline {
+                        Delegate { ensureUnitDependencies(listOf(upgradeType.whatsRequired(level), upgradeType.whatUpgrades())) },
+                        Delegate { Fallback(ReserveResources(upgradeType.mineralPrice(level), upgradeType.gasPrice(level)), Sleep) },
+                        Await("can upgrade $upgradeType") { FTTBot.self.canUpgrade(upgradeType) },
+                        Inline("find researcher for $upgradeType") {
                             researcher = selectResearcher(researcher, upgradeType)
                                     ?: return@Inline NodeStatus.RUNNING
                             NodeStatus.SUCCEEDED
                         },
                         Delegate { ReserveUnit(researcher!!) },
-                        MDelegate {
+                        Delegate {
                             UpgradeCommand(researcher as ResearchingFacility, upgradeType)
                         }
                 ))
@@ -295,13 +300,13 @@ object Production {
         require(type.isBuilding)
         var target: Building? = null
         return Sequence(
-                Inline {
+                Inline("find $type to cancel") {
                     target = UnitQuery.myUnits.filterIsInstance(Building::class.java)
                             .firstOrNull { it.isA(type) && !it.isCompleted }
                             ?: return@Inline NodeStatus.FAILED
                     NodeStatus.SUCCEEDED
                 },
-                MDelegate { CancelCommand(target!!) }
+                Delegate { CancelCommand(target!!) }
         )
     }
 
