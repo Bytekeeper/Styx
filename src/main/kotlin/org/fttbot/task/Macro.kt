@@ -4,10 +4,11 @@ import bwapi4j.org.apache.commons.lang3.mutable.MutableInt
 import org.fttbot.*
 import org.fttbot.task.Production.build
 import org.openbw.bwapi4j.Position
+import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.unit.PlayerUnit
 
 object Macro {
-    fun findBestExpansionPosition(): Position? {
+    fun findBestExpansionPosition(): TilePosition? {
         val existingBases = Info.myBases
         val candidates = FTTBot.bwem.bases.filter { base ->
             existingBases.none { (it as PlayerUnit).getDistance(base.center) < 200 } &&
@@ -22,11 +23,11 @@ object Macro {
                         result.toInt()
                     }.min() ?: 0
                 }
-        return targetBase?.center
+        return targetBase?.location
     }
 
     fun buildExpansion(): Node {
-        var expansionPosition: Position? = null
+        var expansionPosition: TilePosition? = null
         return Sequence(
                 Inline("Find location to expand") {
                     expansionPosition = expansionPosition ?: findBestExpansionPosition() ?: return@Inline NodeStatus.FAILED
@@ -34,7 +35,7 @@ object Macro {
                 },
                 Delegate {
                     build(FTTConfig.BASE) {
-                        expansionPosition!!.toTilePosition()
+                        expansionPosition!!
                     }
                 }
         )

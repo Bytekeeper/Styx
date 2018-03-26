@@ -5,9 +5,6 @@ import org.fttbot.info.UnitQuery
 import org.fttbot.info.findWorker
 import org.fttbot.info.isMyUnit
 import org.fttbot.search.MCTS
-import org.fttbot.task.Production.ensureUnitDependencies
-import org.fttbot.task.Production.selectResearcher
-import org.fttbot.task.Production.train
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.Race
@@ -53,7 +50,7 @@ object Production {
                         ReserveUnit(worker),
                         Fallback(ReserveResources(building.mineralPrice(), building.gasPrice()), Sleep),
                         MSequence("executeBuild",
-                                CompoundActions.reach(worker, at.toPosition(), 150),
+                                Actions.reach(worker, at.toPosition(), 150),
                                 BuildCommand(worker, at, building),
                                 Await("worker constructing", 150) { worker.isConstructing },
                                 Sleep(100),

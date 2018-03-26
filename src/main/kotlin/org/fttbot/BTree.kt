@@ -203,11 +203,20 @@ class DispatchParallel<T : Any>(val childrenResolver: () -> Collection<T>, val n
             result
         }
         children.keys.removeIf { !toTransform.contains(it) }
-        return if (result.contains(NodeStatus.FAILED))
+        return if (result.contains(NodeStatus.FAILED)) {
+            parentFinished()
             return NodeStatus.FAILED
+        }
         else if (result.contains(NodeStatus.RUNNING))
             NodeStatus.RUNNING
-        else NodeStatus.SUCCEEDED
+        else {
+            parentFinished()
+            NodeStatus.SUCCEEDED
+        }
+    }
+
+    override fun parentFinished() {
+        children.clear()
     }
 
     override fun toString(): String = "$name(${children.values.joinToString(", ")})"
@@ -385,7 +394,7 @@ class MSequence(val name: String, vararg val children: Node) : Node {
     override fun toString(): String = "$name@$childIndex(${children.joinToString(",")})"
 }
 
-class MFallback<T : Any>(vararg val children: Node) : Node {
+class MFallback(vararg val children: Node) : Node {
     var childIndex = 0
 
     override fun tick(): NodeStatus {

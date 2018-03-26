@@ -10,7 +10,7 @@ import java.util.*
 object Scouting {
     private val rnd = SplittableRandom()
     fun scout(scout: MobileUnit, target: Position): Node {
-        return CompoundActions.reach(scout, target, 200)
+        return Actions.reach(scout, target, 200)
     }
 
     fun scout(): Node {

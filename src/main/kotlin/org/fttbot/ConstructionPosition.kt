@@ -30,7 +30,7 @@ object ConstructionPosition {
                 if (!FTTBot.game.bwMap.isValidPosition(pos))
                     continue
                 // Simple way to leave gaps
-                if (pos.x % 3 < 1 || pos.y % 5 < 2)
+                if ((i != 0 || j != 0) && (pos.x % 3 < 1 || pos.y % 5 < 2))
                     continue
                 if (dist < bestDistance
                         && FTTBot.game.canBuildHere(pos, unitType)

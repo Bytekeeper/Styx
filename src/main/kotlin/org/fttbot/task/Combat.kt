@@ -2,7 +2,7 @@ package org.fttbot.task
 
 import bwem.ChokePoint
 import org.fttbot.*
-import org.fttbot.CompoundActions.reach
+import org.fttbot.Actions.reach
 import org.fttbot.estimation.SimUnit
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.inRadius

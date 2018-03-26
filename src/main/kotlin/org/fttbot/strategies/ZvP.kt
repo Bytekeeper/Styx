@@ -38,7 +38,7 @@ object ZvP {
                             Delegate { build(UnitType.Zerg_Hatchery) },
                             Repeat(child = MSequence("tillDawn",
                                     Strategies.buildWorkers(),
-                                    Delegate { train(UnitType.Zerg_Zergling) }
+                                    Repeat(2, Delegate { train(UnitType.Zerg_Zergling) })
                             )
                             )
                     )

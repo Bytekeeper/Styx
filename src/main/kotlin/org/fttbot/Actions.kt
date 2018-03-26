@@ -64,6 +64,7 @@ class GatherGas(worker: Worker, gasPatch: GasMiningFacility) : Order<Worker>(wor
 class Repair(worker: SCV, target: Mechanical) : Order<SCV>(worker, { repair(target) })
 class Heal(medic: Medic, target: Organic) : Order<Medic>(medic, { healing(target as PlayerUnit) })
 
+
 class ArriveAt(val unit: MobileUnit, val position: Position, val tolerance: Int = 32) : Node {
     override fun tick(): NodeStatus {
         if (unit.getDistance(position) <= tolerance)
@@ -107,10 +108,19 @@ class BlockResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) :
     }
 }
 
-object CompoundActions {
+object Actions {
+    fun hasReached(unit: MobileUnit, position: Position, tolerance: Int = 64) =
+            unit.getDistance(position) <= tolerance
+
     fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node {
         // TODO: "Search" for a way
-        return MSequence("reach", MoveCommand(unit, position), ArriveAt(unit, position, tolerance))
+        return Fallback(
+                Condition("Reached $position with $unit") { hasReached(unit, position, tolerance)},
+                MSequence("Order $unit to $position",
+                        MoveCommand(unit, position),
+                        Sleep
+                )
+        )
     }
 
 }

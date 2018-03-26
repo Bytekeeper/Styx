@@ -112,13 +112,13 @@ object FTTBot : BWEventListener {
                             val eval = CombatEval.probabilityToWin(myUnits, enemies)
                             eval > 0.55
                         }, Sleep),
-                Fallback(Sequence(
-                        Sleep(24),
-                        Delegate {
-                            Combat.defendPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
-                                    self.startLocation.toPosition(), (game.bwMap.startPositions - self.startLocation)[0].toPosition())
-                        }
-                ), Sleep),
+//                Fallback(Sequence(
+//                        Sleep(24),
+//                        Delegate {
+//                            Combat.defendPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
+//                                    self.startLocation.toPosition(), (game.bwMap.startPositions - self.startLocation)[0].toPosition())
+//                        }
+//                ), Sleep),
 //                        MSequence("",
 //                                Condition { !EnemyState.enemyBases.isEmpty() },
 //

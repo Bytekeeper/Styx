@@ -7,7 +7,6 @@ import org.fttbot.task.Production
 import org.fttbot.task.Production.cancelGas
 import org.openbw.bwapi4j.unit.Egg
 import org.openbw.bwapi4j.unit.PlayerUnit
-import org.openbw.bwapi4j.unit.Unit
 import org.openbw.bwapi4j.unit.Worker
 
 object Strategies {
@@ -24,7 +23,9 @@ object Strategies {
     )
 
     fun considerExpansion() = Fallback(
-            Delegate { Macro.buildExpansion() } onlyIf Condition("should build exe") { UnitQuery.myWorkers.size / 11 >= Info.myBases.size },
+            Sequence(
+                    Delegate { Macro.buildExpansion() } onlyIf Condition("should build exe") { UnitQuery.myWorkers.size / 11 >= Info.myBases.size },
+                    Fail),
             Sleep
     )
 
