@@ -14,8 +14,10 @@ import org.fttbot.task.GatherResources
 import org.fttbot.task.Scouting.scout
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Race
-import org.openbw.bwapi4j.unit.*
+import org.openbw.bwapi4j.unit.Attacker
+import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Unit
+import org.openbw.bwapi4j.unit.Worker
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
 import java.util.logging.Level
@@ -83,7 +85,8 @@ object FTTBot : BWEventListener {
         }
 
         buildQueue = MSequence("buildQueue",
-                ZvP._massZergling()
+//                ZvP._massZergling()
+                ZvP.lurkers()
         )
         bot = Parallel(100, buildQueue,
 //                Delegate {

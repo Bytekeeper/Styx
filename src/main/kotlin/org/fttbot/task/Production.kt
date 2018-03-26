@@ -148,15 +148,15 @@ object Production {
     fun train(unit: UnitType, near: () -> TilePosition? = { null }): Node {
         require(!unit.isBuilding || unit.isAddon)
         var trainer: PlayerUnit? = null
-        val supplyUsed = if (unit == UnitType.Zerg_Zergling) 2 * unit.supplyRequired() else unit.supplyRequired()
+        val supplyUsed = if (unit.isTwoUnitsInOneEgg) 2 * unit.supplyRequired() else unit.supplyRequired()
         return Retry(5,
                 MSequence("train $unit",
                         Inline("reset") {
                             trainer = null
                             NodeStatus.SUCCEEDED
                         },
-                        ensureDependencies(unit),
                         Sequence(
+                                ensureDependencies(unit),
                                 Inline("Mark $unit as pending") {
                                     Board.pendingUnits.add(unit)
                                     NodeStatus.SUCCEEDED
@@ -181,7 +181,7 @@ object Production {
                                     }
                                 }
                         ),
-                        Await("trainer to train",48) {
+                        Await("trainer to train", 48) {
                             if (!trainer!!.exists()) {
                                 trainer = UnitQuery.myUnits.firstOrNull { it.id == trainer!!.id } ?: return@Await false
                             }
@@ -245,19 +245,22 @@ object Production {
     fun research(tech: TechType): Node {
         if (tech == TechType.None) return Success
         var researcher: PlayerUnit? = null
-        return MSequence("research",
-                ensureUnitDependencies(listOf(tech.requiredUnit())),
-                Sequence(
-                        Fallback(ReserveResources(tech.mineralPrice(), tech.gasPrice()), Sleep),
-                        Await("can research $tech") { FTTBot.self.canResearch(tech) }
-                ),
-                Inline("find researcher for $tech") {
-                    researcher = selectResearcher(researcher, tech)
-                            ?: return@Inline NodeStatus.RUNNING
-                    NodeStatus.SUCCEEDED
-                },
-                Delegate { ReserveUnit(researcher!!) },
-                Delegate { ResearchCommand(researcher as ResearchingFacility, tech) }
+        return Fallback(
+                Condition("already researched $tech") { FTTBot.self.hasResearched(tech) },
+                MSequence("research",
+                        ensureUnitDependencies(listOf(tech.requiredUnit())),
+                        Sequence(
+                                Fallback(ReserveResources(tech.mineralPrice(), tech.gasPrice()), Sleep),
+                                Await("can research $tech") { FTTBot.self.canResearch(tech) }
+                        ),
+                        Inline("find researcher for $tech") {
+                            researcher = selectResearcher(researcher, tech)
+                                    ?: return@Inline NodeStatus.RUNNING
+                            NodeStatus.SUCCEEDED
+                        },
+                        Delegate { ReserveUnit(researcher!!) },
+                        Delegate { ResearchCommand(researcher as ResearchingFacility, tech) }
+                )
         )
     }
 

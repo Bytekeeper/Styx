@@ -31,18 +31,35 @@ object ZvP {
 
     fun _massZergling(): Node = MParallel(1000,
             _10Hatch(),
-            MParallel(1000,
-                    Strategies.considerExpansion(),
-                    MSequence("massZerg",
-                            Repeat(6, Delegate { train(UnitType.Zerg_Zergling) }),
-                            Delegate { build(UnitType.Zerg_Hatchery) },
-                            Repeat(child = MSequence("tillDawn",
-                                    Strategies.buildWorkers(),
-                                    Repeat(2, Delegate { train(UnitType.Zerg_Zergling) })
-                            )
-                            )
+            Strategies.considerExpansion(),
+            MSequence("massZerg",
+                    Repeat(6, Delegate { train(UnitType.Zerg_Zergling) }),
+                    Delegate { build(UnitType.Zerg_Hatchery) },
+                    Repeat(child = MSequence("tillDawn",
+                            Strategies.buildWorkers(),
+                            Repeat(2, Delegate { train(UnitType.Zerg_Zergling) })
+                    )
                     )
             )
+    )
+
+    fun lurkers(): Node = MParallel(1000,
+            _10Hatch(),
+            Strategies.considerExpansion(),
+            Repeat(6, Delegate { train(UnitType.Zerg_Zergling) }),
+            Strategies.buildWorkers(),
+            train(UnitType.Zerg_Hydralisk),
+            train(UnitType.Zerg_Hydralisk),
+            train(UnitType.Zerg_Hydralisk),
+            train(UnitType.Zerg_Hydralisk),
+            train(UnitType.Zerg_Lurker),
+            train(UnitType.Zerg_Lurker),
+            train(UnitType.Zerg_Lurker),
+            train(UnitType.Zerg_Lurker),
+            Repeat(child = MParallel(2,
+                    train(UnitType.Zerg_Hydralisk),
+                    train(UnitType.Zerg_Lurker)
+            ))
     )
 
     fun xx(): Node = MParallel(1000,

@@ -11,10 +11,15 @@ import org.openbw.bwapi4j.unit.Worker
 
 object Strategies {
     fun buildWorkers() =
-            Fallback(Production.trainWorker() onlyIf Condition("should build workers") {
-                UnitQuery.myUnits.count { it is Worker && !it.isCompleted || it is Egg && it.buildType.isWorker } <
-                        Info.myBases.count { it is PlayerUnit && it.isCompleted }
-            }, Sleep)
+            Fallback(
+                    Sequence(
+                            Condition("should build workers") {
+                                UnitQuery.myUnits.count { it is Worker && !it.isCompleted || it is Egg && it.buildType.isWorker } <
+                                        Info.myBases.count { it is PlayerUnit && it.isCompleted }
+                            },
+                            Production.trainWorker(),
+                            Fail)
+                    , Sleep)
 
     fun gasTrick() = MSequence("gasTrick",
             Production.buildGas(),

@@ -183,6 +183,7 @@ class MParallel(val m: Int, vararg val children: Node) : Node {
         succeeded = 0
         failed = 0
         children.forEach { it.parentFinished() }
+        activeChildren = children.toList()
     }
 
     override fun toString(): String = "MParallel($m, ${activeChildren.joinToString(", ")})"
