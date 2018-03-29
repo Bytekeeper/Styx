@@ -6,8 +6,13 @@ import org.openbw.bwapi4j.unit.PlayerUnit
 
 object Info {
     val myBases: List<Base> by LazyOnFrame {
-        UnitQuery.myUnits
-                .filterIsInstance(Base::class.java)
-                .filter { base -> FTTBot.bwem.bases.any { it.location.getDistance((base as PlayerUnit).tilePosition) <= 2 } }
+        FTTBot.bwem.bases.mapNotNull { base ->
+            val myClosestBase = UnitQuery.myBases.minBy { it.tilePosition.getDistance(base.location) }
+                    ?: return@mapNotNull null
+            if (myClosestBase.tilePosition.getDistance(base.location) > 5)
+                null
+            else
+                myClosestBase as Base
+        }
     }
 }

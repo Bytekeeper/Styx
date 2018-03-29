@@ -2,6 +2,7 @@ package org.fttbot.strategies
 
 import org.fttbot.*
 import org.fttbot.info.UnitQuery
+import org.fttbot.info.isReadyForResources
 import org.fttbot.task.Macro
 import org.fttbot.task.Production
 import org.fttbot.task.Production.cancelGas
@@ -15,7 +16,11 @@ object Strategies {
                     Sequence(
                             Condition("should build workers") {
                                 UnitQuery.myUnits.count { it is Worker && !it.isCompleted || it is Egg && it.buildType.isWorker } <
-                                        Info.myBases.count { it is PlayerUnit && it.isCompleted }
+                                        Info.myBases.count {
+                                            it as PlayerUnit
+                                            it.isReadyForResources &&
+                                                    (2 * UnitQuery.minerals.count { m -> m.getDistance(it.position) < 300 } - UnitQuery.myWorkers.count { w -> w.getDistance(it.position) < 300 }) > 0
+                                        }
                             },
                             Production.trainWorker(),
                             Fail)

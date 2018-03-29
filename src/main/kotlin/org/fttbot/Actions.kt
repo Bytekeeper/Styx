@@ -2,7 +2,6 @@ package org.fttbot
 
 import org.apache.logging.log4j.LogManager
 import org.fttbot.info.UnitQuery
-import org.fttbot.info.UnitQuery.minerals
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.TechType
@@ -59,19 +58,13 @@ class ResearchCommand(researcher: ResearchingFacility, tech: TechType) : Order<R
 
 class UpgradeCommand(researcher: ResearchingFacility, upgrade: UpgradeType) : Order<ResearchingFacility>(researcher, { upgrade(upgrade) })
 class Attack(unit: PlayerUnit, target: Unit) : Order<PlayerUnit>(unit, { (this as Attacker).attack(target) })
+class BurrowCommand(unit: PlayerUnit) : Order<PlayerUnit>(unit, { (this as Burrowable).burrow() })
+class UnburrowCommand(unit: PlayerUnit) : Order<PlayerUnit>(unit, { (this as Burrowable).unburrow() })
 class GatherMinerals(worker: Worker, mineralPatch: MineralPatch) : Order<Worker>(worker, { gather(mineralPatch) })
 class GatherGas(worker: Worker, gasPatch: GasMiningFacility) : Order<Worker>(worker, { gather(gasPatch) })
 class Repair(worker: SCV, target: Mechanical) : Order<SCV>(worker, { repair(target) })
 class Heal(medic: Medic, target: Organic) : Order<Medic>(medic, { healing(target as PlayerUnit) })
 
-
-class ArriveAt(val unit: MobileUnit, val position: Position, val tolerance: Int = 32) : Node {
-    override fun tick(): NodeStatus {
-        if (unit.getDistance(position) <= tolerance)
-            return NodeStatus.SUCCEEDED
-        return NodeStatus.RUNNING
-    }
-}
 
 class ReserveUnit(val unit: PlayerUnit) : Node {
     override fun tick(): NodeStatus {
@@ -87,9 +80,11 @@ class ReserveUnit(val unit: PlayerUnit) : Node {
 
 class ReserveResources(val minerals: Int, val gas: Int = 0) : Node {
     override fun tick(): NodeStatus {
-        Board.resources.reserve(minerals, gas)
-        if (Board.resources.enoughMineralsAndGas()) return NodeStatus.SUCCEEDED
-        return NodeStatus.FAILED
+        val availableResources = Board.resources
+        availableResources.reserve(minerals, gas)
+        if (minerals > 0 && availableResources.minerals < 0) return NodeStatus.FAILED
+        if (gas > 0 && availableResources.gas < 0) return NodeStatus.FAILED
+        return NodeStatus.SUCCEEDED
     }
 }
 
@@ -114,13 +109,39 @@ object Actions {
 
     fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node {
         // TODO: "Search" for a way
-        return Fallback(
-                Condition("Reached $position with $unit") { hasReached(unit, position, tolerance)},
-                MSequence("Order $unit to $position",
-                        MoveCommand(unit, position),
-                        Sleep
-                )
+        return MaxTries("$unit -> $position", 24 * 60,
+                Fallback(
+                        Condition("Reached $position with $unit") { hasReached(unit, position, tolerance) },
+                        MSequence("Order $unit to $position",
+                                makeMobile(unit),
+                                MoveCommand(unit, position),
+                                CheckIsClosingIn(unit, position)
+                        )
+                ))
+    }
+
+    private fun CheckIsClosingIn(unit: MobileUnit, position: Position): Repeat {
+        return Repeat(child = Sequence(
+                Delegate {
+                    val distance = unit.getDistance(position)
+                    val frame = FTTBot.frameCount
+                    Inline("Closing in?") {
+                        if (FTTBot.frameCount - frame > 10 * 24)
+                            NodeStatus.FAILED
+                        else if (unit.getDistance(position) < distance)
+                            NodeStatus.SUCCEEDED
+                        else
+                            NodeStatus.RUNNING
+                    }
+                }
+        )
         )
     }
 
+    private fun makeMobile(unit: MobileUnit): Fallback {
+        return Fallback(
+                Condition("$unit not burrowed") { unit !is Burrowable || !unit.isBurrowed },
+                Delegate { UnburrowCommand(unit) }
+        )
+    }
 }

@@ -10,6 +10,7 @@ import org.fttbot.info.*
 import org.fttbot.strategies.ZvP
 import org.fttbot.task.BoSearch
 import org.fttbot.task.Combat
+import org.fttbot.task.Combat.attacking
 import org.fttbot.task.GatherResources
 import org.fttbot.task.Scouting.scout
 import org.openbw.bwapi4j.*
@@ -84,9 +85,15 @@ object FTTBot : BWEventListener {
             else -> throw IllegalStateException("Can't handle race ${racePlayed}")
         }
 
-        buildQueue = MSequence("buildQueue",
+        buildQueue = Fallback(
+                MSequence("buildQueue",
 //                ZvP._massZergling()
-                ZvP.lurkers()
+                ZvP._2HatchMuta(),
+                        Inline("Crap Check") {
+                            NodeStatus.SUCCEEDED
+                        }
+                )
+
         )
         bot = Parallel(100, buildQueue,
 //                Delegate {
@@ -94,27 +101,7 @@ object FTTBot : BWEventListener {
 //                            UnitQuery.enemyUnits)
 //                },
                 scout(),
-                Fallback(
-                        Sequence(
-                                Condition("could still combat") {
-                                    val myUnits = UnitQuery.myMobileCombatUnits
-                                            .map { SimUnit.of(it) }
-                                    val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Attacker }
-                                            .map { SimUnit.of(it) }
-                                    val eval = CombatEval.probabilityToWin(myUnits, enemies)
-                                    eval > 0.45
-                                },
-                                Delegate {
-                                    Combat.attack(UnitQuery.myMobileCombatUnits, UnitQuery.enemyUnits)
-                                }
-                        ) onlyIf Condition("could win combat") {
-                            val myUnits = UnitQuery.myMobileCombatUnits
-                                    .map { SimUnit.of(it) }
-                            val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Attacker }
-                                    .map { SimUnit.of(it) }
-                            val eval = CombatEval.probabilityToWin(myUnits, enemies)
-                            eval > 0.55
-                        }, Sleep),
+                attacking(),
 //                Fallback(Sequence(
 //                        Sleep(24),
 //                        Delegate {
@@ -154,8 +141,7 @@ object FTTBot : BWEventListener {
         }
         bwem.neutralData.minerals.filter { mineral -> bwem.areas.none { area -> area.minerals.contains(mineral) } }
                 .forEach {
-                    val pos = it.bottomRight.add(it.topLeft).div(2)
-                    game.mapDrawer.drawTextMap(pos.toPosition(), "${it.unit.position}")
+                    game.mapDrawer.drawTextMap(it.center, "ua")
                 }
     }
 

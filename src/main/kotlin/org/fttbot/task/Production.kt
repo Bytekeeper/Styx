@@ -4,6 +4,7 @@ import org.fttbot.*
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.findWorker
 import org.fttbot.info.isMyUnit
+import org.fttbot.info.isReadyForResources
 import org.fttbot.search.MCTS
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
@@ -27,6 +28,8 @@ class AwaitConstructionStart(val worker: Worker, val type: UnitType, val at: Til
                     ?: return NodeStatus.RUNNING
             if (candidate.isA(type))
                 return NodeStatus.SUCCEEDED
+            return NodeStatus.FAILED
+        } else if (!worker.exists()) {
             return NodeStatus.FAILED
         }
         if (worker.buildType != UnitType.None) {
@@ -113,12 +116,12 @@ object Production {
                         Inline("find build location and builder") {
                             targetPosition = targetPosition ?: ConstructionPosition.findPositionFor(type, at()?.toPosition()) ?: ConstructionPosition.findPositionFor(type)
                                     ?: return@Inline NodeStatus.FAILED
-                            builder = if (builder != null && Board.resources.units.contains(builder!!)) builder else
+                            builder = (if (builder != null && Board.resources.units.contains(builder!!)) builder else
                                 if (type.whatBuilds().first.isWorker)
                                     findWorker(targetPosition!!.toPosition(), 10000.0)
                                 else
                                     Board.resources.units.firstOrNull { it.isA(type.whatBuilds().first) && it is Building && it.remainingBuildTime == 0 }
-                                            ?: return@Inline NodeStatus.RUNNING
+                                    ) ?: return@Inline NodeStatus.RUNNING
                             NodeStatus.SUCCEEDED
                         }
                 ),
@@ -225,7 +228,7 @@ object Production {
     fun ensureSupply(supplyDemand: Int): Fallback {
         return Fallback(
                 ReserveSupply(supplyDemand),
-                Condition("enough supply pending") { enoughSupplyInConstruction() },
+                Sequence(Condition("enough supply pending") { enoughSupplyInConstruction() }, Sleep),
                 Delegate { buildOrTrainSupply() }
         )
     }
@@ -313,7 +316,7 @@ object Production {
     fun cancelGas() = cancel(FTTConfig.GAS_BUILDING)
 
     fun bestPositionForNewWorker(): TilePosition =
-            (Info.myBases.filter { (it as PlayerUnit).isCompleted }.minBy {
+            (Info.myBases.filter { it.isReadyForResources }.minBy {
                 it as PlayerUnit
                 it.getUnitsInRadius(300, UnitQuery.myWorkers).size
             } as PlayerUnit).tilePosition

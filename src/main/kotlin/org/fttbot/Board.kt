@@ -56,7 +56,6 @@ class Resources {
         this._units.addAll(units)
     }
 
-    fun enoughMineralsAndGas(): Boolean = minerals >= 0 && gas >= 0
     fun enough(): Boolean = minerals >= 0 && gas >= 0 && supply >= 0
 }
 

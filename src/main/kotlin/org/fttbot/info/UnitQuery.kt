@@ -24,6 +24,7 @@ fun WeaponType.inRange(distance: Int, safety: Int): Boolean =
 
 fun <T : Unit> List<T>.inRadius(other: Unit, maxRadius: Int) = filter { other.getDistance(it) < maxRadius }
 fun <T : Unit> List<T>.inRadius(position: Position, maxRadius: Int) = filter { it.getDistance(position) < maxRadius }
+val Base.isReadyForResources get() = (this as PlayerUnit).isCompleted || this is Lair
 
 // From https://docs.google.com/spreadsheets/d/1bsvPvFil-kpvEUfSG74U3E5PLSTC02JxSkiR8QdLMuw/edit#gid=0 resp. PurpleWave
 val Attacker.stopFrames
@@ -119,7 +120,7 @@ object UnitQuery {
 
     fun update(allUnits: Collection<Unit>) {
         this.allUnits = allUnits.filter { it.isVisible }
-        ownedUnits = allUnits.filterIsInstance(PlayerUnit::class.java)
+        ownedUnits = this.allUnits.filterIsInstance(PlayerUnit::class.java)
         myUnits = ownedUnits.filter { it.player == FTTBot.self }
         enemyUnits = ownedUnits.filter { it.player == FTTBot.enemy }
         myWorkers = myUnits.filterIsInstance(Worker::class.java).filter { it.isCompleted }

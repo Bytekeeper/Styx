@@ -3,8 +3,11 @@ package org.fttbot.task
 import bwem.ChokePoint
 import org.fttbot.*
 import org.fttbot.Actions.reach
+import org.fttbot.estimation.CombatEval
 import org.fttbot.estimation.SimUnit
+import org.fttbot.info.EnemyState
 import org.fttbot.info.UnitQuery
+import org.fttbot.info.canAttack
 import org.fttbot.info.inRadius
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.WalkPosition
@@ -13,7 +16,7 @@ import kotlin.math.max
 
 object Combat {
     fun attack(units: List<PlayerUnit>, targets: List<PlayerUnit>): Node {
-        return Sequence(DispatchParallel({ units }, "attack") { unit ->
+        return Sequence(DispatchParallel({ units.filterIsInstance(MobileUnit::class.java) }, "attack") { unit ->
             val simUnit = SimUnit.of(unit)
             var bestTarget: PlayerUnit? = null
 
@@ -30,10 +33,26 @@ object Combat {
                         else
                             NodeStatus.SUCCEEDED
                     },
-                    Delegate { Attack(unit, bestTarget!!) }
+                    Delegate { attack(unit, bestTarget!!) }
             )
         }, Sleep)
     }
+
+    fun attack(unit: MobileUnit, target: PlayerUnit) = Sequence(
+            Condition("$target exists?") { target.exists() || EnemyState.seenUnits.contains(target)},
+            Fallback(
+                    Condition("Can I see you?") { target.isVisible },
+                    Delegate { reach(unit, target.lastKnownPosition, 100) }
+            ),
+            Fallback(
+                    Sequence(
+                            Condition("$unit is Lurker") { unit is Lurker && unit.canAttack(target) }, Delegate { BurrowCommand(unit) }
+                    ),
+                    Delegate {
+                        Attack(unit, target)
+                    }
+            )
+    )
 
     fun moveToStandOffPosition(units: List<MobileUnit>, targetPosition: Position): Node {
         if (units.isEmpty()) return Success
@@ -95,5 +114,30 @@ object Combat {
         return bestCP.value
     }
 
+    fun attacking(): Node = Fallback(
+            MSequence("Test combat",
+                    Sleep(24),
+                    Condition("could still combat") {
+                        val myUnits = UnitQuery.myMobileCombatUnits
+                                .map { SimUnit.of(it) }
+                        val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Attacker }
+                                .map { SimUnit.of(it) }
+                        val eval = CombatEval.probabilityToWin(myUnits, enemies)
+                        eval > 0.55
+                    },
+                    Sequence(
+                            Condition("could win combat") {
+                                val myUnits = UnitQuery.myMobileCombatUnits
+                                        .map { SimUnit.of(it) }
+                                val enemies = UnitQuery.enemyUnits.filter { it !is Worker && it is Attacker }
+                                        .map { SimUnit.of(it) }
+                                val eval = CombatEval.probabilityToWin(myUnits, enemies)
+                                eval > 0.45
+                            },
+                            Delegate {
+                                Combat.attack(UnitQuery.myMobileCombatUnits, UnitQuery.enemyUnits)
+                            }
+                    )
+            ), Sleep)
 
 }

@@ -2,8 +2,9 @@ package org.fttbot.task
 
 import bwapi4j.org.apache.commons.lang3.mutable.MutableInt
 import org.fttbot.*
+import org.fttbot.info.UnitQuery
 import org.fttbot.task.Production.build
-import org.openbw.bwapi4j.Position
+import org.fttbot.task.Production.buildGas
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.unit.PlayerUnit
 
@@ -30,7 +31,7 @@ object Macro {
         var expansionPosition: TilePosition? = null
         return Sequence(
                 Inline("Find location to expand") {
-                    expansionPosition = expansionPosition ?: findBestExpansionPosition() ?: return@Inline NodeStatus.FAILED
+                    expansionPosition = findBestExpansionPosition() ?: return@Inline NodeStatus.FAILED
                     NodeStatus.SUCCEEDED
                 },
                 Delegate {
@@ -40,4 +41,17 @@ object Macro {
                 }
         )
     }
+
+    fun considerGas(): Node = Fallback(
+            Sequence(
+                    Condition("Not enough gas mines?") {
+                        (Board.pendingUnits.sumBy { it.gasPrice() } > 0 ||
+                                Board.resources.gas < 0) && (FTTBot.self.minerals() / 3 > FTTBot.self.gas())
+                                && Info.myBases.any { base -> base as PlayerUnit; UnitQuery.geysers.any { it.getDistance(base) < 300 } }
+                    },
+                    Delegate {
+                        buildGas()
+                    }),
+            Sleep
+    )
 }

@@ -62,6 +62,35 @@ class Delegate(val subtreeProducer: () -> Node) : Node {
 
 }
 
+class MaxTries(val name: String, var maxTries: Int = Int.MAX_VALUE, child: Node) : Decorator(child) {
+    private var remaining = maxTries
+    override fun tick(): NodeStatus {
+        if (remaining <= 0) {
+            return NodeStatus.FAILED
+        }
+        val childResult = super.tick()
+        return when (childResult) {
+            NodeStatus.SUCCEEDED -> NodeStatus.SUCCEEDED
+            NodeStatus.FAILED -> NodeStatus.FAILED
+            NodeStatus.RUNNING -> {
+                remaining--
+                if (remaining == 0) {
+                    NodeStatus.FAILED
+                } else
+                    NodeStatus.RUNNING
+            }
+        }
+    }
+
+    override fun parentFinished() {
+        remaining = maxTries
+        super.parentFinished()
+    }
+
+    override fun toString(): String = "Trying $name ($remaining ticks rem)"
+}
+
+
 class Await(val name: String, var toWait: Int = Int.MAX_VALUE, val condition: () -> Boolean) : Node {
     private var remaining = toWait
     override fun tick(): NodeStatus {
@@ -384,6 +413,7 @@ class MSequence(val name: String, vararg val children: Node) : Node {
             }
             childIndex++
         }
+        parentFinished()
         return NodeStatus.SUCCEEDED
     }
 
