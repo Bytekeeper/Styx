@@ -33,7 +33,9 @@ class Resources {
     }
 
     fun isAvailable(mineralPrice: Int, gasPrice: Int, supply: Int = 0): Boolean =
-            mineralPrice <= minerals && gasPrice <= gas && (supply == 0 || supply <= this.supply)
+            (mineralPrice == 0 || mineralPrice <= minerals) &&
+                    (gasPrice == 0 || gasPrice <= gas) &&
+                    (supply == 0 || supply <= this.supply)
 
     fun reserve(minerals: Int = 0, gas: Int = 0, supply: Int = 0): Resources {
         this.minerals -= minerals

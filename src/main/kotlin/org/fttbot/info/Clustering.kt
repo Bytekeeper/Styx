@@ -2,27 +2,28 @@ package org.fttbot.info
 
 import org.fttbot.div
 import org.openbw.bwapi4j.Position
-import org.openbw.bwapi4j.unit.MobileUnit
-import org.openbw.bwapi4j.unit.PlayerUnit
+import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
-import org.openbw.bwapi4j.unit.Worker
 
-class Cluster<U : Unit>(var position: Position, internal val units: MutableSet<U>, internal var aggPosition: Position = Position(0,0), internal var lastUnitCount: Int = 1) {
+class Cluster<U : Unit>(var position: Position, internal val units: MutableSet<U>, private var aggPosition: Position = Position(0,0), internal var lastUnitCount: Int = 1) {
     companion object {
         var mobileCombatUnits: List<Cluster<MobileUnit>> = emptyList()
+        var myClusters: List<Cluster<PlayerUnit>> = emptyList()
         var enemyClusters: List<Cluster<PlayerUnit>> = emptyList()
 
         fun getClusterOf(unit: PlayerUnit) = mobileCombatUnits.firstOrNull { it.units.contains(unit) }
 
         fun step() {
-            mobileCombatUnits = buildClusters(UnitQuery.myUnits.filterIsInstance(MobileUnit::class.java).filter { it.isCompleted && it !is Worker })
-            enemyClusters = buildClusters(UnitQuery.enemyUnits + EnemyState.seenUnits)
+            mobileCombatUnits = buildClusters(UnitQuery.myUnits.filterIsInstance(MobileUnit::class.java)
+                    .filter { it.isCompleted && it !is Worker && it is Attacker})
+            myClusters = buildClusters(UnitQuery.myUnits)
+            enemyClusters = buildClusters(UnitQuery.enemyUnits + EnemyInfo.seenUnits)
         }
 
         private fun <U : Unit> buildClusters(relevantUnits: List<U>): List<Cluster<U>> {
             val clusters: MutableList<Cluster<U>> = ArrayList()
             val clusterUnits = relevantUnits.map { unit ->
-                val cluster = clusters.filter { it.position.getDistance(unit.position) < 300 }
+                val cluster = clusters.filter { it.position.getDistance(unit.position) < 400 }
                         .maxBy { it.units.size }
                 if (cluster != null) {
                     cluster.units += unit
@@ -34,7 +35,7 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableSet<U
                     UnitInCluster(newCluster, unit)
                 }
             }
-            var maxTries = 10
+            var maxTries = 3
             do {
                 clusters.forEach {
                     val size = it.units.size

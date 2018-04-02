@@ -1,18 +1,18 @@
 package org.fttbot.task
 
 import org.fttbot.*
+import org.fttbot.info.MyInfo
 import org.fttbot.info.UnitQuery
-import org.fttbot.info.UnitQuery.minerals
-import org.fttbot.info.inRadius
 import org.fttbot.info.isMyUnit
 import org.openbw.bwapi4j.unit.*
+import kotlin.math.max
 
 const val RESOURCE_RANGE = 300
 
-object GatherResources : Node {
+object GatherResources : BaseNode<Any>() {
     override fun tick(): NodeStatus {
         val available = Board.resources
-        val myBases = Info.myBases.filterIsInstance(PlayerUnit::class.java).filter { it.isCompleted }
+        val myBases = MyInfo.myBases.filterIsInstance(PlayerUnit::class.java).filter { it.isCompleted }
         val units = available.units
 
         val workerUnits = myBases.flatMap { base ->
@@ -22,7 +22,7 @@ object GatherResources : Node {
             val workersToAssign = remainingWorkers.toMutableList()
             val minerals = relevantUnits.filterIsInstance(MineralPatch::class.java).toMutableList()
 
-            val gasMissing = refineries.size * 3 - workersToAssign.count { it.isGatheringGas }
+            val gasMissing = refineries.size * 3 - workersToAssign.count { it.isGatheringGas } - max(0, 3 - workersToAssign.count())
             if (gasMissing > 0) {
                 val refinery = refineries.first()
                 repeat(gasMissing) {

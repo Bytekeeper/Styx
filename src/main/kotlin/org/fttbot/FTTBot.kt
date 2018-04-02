@@ -3,22 +3,22 @@ package org.fttbot
 import bwem.BWEM
 import bwem.map.Map
 import bwta.BWTA
+import org.apache.logging.log4j.LogManager
 import org.fttbot.estimation.BOPrediction
-import org.fttbot.estimation.CombatEval
-import org.fttbot.estimation.SimUnit
 import org.fttbot.info.*
 import org.fttbot.strategies.ZvP
 import org.fttbot.task.BoSearch
-import org.fttbot.task.Combat
 import org.fttbot.task.Combat.attacking
+import org.fttbot.task.Combat.defending
 import org.fttbot.task.GatherResources
+import org.fttbot.task.Macro.moveSurplusWorkers
+import org.fttbot.task.Macro.preventSupplyBlock
 import org.fttbot.task.Scouting.scout
 import org.openbw.bwapi4j.*
+import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.Race
-import org.openbw.bwapi4j.unit.Attacker
 import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Unit
-import org.openbw.bwapi4j.unit.Worker
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
 import java.util.logging.Level
@@ -26,7 +26,7 @@ import java.util.logging.Logger
 
 object FTTBot : BWEventListener {
 
-    private val LOG = Logger.getLogger(this::class.java.simpleName)
+    private val LOG = LogManager.getLogger()
     private lateinit var bwtaInitializer: Future<BWTA>
     private lateinit var bwemInitializer: Future<BWEM>
     val game = BW(this)
@@ -46,9 +46,9 @@ object FTTBot : BWEventListener {
 
 //    private val combatManager = BehaviorTree(AttackEnemyBase())
 
-    private lateinit var bot: Node
+    private lateinit var bot: Node<Any, Any>
 
-    private lateinit var buildQueue: Node
+    private lateinit var buildQueue: Node<Any, Any>
 
     fun start() {
         game.startGame()
@@ -88,20 +88,22 @@ object FTTBot : BWEventListener {
         buildQueue = Fallback(
                 MSequence("buildQueue",
 //                ZvP._massZergling()
-                ZvP._2HatchMuta(),
+                        ZvP._2HatchMuta(),
                         Inline("Crap Check") {
                             NodeStatus.SUCCEEDED
                         }
                 )
 
         )
-        bot = Parallel(100, buildQueue,
+        bot = Fallback(
+                Parallel(100,
 //                Delegate {
 //                    Combat.attack(UnitQuery.myUnits.filter { it is MobileUnit && it !is Worker && it is Attacker },
 //                            UnitQuery.enemyUnits)
 //                },
-                scout(),
-                attacking(),
+                        buildQueue,
+                        NoFail(scout()),
+                        NoFail(defending()),
 //                Fallback(Sequence(
 //                        Sleep(24),
 //                        Delegate {
@@ -110,15 +112,24 @@ object FTTBot : BWEventListener {
 //                        }
 //                ), Sleep),
 //                        MSequence("",
-//                                Condition { !EnemyState.enemyBases.isEmpty() },
+//                                Condition { !EnemyInfo.enemyBases.isEmpty() },
 //
 //                                MDelegate
 //                                {
 //                                    Combat.moveToStandOffPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
-//                                            EnemyState.enemyBases[0].position)
+//                                            EnemyInfo.enemyBases[0].position)
 //                                })
 //                ),
-                Sequence(GatherResources, Sleep))
+                        NoFail(attacking()),
+                        NoFail(preventSupplyBlock()),
+                        NoFail(moveSurplusWorkers()),
+                        NoFail(Sequence(GatherResources, Sleep))
+                ),
+                Inline("This shouldn't have happened") {
+                    LOG.error("Main loop failed!")
+                    NodeStatus.SUCCEEDED
+                }
+        )
         UnitQuery.update(emptyList())
     }
 
@@ -132,7 +143,7 @@ object FTTBot : BWEventListener {
         if (game.interactionHandler.frameCount % latency_frames == 0) {
             UnitQuery.update(game.allUnits)
 //        Exporter.export()
-            EnemyState.step()
+            EnemyInfo.step()
             Cluster.step()
             ClusterUnitInfo.step()
 
@@ -143,11 +154,17 @@ object FTTBot : BWEventListener {
                 .forEach {
                     game.mapDrawer.drawTextMap(it.center, "ua")
                 }
+        UnitQuery.myWorkers.forEach {
+            game.mapDrawer.drawTextMap(it.position, "${it.id}(${it.lastCommand})")
+            if (it.targetPosition != null) {
+                game.mapDrawer.drawLineMap(it.position, it.targetPosition, Color.BLUE)
+            }
+        }
     }
 
     override fun onUnitDestroy(unit: Unit) {
         if (unit !is PlayerUnit) return
-        EnemyState.onUnitDestroy(unit)
+        EnemyInfo.onUnitDestroy(unit)
         BoSearch.onUnitDestroy(unit)
     }
 
@@ -167,18 +184,18 @@ object FTTBot : BWEventListener {
     override fun onUnitShow(unit: Unit) {
         if (unit is PlayerUnit && unit.isEnemyUnit) {
             BOPrediction.onSeenUnit(unit)
-            EnemyState.onUnitShow(unit)
+            EnemyInfo.onUnitShow(unit)
         }
     }
 
     override fun onUnitHide(unit: Unit) {
-        if (unit is PlayerUnit && unit.isEnemyUnit) EnemyState.onUnitHide(unit)
+        if (unit is PlayerUnit && unit.isEnemyUnit) EnemyInfo.onUnitHide(unit)
     }
 
     override fun onUnitRenegade(unit: Unit?) {
         // Unit changed owner
         if (unit is PlayerUnit) {
-            EnemyState.onUnitRenegade(unit)
+            EnemyInfo.onUnitRenegade(unit)
             BoSearch.onUnitRenegade(unit)
         }
     }
@@ -211,7 +228,7 @@ object FTTBot : BWEventListener {
         ProcessHelper.killChaosLauncherProcess()
         println()
         println("Exiting...")
-        System.exit(0)
+//        System.exit(0)
     }
 }
 

@@ -82,7 +82,7 @@ fun PlayerUnit.canAttack(target: Unit, safety: Int = 0): Boolean {
 }
 
 fun Unit.potentialAttackers(safety: Int = 16): List<PlayerUnit> =
-        (UnitQuery.allUnits().inRadius(position, 300).filterIsInstance(PlayerUnit::class.java) + EnemyState.seenUnits.filter { it.getDistance(this) < 300 })
+        (UnitQuery.allUnits().inRadius(position, 300).filterIsInstance(PlayerUnit::class.java) + EnemyInfo.seenUnits.filter { it.getDistance(this) < 300 })
                 .filter {
                     it.isEnemyUnit && it.canAttack(this, safety + (((it as? MobileUnit)?.topSpeed
                             ?: 0.0) * MAX_FRAMES_TO_ATTACK).toInt())
@@ -116,17 +116,18 @@ object UnitQuery {
     lateinit var myUnits: List<PlayerUnit> private set
     lateinit var ownedUnits: List<PlayerUnit> private set
     lateinit var enemyUnits: List<PlayerUnit> private set
-    lateinit var myWorkers: List<PlayerUnit> private set
+    lateinit var myWorkers: List<Worker> private set
+    lateinit var minerals : List<MineralPatch> private set
 
     fun update(allUnits: Collection<Unit>) {
         this.allUnits = allUnits.filter { it.isVisible }
+        minerals = allUnits.filterIsInstance(MineralPatch::class.java)
         ownedUnits = this.allUnits.filterIsInstance(PlayerUnit::class.java)
         myUnits = ownedUnits.filter { it.player == FTTBot.self }
         enemyUnits = ownedUnits.filter { it.player == FTTBot.enemy }
         myWorkers = myUnits.filterIsInstance(Worker::class.java).filter { it.isCompleted }
     }
 
-    val minerals get() = allUnits.filterIsInstance(MineralPatch::class.java)
     val geysers get() = allUnits.filter { it is VespeneGeyser }
     val myBases get() = myUnits.filter { it is Base }
     val myMobileCombatUnits by LazyOnFrame {

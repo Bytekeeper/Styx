@@ -2,10 +2,10 @@ package org.fttbot
 
 fun main(args: Array<String>) {
     // Kill previous Starcraft.exe process
-    ProcessHelper.killStarcraftProcess()
+//    ProcessHelper.killStarcraftProcess()
 
     // Kill previous Chaoslauncher.exe process
-    ProcessHelper.killChaosLauncherProcess()
+//    ProcessHelper.killChaosLauncherProcess()
 
     // Autostart Chaoslauncher
     // Combined with Chaoslauncher -> Settings -> Run Starcraft on Startup

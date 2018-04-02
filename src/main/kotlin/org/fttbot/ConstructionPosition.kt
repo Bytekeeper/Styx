@@ -3,6 +3,7 @@ package org.fttbot
 import com.badlogic.gdx.math.ConvexHull
 import com.badlogic.gdx.math.Polygon
 import com.badlogic.gdx.math.Rectangle
+import org.fttbot.info.MyInfo
 import org.fttbot.info.UnitQuery
 import org.fttbot.task.RESOURCE_RANGE
 import org.openbw.bwapi4j.Position
@@ -21,7 +22,7 @@ object ConstructionPosition {
         }
 
         val target = if (near != null) near.toTilePosition() else
-            if (!Info.myBases.isEmpty()) (Info.myBases[0] as Unit).tilePosition
+            if (!MyInfo.myBases.isEmpty()) (MyInfo.myBases[0] as Unit).tilePosition
             else return null
         var bestBuildPosition: TilePosition? = null
         var bestDistance: Int = Int.MAX_VALUE

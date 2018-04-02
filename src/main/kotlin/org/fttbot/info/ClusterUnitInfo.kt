@@ -20,12 +20,12 @@ object ClusterUnitInfo {
 class ClusterInfo(private val cluster: Cluster<*>) {
     val unitsInArea by lazy {
         (UnitQuery.inRadius(cluster.position, 600) +
-                EnemyState.seenUnits.filter { it.getDistance(cluster.position) < 600 })
+                EnemyInfo.seenUnits.filter { it.getDistance(cluster.position) < 600 })
                 .filter { it is PlayerUnit && (it is Attacker || it is Bunker) && it.isCompleted }
                 .map { it as PlayerUnit }
     }
 
-    val combatRelevantUnits by lazy { unitsInArea.filter { it.getDistance(forceCenter) < 300 } }
+    val combatRelevantUnits by lazy { unitsInArea.filter { it.getDistance(forceCenter) < 400 } }
 
     val forceCenter by lazy {
         unitsInArea.fold(Position(0, 0)) { a, u -> a + u.position } / unitsInArea.size

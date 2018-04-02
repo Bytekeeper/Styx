@@ -2,6 +2,7 @@ package org.fttbot
 
 import org.apache.logging.log4j.LogManager
 import org.fttbot.info.UnitQuery
+import org.fttbot.info.canAttack
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.TechType
@@ -10,7 +11,7 @@ import org.openbw.bwapi4j.type.UpgradeType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 
-open class Order<E : kotlin.Any>(val unit: E, val order: E.() -> Boolean, val toleranceFrames: Int = 30) : Node {
+open class Order<E : kotlin.Any>(val unit: E, val order: E.() -> Boolean, val toleranceFrames: Int = 30) : BaseNode<Any>() {
     var orderFrame: Int = -1
 
     override fun tick(): NodeStatus {
@@ -18,24 +19,29 @@ open class Order<E : kotlin.Any>(val unit: E, val order: E.() -> Boolean, val to
             orderFrame = FTTBot.frameCount
         }
         if (FTTBot.frameCount - orderFrame > toleranceFrames) {
-            orderFrame = -1
             return NodeStatus.FAILED
         }
         if (order(unit)) {
-            orderFrame = -1
             return NodeStatus.SUCCEEDED
         }
         return NodeStatus.RUNNING
     }
 
+    override fun parentFinished() {
+        orderFrame = -1
+        super.parentFinished()
+    }
 }
 
 class MoveCommand(unit: MobileUnit, position: Position) : Order<MobileUnit>(unit, { move(position) })
 class BuildCommand(worker: Worker, position: TilePosition, building: UnitType) : Order<Worker>(worker, {
     require(building.gasPrice() <= FTTBot.self.gas())
     require(building.mineralPrice() <= FTTBot.self.minerals())
-    if (building.supplyProvided() == 0 && UnitQuery.myUnits.any { it.isA(building) }) {
+    if (building.supplyProvided() == 0 && UnitQuery.myUnits.any { it.isA(building) } && !building.isRefinery && !building.isResourceDepot) {
         LogManager.getLogger().warn("Building another {}", building)
+    }
+    if (Board.resources.minerals < 0) {
+        LogManager.getLogger().warn("Why would you even do that?")
     }
     build(position, building)
 })
@@ -46,6 +52,9 @@ class MorphCommand(morphable: Morphable, unit: UnitType) : Order<Morphable>(morp
     require(unit.gasPrice() <= FTTBot.self.gas())
     require(unit.mineralPrice() <= FTTBot.self.minerals())
     require(unit.supplyRequired() == 0 || unit.supplyRequired() <= FTTBot.self.supplyTotal() - FTTBot.self.supplyUsed())
+    if (Board.resources.minerals < 0) {
+        LogManager.getLogger().warn("Why would you even do that?")
+    }
     morph(unit)
 })
 
@@ -57,7 +66,7 @@ class ResearchCommand(researcher: ResearchingFacility, tech: TechType) : Order<R
         })
 
 class UpgradeCommand(researcher: ResearchingFacility, upgrade: UpgradeType) : Order<ResearchingFacility>(researcher, { upgrade(upgrade) })
-class Attack(unit: PlayerUnit, target: Unit) : Order<PlayerUnit>(unit, { (this as Attacker).attack(target) })
+class AttackCommand(unit: PlayerUnit, target: Unit) : Order<PlayerUnit>(unit, { (this as Attacker).attack(target) })
 class BurrowCommand(unit: PlayerUnit) : Order<PlayerUnit>(unit, { (this as Burrowable).burrow() })
 class UnburrowCommand(unit: PlayerUnit) : Order<PlayerUnit>(unit, { (this as Burrowable).unburrow() })
 class GatherMinerals(worker: Worker, mineralPatch: MineralPatch) : Order<Worker>(worker, { gather(mineralPatch) })
@@ -66,7 +75,7 @@ class Repair(worker: SCV, target: Mechanical) : Order<SCV>(worker, { repair(targ
 class Heal(medic: Medic, target: Organic) : Order<Medic>(medic, { healing(target as PlayerUnit) })
 
 
-class ReserveUnit(val unit: PlayerUnit) : Node {
+class ReserveUnit(val unit: PlayerUnit) : BaseNode<Any>() {
     override fun tick(): NodeStatus {
         if (Board.resources.units.contains(unit)) {
             Board.resources.reserveUnit(unit)
@@ -78,7 +87,7 @@ class ReserveUnit(val unit: PlayerUnit) : Node {
     override fun toString(): String = "Reserving unit $unit"
 }
 
-class ReserveResources(val minerals: Int, val gas: Int = 0) : Node {
+class ReserveResources(val minerals: Int, val gas: Int = 0) : BaseNode<Any>() {
     override fun tick(): NodeStatus {
         val availableResources = Board.resources
         availableResources.reserve(minerals, gas)
@@ -88,14 +97,14 @@ class ReserveResources(val minerals: Int, val gas: Int = 0) : Node {
     }
 }
 
-class ReserveSupply(val supply: Int) : Node {
+class ReserveSupply(val supply: Int) : BaseNode<Any>() {
     override fun tick(): NodeStatus =
             if (supply == 0 || Board.resources.reserve(supply = supply).supply >= 0)
                 NodeStatus.SUCCEEDED
             else NodeStatus.FAILED
 }
 
-class BlockResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) : Node {
+class BlockResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) : BaseNode<Any>() {
     override fun tick(): NodeStatus {
         if (Board.resources.isAvailable(minerals, gas, supply)) return NodeStatus.SUCCEEDED
         Board.resources.reserve(minerals, gas, supply)
@@ -103,45 +112,3 @@ class BlockResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) :
     }
 }
 
-object Actions {
-    fun hasReached(unit: MobileUnit, position: Position, tolerance: Int = 64) =
-            unit.getDistance(position) <= tolerance
-
-    fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node {
-        // TODO: "Search" for a way
-        return MaxTries("$unit -> $position", 24 * 60,
-                Fallback(
-                        Condition("Reached $position with $unit") { hasReached(unit, position, tolerance) },
-                        MSequence("Order $unit to $position",
-                                makeMobile(unit),
-                                MoveCommand(unit, position),
-                                CheckIsClosingIn(unit, position)
-                        )
-                ))
-    }
-
-    private fun CheckIsClosingIn(unit: MobileUnit, position: Position): Repeat {
-        return Repeat(child = Sequence(
-                Delegate {
-                    val distance = unit.getDistance(position)
-                    val frame = FTTBot.frameCount
-                    Inline("Closing in?") {
-                        if (FTTBot.frameCount - frame > 10 * 24)
-                            NodeStatus.FAILED
-                        else if (unit.getDistance(position) < distance)
-                            NodeStatus.SUCCEEDED
-                        else
-                            NodeStatus.RUNNING
-                    }
-                }
-        )
-        )
-    }
-
-    private fun makeMobile(unit: MobileUnit): Fallback {
-        return Fallback(
-                Condition("$unit not burrowed") { unit !is Burrowable || !unit.isBurrowed },
-                Delegate { UnburrowCommand(unit) }
-        )
-    }
-}

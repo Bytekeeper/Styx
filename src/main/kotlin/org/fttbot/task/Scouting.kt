@@ -3,6 +3,7 @@ package org.fttbot.task
 import org.fttbot.*
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.canAttack
+import org.fttbot.task.Actions.flee
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.Overlord
@@ -12,11 +13,11 @@ import java.util.*
 
 object Scouting {
     private val rnd = SplittableRandom()
-    fun scout(scout: MobileUnit, target: Position): Node {
+    fun scout(scout: MobileUnit, target: Position): Node<Any, Any> {
         return Actions.reach(scout, target, 200)
     }
 
-    fun scout(): Node {
+    fun scout(): Node<Any, Any> {
         var scouts: List<PlayerUnit> = emptyList()
         return Fallback(
                 Sequence(
@@ -31,16 +32,11 @@ object Scouting {
                             s ->
                             s as MobileUnit
                             Fallback(
-                                    Sequence(
-                                            Condition("Any close enemy") {
-                                                UnitQuery.enemyUnits.any { it.canAttack(s, 150) }
-                                            },
-                                            Condition("Has base") { !Info.myBases.isEmpty() },
-                                            Delegate { Actions.reach(s, (Info.myBases[0] as Unit).position, 300) }
-                                    ),
+                                    flee(s),
                                 scout(s, FTTBot.game.bwMap.startPositions[rnd.nextInt(FTTBot.game.bwMap.startPositions.size)].toPosition())
                             )
                         }
                 ), Sleep)
     }
+
 }

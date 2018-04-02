@@ -1,25 +1,28 @@
 package org.fttbot.strategies
 
 import com.badlogic.gdx.math.MathUtils
-import org.fttbot.Delegate
-import org.fttbot.MParallel
-import org.fttbot.Node
-import org.fttbot.Repeat
+import org.fttbot.*
+import org.fttbot.info.MyInfo
+import org.fttbot.task.Combat
 import org.fttbot.task.Macro
+import org.fttbot.task.Macro.considerExpansion
 import org.fttbot.task.Production
 import org.fttbot.task.Production.build
 import org.fttbot.task.Production.buildGas
-import org.fttbot.task.Production.buildOrTrainSupply
 import org.fttbot.task.Production.produce
+import org.fttbot.task.Production.produceSupply
 import org.fttbot.task.Production.train
 import org.fttbot.task.Production.trainWorker
+import org.fttbot.task.Production.upgrade
 import org.openbw.bwapi4j.type.UnitType
+import org.openbw.bwapi4j.type.UpgradeType
+import org.openbw.bwapi4j.unit.PlayerUnit
 
 object ZvP {
-    fun _12HatchA(): Node =
+    fun _12HatchA(): Node<Any, Any> =
             MParallel(1000,
                     Repeat(5, Delegate { Production.trainWorker() }),
-                    buildOrTrainSupply(),
+                    produceSupply(),
                     trainWorker(),
                     trainWorker(),
                     trainWorker(),
@@ -27,10 +30,10 @@ object ZvP {
                     build(UnitType.Zerg_Spawning_Pool)
             )
 
-    fun _12HatchB(): Node =
+    fun _12HatchB(): Node<Any, Any> =
             MParallel(1000,
                     Repeat(5, Delegate { Production.trainWorker() }),
-                    buildOrTrainSupply(),
+                    produceSupply(),
                     trainWorker(),
                     trainWorker(),
                     trainWorker(),
@@ -38,7 +41,7 @@ object ZvP {
                     build(UnitType.Zerg_Spawning_Pool)
             )
 
-    fun _2HatchMuta(): Node =
+    fun _2HatchMuta(): Node<Any, Any> =
             MParallel(1000,
                     Delegate {
                         if (MathUtils.randomBoolean()) {
@@ -52,22 +55,46 @@ object ZvP {
                     trainWorker(),
                     train(UnitType.Zerg_Zergling),
                     train(UnitType.Zerg_Zergling),
+                    Repeat(child = Fallback(
+                            Sequence(
+                                    DispatchParallel({ MyInfo.myBases })
+                                    {
+                                        val base = it as PlayerUnit
+                                        Sequence(
+                                                Combat.shouldIncreaseDefense(base.position),
+                                                train(UnitType.Zerg_Zergling, { base.tilePosition })
+                                        )
+                                    }
+                            ),
+                            Sleep
+                    )),
                     trainWorker(),
                     trainWorker(),
                     build(UnitType.Zerg_Lair),
                     trainWorker(),
                     trainWorker(),
-                    buildOrTrainSupply(),
+                    produceSupply(),
                     trainWorker(),
                     trainWorker(),
                     produce(UnitType.Zerg_Spire),
                     Macro.buildExpansion(),
-                    Repeat(child = Delegate { Strategies.buildWorkers() }),
-                    buildGas(),
-                    buildOrTrainSupply(),
-                    buildOrTrainSupply(),
-                    Repeat(child = Delegate { train(UnitType.Zerg_Mutalisk) }),
-                    Repeat(child = Delegate { Strategies.considerExpansion() }),
-                    Repeat(child = Delegate { Macro.considerGas() })
+                    Repeat(child = Delegate { Strategies.considerWorkers() }),
+                    Fallback(buildGas(), Success),
+                    produceSupply(),
+                    produceSupply(),
+                    Fallback(Parallel(
+                            1,
+                            Repeat(child = Delegate { train(UnitType.Zerg_Mutalisk) }),
+                            Repeat(50, child = Delegate { train(UnitType.Zerg_Zergling) }),
+                            Repeat(child = Delegate { considerExpansion() }),
+                            Repeat(child = Delegate { Macro.considerGas() }),
+                            Repeat(child = Delegate { train(UnitType.Zerg_Ultralisk) })
+                    )),
+                    upgrade(UpgradeType.Zerg_Flyer_Attacks),
+                    upgrade(UpgradeType.Metabolic_Boost),
+                    upgrade(UpgradeType.Adrenal_Glands),
+                    upgrade(UpgradeType.Zerg_Melee_Attacks),
+                    upgrade(UpgradeType.Zerg_Melee_Attacks),
+                    upgrade(UpgradeType.Zerg_Melee_Attacks)
             )
 }
