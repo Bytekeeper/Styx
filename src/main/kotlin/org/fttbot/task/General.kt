@@ -1,6 +1,9 @@
 package org.fttbot.task
 
 import org.fttbot.*
+import org.fttbot.Fallback.Companion.fallback
+import org.fttbot.MSequence.Companion.msequence
+import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.info.EnemyInfo
 import org.fttbot.info.MyInfo
 import org.fttbot.info.UnitQuery
@@ -21,7 +24,7 @@ object Actions {
     }
 
     fun reachSafely(unit: MobileUnit, position: Position, tolerance: Int): Node<Any, Any> {
-        return Sequence(
+        return sequence(
                 Condition("targetPosition $position safe?") { canReachSafely(unit, position) },
                 Delegate { reach(unit, position, tolerance) }
         )
@@ -30,9 +33,9 @@ object Actions {
     fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node<Any, Any> {
         // TODO: "Search" for a way
         return MaxTries("$unit -> $position", 24 * 60,
-                Fallback(
+                fallback(
                         Condition("Reached $position with $unit") { hasReached(unit, position, tolerance) },
-                        MSequence("Order $unit to $position",
+                        msequence("Order $unit to $position",
                                 makeMobile(unit),
                                 MoveCommand(unit, position),
                                 CheckIsClosingIn(unit, position)
@@ -46,7 +49,7 @@ object Actions {
             }
 
     private fun CheckIsClosingIn(unit: MobileUnit, position: Position): Repeat<Any> {
-        return Repeat(child = Sequence(
+        return Repeat(child = sequence(
                 Delegate {
                     val distance = unit.getDistance(position)
                     val frame = FTTBot.frameCount
@@ -59,20 +62,19 @@ object Actions {
                         else
                             NodeStatus.RUNNING
                     }
-                }
-        )
+                })
         )
     }
 
     private fun makeMobile(unit: MobileUnit): Fallback<Any, Any> {
-        return Fallback(
+        return fallback(
                 Condition("$unit not burrowed") { unit !is Burrowable || !unit.isBurrowed },
                 Delegate { UnburrowCommand(unit) }
         )
     }
 
     fun flee(s: MobileUnit): Sequence<Any, Any> {
-        return Sequence(
+        return sequence(
                 Condition("Any close enemy") {
                     UnitQuery.enemyUnits.any { it.canAttack(s, 150) }
                 },

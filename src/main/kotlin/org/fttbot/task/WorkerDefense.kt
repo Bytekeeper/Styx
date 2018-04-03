@@ -7,14 +7,15 @@ import org.fttbot.estimation.CombatEval
 import org.fttbot.estimation.SimUnit
 import org.fttbot.info.Cluster
 import org.fttbot.info.findWorker
-import org.omg.PortableInterceptor.SUCCESSFUL
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.unit.Attacker
+import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Worker
 
-class WorkerDefense(val base: Position) : BaseNode<Any>() {
-    val defendingWorkers = mutableListOf<Worker>()
+data class WorkerDefenseBoard(val defendingWorkers: MutableList<Worker> = mutableListOf(),
+                              var enemies: MutableList<PlayerUnit> = mutableListOf())
 
+class WorkerDefense(val base: Position) : BaseNode<WorkerDefenseBoard>() {
     override fun tick(): NodeStatus {
         val enemyCluster = Cluster.enemyClusters.minBy { it.position.getDistance(base) } ?: return NodeStatus.SUCCEEDED
         if (enemyCluster.position.getDistance(base) > 300) return NodeStatus.SUCCEEDED
@@ -23,8 +24,9 @@ class WorkerDefense(val base: Position) : BaseNode<Any>() {
         val successForCompleteDefense = CombatEval.probabilityToWin(myCluster.units.filter { it is Attacker }.map { SimUnit.of(it) }, simUnitsOfEnemy)
         if (successForCompleteDefense < 0.5) {
             // TODO: FLEE - you fools!
-            return NodeStatus.RUNNING
+            return NodeStatus.FAILED
         }
+        val defendingWorkers = board!!.defendingWorkers
         defendingWorkers.retainAll(Board.resources.units)
         val successForCurrentRatio = CombatEval.probabilityToWin(myCluster.units.filter {
             it is Attacker && (it !is Worker || defendingWorkers.contains(it))
@@ -34,10 +36,12 @@ class WorkerDefense(val base: Position) : BaseNode<Any>() {
                 defendingWorkers.remove(it)
             }
         } else if (successForCurrentRatio < 0.5) {
-            findWorker(base, candidates = myCluster.units.filterIsInstance(Worker::class.java))?.let {
+            findWorker(base, candidates = myCluster.units.filterIsInstance(Worker::class.java).filter { Board.resources.units.contains(it) })?.let {
                 defendingWorkers.add(it)
             }
         }
+        if (defendingWorkers.isEmpty()) return NodeStatus.SUCCEEDED
+        board!!.enemies = enemyCluster.units.toMutableList()
         Board.resources.reserveUnits(defendingWorkers)
         return NodeStatus.SUCCEEDED
     }

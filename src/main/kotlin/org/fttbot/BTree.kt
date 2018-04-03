@@ -10,13 +10,13 @@ enum class NodeStatus {
 }
 
 interface Node<in P, out T> {
-    val board: T
+    val board: T?
     fun setParent(parent: Node<*, P>)
     fun tick(): NodeStatus
     fun parentFinished() {}
 
     infix fun <X : P> onlyIf(condition: Node<X, *>): Node<X, T> = object : Node<X, T> {
-        override val board: T
+        override val board: T?
             get() = this@Node.board
 
         override fun setParent(parent: Node<*, X>) {
@@ -38,31 +38,30 @@ interface Node<in P, out T> {
 }
 
 abstract class BaseNode<T> : Node<T, T> {
-    private var _board: T? = null
-    override val board get() = _board!!
+    protected var _parent: Node<*, T>? = null
+    override val board get() = _parent?.board
 
     override fun setParent(parent: Node<*, T>) {
-        _board = parent.board
+        this._parent = parent
     }
 }
 
-abstract class ParentNode<P, T>(protected val children: List<Node<P, T>>) : Node<P, T> {
-    private var _board: T? = null
-    override val board: T get() = _board!!
-    private lateinit var parent: Node<*, P>
-    protected var convert: ((P) -> T?)? = null
+abstract class ParentNode<P, T>(protected val convert: (P?) -> T?, protected val children: List<Node<T, *>>) : Node<P, T> {
+    override var board: T? = null
+    private var parent: Node<*, P>? = null
 
-    fun withConverter(convert: ((P) -> T?)) {
-        this.convert = convert
+    init {
+        children.forEach { it.setParent(this) }
     }
 
     override fun setParent(parent: Node<*, P>) {
         this.parent = parent
         resetBoard()
+        children.forEach { it.setParent(this) }
     }
 
     private fun resetBoard() {
-        _board = convert?.let { it(parent.board) }
+        board = convert(parent?.board)
     }
 
     override fun parentFinished() {
@@ -73,8 +72,8 @@ abstract class ParentNode<P, T>(protected val children: List<Node<P, T>>) : Node
     }
 }
 
-class Condition<T>(val name: String, val condition: () -> Boolean) : BaseNode<T>() {
-    override fun tick(): NodeStatus = if (condition()) NodeStatus.SUCCEEDED else NodeStatus.FAILED
+class Condition<T>(val name: String, val condition: T?.() -> Boolean) : BaseNode<T>() {
+    override fun tick(): NodeStatus = if (condition(_parent?.board)) NodeStatus.SUCCEEDED else NodeStatus.FAILED
     override fun toString(): String = "require $name"
 }
 
@@ -91,19 +90,18 @@ open class Decorator<T>(val child: Node<T, *>) : BaseNode<T>() {
     }
 }
 
-class Inline<T>(val name: String, val delegate: () -> NodeStatus) : BaseNode<T>() {
-    override fun tick(): NodeStatus = delegate()
+class Inline<T>(val name: String, val delegate: T?.() -> NodeStatus) : BaseNode<T>() {
+    override fun tick(): NodeStatus = delegate(_parent?.board)
 
     override fun toString(): String = "Inline $name"
 }
 
-class Delegate<T>(val subtreeProducer: () -> Node<T, *>) : BaseNode<T>() {
-    private var _parent: Node<*, T>? = null
-    private var subtree: Node<T, *>? = null;
+class Delegate<T>(val subtreeProducer: T?.() -> Node<T, *>) : BaseNode<T>() {
+    private var subtree: Node<T, *>? = null
 
     override fun tick(): NodeStatus {
         subtree = if (subtree != null) subtree else {
-            val result = subtreeProducer()
+            val result = subtreeProducer(_parent?.board)
             _parent?.let(result::setParent)
             result
         }
@@ -229,8 +227,7 @@ class Repeat<T>(val times: Int = -1, child: Node<T, *>) : Decorator<T>(child) {
     override fun toString(): String = "Repeat($remaining) -> $child"
 }
 
-class Parallel<P, T>(val m: Int, vararg children: Node<P, T>) : ParentNode<P, T>(children.toList()) {
-
+class Parallel<P, T>(val m: Int, convert: (P?) -> T?, children: List<Node<T, *>>) : ParentNode<P, T>(convert, children) {
     override fun tick(): NodeStatus {
         val result = children.map { it.tick() }
         if (result.count { it == NodeStatus.SUCCEEDED } >= m) {
@@ -244,10 +241,14 @@ class Parallel<P, T>(val m: Int, vararg children: Node<P, T>) : ParentNode<P, T>
         return NodeStatus.RUNNING
     }
 
-    override fun toString(): String = "Parallel($m, ${children.joinToString(", ")})"
+    override fun toString(): String = "parallel($m, ${children.joinToString(", ")})"
+
+    companion object {
+        fun <T> parallel(m: Int, vararg child: Node<T, *>) = Parallel<T, T>(m, { it }, children = child.toList())
+    }
 }
 
-class MParallel<P, T>(val m: Int, vararg children: Node<P, T>) : ParentNode<P, T>(children.toList()) {
+class MParallel<P, T>(val m: Int, convert: (P?) -> T?, children: List<Node<T, *>>) : ParentNode<P, T>(convert, children) {
     var activeChildren = super.children
     var succeeded = 0
     var failed = 0
@@ -274,18 +275,25 @@ class MParallel<P, T>(val m: Int, vararg children: Node<P, T>) : ParentNode<P, T
         super.parentFinished()
     }
 
-    override fun toString(): String = "MParallel($m, ${activeChildren.joinToString(", ")})"
+    override fun toString(): String = "Mparallel($m, ${activeChildren.joinToString(", ")})"
+
+    companion object {
+        fun <T> mparallel(m: Int, vararg child: Node<T, T>) = MParallel<T, T>(m, { it }, children = child.toList())
+    }
 }
 
 
-class DispatchParallel<P, T : Any, X>(val childrenResolver: () -> Collection<X>, val name: String? = "", val nodeGen: (X) -> Node<P, T>) : BaseNode<T>() {
+class DispatchParallel<T : Any, X>(val childrenResolver: () -> Collection<X>, val name: String? = "", val nodeGen: (X) -> Node<T, *>) : BaseNode<T>() {
     private val LOG = LogManager.getLogger()
-    private val children = HashMap<X, Node<P, T>>()
+    private val children = HashMap<X, Node<T, *>>()
     override fun tick(): NodeStatus {
         val toTransform = childrenResolver()
         val result = toTransform.map {
-            val result = children.computeIfAbsent(it, nodeGen)
-                    .tick()
+            val result = children.computeIfAbsent(it) {
+                val newNode = nodeGen(it)
+                _parent?.let { newNode.setParent(it) }
+                newNode
+            }.tick()
             if (result == NodeStatus.SUCCEEDED) {
                 children.remove(it)
             }
@@ -364,9 +372,7 @@ class Sleep<T>(val timeOut: Int = Int.MAX_VALUE) : BaseNode<T>() {
     }
 }
 
-class Fallback<P, T>(children: List<Node<P, T>>) : ParentNode<P, T>(children) {
-    constructor(vararg children: Node<P, T>, convert: ((P) -> T?)? = null) : this(children.toList())
-
+class Fallback<P, T>(convert: (P?) -> T?, children: List<Node<T, *>>) : ParentNode<P, T>(convert, children) {
     override fun tick(): NodeStatus {
         children.forEach {
             val result = it.tick()
@@ -383,13 +389,18 @@ class Fallback<P, T>(children: List<Node<P, T>>) : ParentNode<P, T>(children) {
     }
 
     override fun parentFinished() {
-        children.forEach(Node<P, T>::parentFinished)
+        children.forEach(Node<T, *>::parentFinished)
     }
 
     override fun toString(): String = "fallback(${children.joinToString(", ")})"
+
+    companion object {
+        fun <T> fallback(vararg child: Node<T, *>) = Fallback<T, T>({ it }, children = child.toList())
+        fun <P, T> fallback(convert: (P?) -> T?, vararg child: Node<T, *>) = Fallback<P, T>(convert, children = child.toList())
+    }
 }
 
-class Sequence<P, T>(vararg children: Node<P, T>) : ParentNode<P, T>(children.toList()) {
+class Sequence<P, T>(convert: (P?) -> T?, children: List<Node<T, *>>) : ParentNode<P, T>(convert, children) {
     override fun tick(): NodeStatus {
         children.forEach {
             val result = it.tick()
@@ -406,9 +417,14 @@ class Sequence<P, T>(vararg children: Node<P, T>) : ParentNode<P, T>(children.to
     }
 
     override fun toString(): String = "Seq(${children.joinToString(", ")})"
+
+    companion object {
+        fun <T> sequence(vararg child: Node<T, *>) = Sequence<T, T>({ it }, children = child.toList())
+        fun <P, T> sequence(convert: (P?) -> T?, vararg child: Node<T, *>) = Sequence<P, T>(convert, children = child.toList())
+    }
 }
 
-class MSequence<P, T>(val name: String, vararg children: Node<P, T>) : ParentNode<P, T>(children.toList()) {
+class MSequence<P, T>(val name: String, convert: (P?) -> T?, children: List<Node<T, *>>) : ParentNode<P, T>(convert, children) {
     private var childIndex = 0
 
     override fun tick(): NodeStatus {
@@ -433,4 +449,9 @@ class MSequence<P, T>(val name: String, vararg children: Node<P, T>) : ParentNod
     }
 
     override fun toString(): String = "$name@$childIndex(${children.joinToString(",")})"
+
+    companion object {
+        fun <T> msequence(name: String, vararg child: Node<T, *>) = MSequence<T, T>(name, { it }, children = child.toList())
+        fun <P, T> msequence(convert: (P?) -> T, name: String, vararg child: Node<T, *>) = MSequence<P, T>(name, convert, children = child.toList())
+    }
 }

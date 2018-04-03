@@ -1,6 +1,10 @@
 package org.fttbot.task
 
 import org.fttbot.*
+import org.fttbot.Fallback.Companion.fallback
+import org.fttbot.MSequence.Companion.msequence
+import org.fttbot.Parallel.Companion.parallel
+import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.info.*
 import org.fttbot.info.MyInfo.pendingSupply
 import org.fttbot.search.MCTS
@@ -45,12 +49,12 @@ class AwaitConstructionStart(val worker: Worker, val type: UnitType, val at: Til
 
 object Production {
     fun buildWithWorker(worker: Worker, at: TilePosition, building: UnitType): Node<Any, Any> {
-        return Parallel(1,
+        return parallel(1,
                 AwaitConstructionStart(worker, building, at),
-                Sequence(
+                sequence(
                         ReserveUnit(worker),
-                        Fallback(ReserveResources(building.mineralPrice(), building.gasPrice()), Sleep),
-                        MSequence("executeBuild",
+                        fallback(ReserveResources(building.mineralPrice(), building.gasPrice()), Sleep),
+                        msequence("executeBuild",
                                 Actions.reach(worker, at.toPosition(), 150),
                                 BuildCommand(worker, at, building),
                                 Await("worker constructing", 150) { worker.isConstructing },
@@ -97,22 +101,18 @@ object Production {
                 }
     }
 
+    data class BuildBoard(var targetPosition: TilePosition? = null, var builder: PlayerUnit? = null)
+
     fun build(type: UnitType, considerSafety: Boolean? = null, at: () -> TilePosition? = { null }): Node<Any, Any> {
         require(type.isBuilding && !type.isAddon)
         val safety = considerSafety ?: type.isResourceDepot
-        var targetPosition: TilePosition? = null
-        var builder: PlayerUnit? = null
-        return Retry(5, MSequence("build $type",
-                Inline("reset") {
-                    targetPosition = null
-                    builder = null
-                    NodeStatus.SUCCEEDED
-                },
-                Sequence(
+        return Retry(5, msequence({ BuildBoard() }, "build $type",
+                sequence<BuildBoard>(
                         ensureDependencies(type),
                         BlockResources(type.mineralPrice(), type.gasPrice()),
                         Await("canMake $type") { FTTBot.self.canMake(type) },
                         Inline("find build location and builder") {
+                            this!!
                             targetPosition = targetPosition ?: ConstructionPosition.findPositionFor(type, at()?.toPosition()) ?: ConstructionPosition.findPositionFor(type)
                                     ?: return@Inline NodeStatus.FAILED
                             builder = (if (builder != null && Board.resources.units.contains(builder!!)) builder else
@@ -129,12 +129,14 @@ object Production {
                             NodeStatus.SUCCEEDED
                         }
                 ),
-                Sequence(
+                sequence(
                         Condition("Safe to build or don't care?") {
+                            this!!
                             !safety || builder !is MobileUnit || Actions.canReachSafely(builder as Worker, targetPosition!!.toPosition())
                         },
                         Delegate
                         {
+                            this!!
                             if (builder is Worker)
 //                        buildWithWorker(builder as Worker, targetPosition!!, type)
                                 buildWithWorker(builder as Worker, targetPosition!!, type)
@@ -146,10 +148,10 @@ object Production {
     }
 
     fun morph(unit: Morphable, to: UnitType): Node<Any, Any> {
-        return MSequence("morph $to",
-                Sequence(
+        return msequence("morph $to",
+                sequence(
                         ReserveUnit(unit as PlayerUnit),
-                        Fallback(ReserveResources(to.mineralPrice(), to.gasPrice()), Sleep)
+                        fallback(ReserveResources(to.mineralPrice(), to.gasPrice()), Sleep)
                 ),
                 Delegate {
                     MorphCommand(unit, to)
@@ -162,20 +164,20 @@ object Production {
         var trainer: PlayerUnit? = null
         val supplyUsed = if (unit.isTwoUnitsInOneEgg) 2 * unit.supplyRequired() else unit.supplyRequired()
         return Retry(5,
-                MSequence("train $unit",
+                msequence("train $unit",
                         Inline("reset") {
                             trainer = null
                             NodeStatus.SUCCEEDED
                         },
-                        Sequence(
+                        sequence(
                                 Inline("Mark $unit as pending") {
                                     Board.pendingUnits.add(unit)
                                     NodeStatus.SUCCEEDED
                                 },
                                 ensureDependencies(unit),
-                                Parallel(2,
+                                parallel(2,
                                         ensureSupply(supplyUsed),
-                                        Fallback(ReserveResources(unit.mineralPrice(), unit.gasPrice()), Sleep)
+                                        fallback(ReserveResources(unit.mineralPrice(), unit.gasPrice()), Sleep)
                                 ),
                                 Await("can make $unit") { FTTBot.self.canMake(unit) },
                                 Inline("Finding trainer for $unit") {
@@ -184,7 +186,7 @@ object Production {
                                     NodeStatus.SUCCEEDED
                                 }
                         ),
-                        Sequence(
+                        sequence(
                                 Delegate { ReserveUnit(trainer!!) },
                                 Delegate {
                                     when (trainer) {
@@ -220,7 +222,7 @@ object Production {
 
     fun ensureResearchDependencies(tech: TechType): Node<Any, Any> {
         if (tech == TechType.None) return Success
-        return MSequence("resDep",
+        return msequence("resDep",
                 ensureDependencies(tech.requiredUnit()),
                 research(tech)
         )
@@ -228,16 +230,16 @@ object Production {
 
     fun ensureDependencies(unit: UnitType): Node<Any, Any> {
         if (unit == UnitType.None) return Success
-        return Parallel(2,
+        return parallel(2,
                 Delegate { ensureUnitDependencies(unit.requiredUnits()) },
                 Delegate { ensureResearchDependencies(unit.requiredTech()) }
         )
     }
 
     fun ensureSupply(supplyDemand: Int): Node<Any, Any> {
-        return Fallback(
+        return fallback(
                 ReserveSupply(supplyDemand),
-                Sequence(Condition("enough supply pending") { pendingSupply() >= 0 }, Sleep),
+                sequence(Condition("enough supply pending") { pendingSupply() >= 0 }, Sleep),
                 Delegate { produceSupply() }
         )
     }
@@ -245,12 +247,12 @@ object Production {
     fun research(tech: TechType): Node<Any, Any> {
         if (tech == TechType.None) return Success
         var researcher: PlayerUnit? = null
-        return Fallback(
+        return fallback(
                 Condition("already researched $tech") { FTTBot.self.hasResearched(tech) },
-                MSequence("research",
+                msequence("research",
                         ensureUnitDependencies(listOf(tech.requiredUnit())),
-                        Sequence(
-                                Fallback(ReserveResources(tech.mineralPrice(), tech.gasPrice()), Sleep),
+                        sequence(
+                                fallback(ReserveResources(tech.mineralPrice(), tech.gasPrice()), Sleep),
                                 Await("can research $tech") { FTTBot.self.canResearch(tech) }
                         ),
                         Inline("find researcher for $tech") {
@@ -268,10 +270,10 @@ object Production {
         if (upgradeType == UpgradeType.None) return Success
         var researcher: PlayerUnit? = null
         val level = FTTBot.self.getUpgradeLevel(upgradeType)
-        return Fallback(Condition("already upgraded $upgradeType") { FTTBot.self.getUpgradeLevel(upgradeType) > level || level >= upgradeType.maxRepeats() },
-                Sequence(
+        return fallback(Condition("already upgraded $upgradeType") { FTTBot.self.getUpgradeLevel(upgradeType) > level || level >= upgradeType.maxRepeats() },
+                sequence(
                         Delegate { ensureUnitDependencies(listOf(upgradeType.whatsRequired(level), upgradeType.whatUpgrades())) },
-                        Delegate { Fallback(ReserveResources(upgradeType.mineralPrice(level), upgradeType.gasPrice(level)), Sleep) },
+                        Delegate { fallback(ReserveResources(upgradeType.mineralPrice(level), upgradeType.gasPrice(level)), Sleep) },
                         Await("can upgrade $upgradeType") { FTTBot.self.canUpgrade(upgradeType) },
                         Inline("find researcher for $upgradeType") {
                             researcher = selectResearcher(researcher, upgradeType)
@@ -299,7 +301,7 @@ object Production {
     fun cancel(type: UnitType): Node<Any, Any> {
         require(type.isBuilding)
         var target: Building? = null
-        return Sequence(
+        return sequence(
                 Inline("find $type to cancel") {
                     target = UnitQuery.myUnits.filterIsInstance(Building::class.java)
                             .firstOrNull { it.isA(type) && !it.isCompleted }

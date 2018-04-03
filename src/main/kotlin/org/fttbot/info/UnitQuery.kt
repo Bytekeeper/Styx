@@ -123,16 +123,13 @@ object UnitQuery {
         this.allUnits = allUnits.filter { it.isVisible }
         minerals = allUnits.filterIsInstance(MineralPatch::class.java)
         ownedUnits = this.allUnits.filterIsInstance(PlayerUnit::class.java)
-        myUnits = ownedUnits.filter { it.player == FTTBot.self }
+        myUnits = ownedUnits.filter { it.player == FTTBot.self && it.exists()}
         enemyUnits = ownedUnits.filter { it.player == FTTBot.enemy }
         myWorkers = myUnits.filterIsInstance(Worker::class.java).filter { it.isCompleted }
     }
 
     val geysers get() = allUnits.filter { it is VespeneGeyser }
     val myBases get() = myUnits.filter { it is Base }
-    val myMobileCombatUnits by LazyOnFrame {
-        myUnits.filter { it !is Worker && it is Attacker && it.isCompleted }.filterIsInstance(MobileUnit::class.java)
-    }
 
     fun allUnits(): List<Unit> = allUnits
     fun inRadius(position: Position, radius: Int) = allUnits.inRadius(position, radius)

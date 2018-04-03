@@ -4,6 +4,16 @@ import bwem.BWEM
 import bwem.map.Map
 import bwta.BWTA
 import org.apache.logging.log4j.LogManager
+import org.fttbot.FTTBot.enemy
+import org.fttbot.FTTBot.frameCount
+import org.fttbot.FTTBot.game
+import org.fttbot.FTTBot.latency_frames
+import org.fttbot.FTTBot.remaining_latency_frames
+import org.fttbot.FTTBot.self
+import org.fttbot.Fallback.Companion.fallback
+import org.fttbot.MSequence.Companion.msequence
+import org.fttbot.Parallel.Companion.parallel
+import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.estimation.BOPrediction
 import org.fttbot.info.*
 import org.fttbot.strategies.ZvP
@@ -27,18 +37,12 @@ import java.util.logging.Logger
 object FTTBot : BWEventListener {
 
     private val LOG = LogManager.getLogger()
-    private lateinit var bwtaInitializer: Future<BWTA>
     private lateinit var bwemInitializer: Future<BWEM>
     val game = BW(this)
     lateinit var self: Player
     lateinit var enemy: Player
 
-    val bwta: BWTA by lazy(LazyThreadSafetyMode.NONE) {
-        bwtaInitializer.get()
-    }
-    val bwem: Map by lazy(LazyThreadSafetyMode.NONE) {
-        bwemInitializer.get().map
-    }
+    val bwem: Map get() = bwemInitializer.get().map
     lateinit var render: MapDrawer
     var latency_frames = 0
     var remaining_latency_frames = 0
@@ -55,11 +59,6 @@ object FTTBot : BWEventListener {
     }
 
     override fun onStart() {
-        bwtaInitializer = CompletableFuture.supplyAsync {
-            val bwta = BWTA()
-            bwta.analyze()
-            bwta
-        }
         bwemInitializer = CompletableFuture.supplyAsync {
             val bwem = BWEM(game)
             bwem.initialize()
@@ -85,8 +84,8 @@ object FTTBot : BWEventListener {
             else -> throw IllegalStateException("Can't handle race ${racePlayed}")
         }
 
-        buildQueue = Fallback(
-                MSequence("buildQueue",
+        buildQueue = fallback(
+                msequence("buildQueue",
 //                ZvP._massZergling()
                         ZvP._2HatchMuta(),
                         Inline("Crap Check") {
@@ -95,23 +94,22 @@ object FTTBot : BWEventListener {
                 )
 
         )
-        bot = Fallback(
-                Parallel(100,
+        bot = fallback(
+                parallel(100,
 //                Delegate {
 //                    Combat.attack(UnitQuery.myUnits.filter { it is MobileUnit && it !is Worker && it is Attacker },
 //                            UnitQuery.enemyUnits)
 //                },
                         buildQueue,
                         NoFail(scout()),
-                        NoFail(defending()),
-//                Fallback(Sequence(
+//                fallback(sequence(
 //                        Sleep(24),
 //                        Delegate {
 //                            Combat.defendPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
 //                                    self.startLocation.toPosition(), (game.bwMap.startPositions - self.startLocation)[0].toPosition())
 //                        }
 //                ), Sleep),
-//                        MSequence("",
+//                        msequence("",
 //                                Condition { !EnemyInfo.enemyBases.isEmpty() },
 //
 //                                MDelegate
@@ -120,10 +118,11 @@ object FTTBot : BWEventListener {
 //                                            EnemyInfo.enemyBases[0].position)
 //                                })
 //                ),
+                        NoFail(defending()),
                         NoFail(attacking()),
                         NoFail(preventSupplyBlock()),
                         NoFail(moveSurplusWorkers()),
-                        NoFail(Sequence(GatherResources, Sleep))
+                        NoFail(sequence(GatherResources, Sleep))
                 ),
                 Inline("This shouldn't have happened") {
                     LOG.error("Main loop failed!")
@@ -131,6 +130,7 @@ object FTTBot : BWEventListener {
                 }
         )
         UnitQuery.update(emptyList())
+        EnemyInfo.reset()
     }
 
     override fun onFrame() {
@@ -149,6 +149,9 @@ object FTTBot : BWEventListener {
 
             Board.reset()
             bot.tick()
+            if (UnitQuery.myWorkers.any { !it.exists() }) {
+                throw IllegalStateException()
+            }
         }
         bwem.neutralData.minerals.filter { mineral -> bwem.areas.none { area -> area.minerals.contains(mineral) } }
                 .forEach {
@@ -159,6 +162,11 @@ object FTTBot : BWEventListener {
             if (it.targetPosition != null) {
                 game.mapDrawer.drawLineMap(it.position, it.targetPosition, Color.BLUE)
             }
+        }
+
+        EnemyInfo.seenUnits.forEach {
+            game.mapDrawer.drawCircleMap(it.position, 16, Color.RED)
+            game.mapDrawer.drawTextMap(it.position, "${it.initialType}")
         }
     }
 
@@ -224,8 +232,8 @@ object FTTBot : BWEventListener {
     override fun onEnd(isWinner: Boolean) {
         if (isWinner) LOG.info("Hurray, I won!")
         else LOG.info("Sad, I lost!")
-        ProcessHelper.killStarcraftProcess()
-        ProcessHelper.killChaosLauncherProcess()
+//        ProcessHelper.killStarcraftProcess()
+//        ProcessHelper.killChaosLauncherProcess()
         println()
         println("Exiting...")
 //        System.exit(0)

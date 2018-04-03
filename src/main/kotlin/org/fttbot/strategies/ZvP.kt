@@ -2,6 +2,10 @@ package org.fttbot.strategies
 
 import com.badlogic.gdx.math.MathUtils
 import org.fttbot.*
+import org.fttbot.Fallback.Companion.fallback
+import org.fttbot.MParallel.Companion.mparallel
+import org.fttbot.Parallel.Companion.parallel
+import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.info.MyInfo
 import org.fttbot.task.Combat
 import org.fttbot.task.Macro
@@ -20,7 +24,7 @@ import org.openbw.bwapi4j.unit.PlayerUnit
 
 object ZvP {
     fun _12HatchA(): Node<Any, Any> =
-            MParallel(1000,
+            mparallel(1000,
                     Repeat(5, Delegate { Production.trainWorker() }),
                     produceSupply(),
                     trainWorker(),
@@ -31,7 +35,7 @@ object ZvP {
             )
 
     fun _12HatchB(): Node<Any, Any> =
-            MParallel(1000,
+            mparallel(1000,
                     Repeat(5, Delegate { Production.trainWorker() }),
                     produceSupply(),
                     trainWorker(),
@@ -42,7 +46,7 @@ object ZvP {
             )
 
     fun _2HatchMuta(): Node<Any, Any> =
-            MParallel(1000,
+            mparallel(1000,
                     Delegate {
                         if (MathUtils.randomBoolean()) {
                             _12HatchA()
@@ -55,17 +59,16 @@ object ZvP {
                     trainWorker(),
                     train(UnitType.Zerg_Zergling),
                     train(UnitType.Zerg_Zergling),
-                    Repeat(child = Fallback(
-                            Sequence(
+                    Repeat(child = fallback(
+                            sequence(
                                     DispatchParallel({ MyInfo.myBases })
                                     {
                                         val base = it as PlayerUnit
-                                        Sequence(
+                                        sequence(
                                                 Combat.shouldIncreaseDefense(base.position),
                                                 train(UnitType.Zerg_Zergling, { base.tilePosition })
                                         )
-                                    }
-                            ),
+                                    }),
                             Sleep
                     )),
                     trainWorker(),
@@ -79,10 +82,10 @@ object ZvP {
                     produce(UnitType.Zerg_Spire),
                     Macro.buildExpansion(),
                     Repeat(child = Delegate { Strategies.considerWorkers() }),
-                    Fallback(buildGas(), Success),
+                    fallback(buildGas(), Success),
                     produceSupply(),
                     produceSupply(),
-                    Fallback(Parallel(
+                    fallback(parallel(
                             1,
                             Repeat(child = Delegate { train(UnitType.Zerg_Mutalisk) }),
                             Repeat(50, child = Delegate { train(UnitType.Zerg_Zergling) }),
