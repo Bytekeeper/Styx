@@ -23,8 +23,8 @@ object CombatEval {
         val hpB = unitsOfPlayerB.filter { it.isAttacker }.map { it.hitPoints }.average().or(0.1) +
                 unitsOfPlayerB.count { it.canHeal } * HEAL_SCORE
 
-        val rangeA = (unitsOfPlayerA.map { max(it.groundWeapon.type().maxRange(), it.airWeapon.type().maxRange()) } + 1).average()
-        val rangeB = (unitsOfPlayerB.map { max(it.groundWeapon.type().maxRange(), it.airWeapon.type().maxRange()) } + 1).average()
+        val rangeA = (unitsOfPlayerA.map { max(it.groundWeapon.type().maxRange() + it.groundBonusRange, it.airWeapon.type().maxRange() + it.airBonusRange) } + 1).average()
+        val rangeB = (unitsOfPlayerB.map { max(it.groundWeapon.type().maxRange() + it.groundBonusRange, it.airWeapon.type().maxRange() + it.airBonusRange) } + 1).average()
         val mobilityA = (unitsOfPlayerA.map { it.topSpeed } + 0.01).average()
         val mobilityB = (unitsOfPlayerB.map { it.topSpeed } + 0.01).average()
 
@@ -44,8 +44,8 @@ object CombatEval {
         // Lanchester's Law
 //        val agg = 0.1 * ((distB / 100.0 + mobilityA / 100.0 + rangeA / 1000.0 + 4000.0 *  damageA / hpB) * unitsOfPlayerA.size * unitsOfPlayerA.size -
 //                (distA / 100.0 + mobilityB / 100.0 + rangeB / 1000.0 + 4000.0 * damageB / hpA) * unitsOfPlayerB.size * unitsOfPlayerB.size)
-        val agg = 0.1 * ((mobilityA / 100.0 + rangeA / 1000.0 + damageA / 10.0 + hpA / 100.0 + distB / 1000.0) * unitsOfPlayerA.size * unitsOfPlayerA.size -
-                (mobilityB / 100.0 + rangeB / 1000.0 + damageB / 10.0 + hpB / 100.0 + distA / 1000.0) * unitsOfPlayerB.size * unitsOfPlayerB.size)
+        val agg = 0.1 * ((mobilityA / 80.0 + rangeA / 800.0 + damageA / 0.2 + hpA / 800.0 + distB / 8000.0) * unitsOfPlayerA.size * unitsOfPlayerA.size -
+                (mobilityB / 80.0 + rangeB / 800.0 + damageB / 0.2 + hpB / 800.0 + distA / 8000.0) * unitsOfPlayerB.size * unitsOfPlayerB.size)
         return 1.0 / (exp(-agg) + 1)
     }
 
@@ -75,7 +75,9 @@ class SimUnit(val name: String = "Unknown",
               val isPowered: Boolean = true,
               val type: UnitType,
               val airHits: Int,
-              val groundHits: Int) {
+              val groundHits: Int,
+              val groundBonusRange: Int,
+              val airBonusRange: Int) {
     val isAttacker = groundWeapon.type() != WeaponType.None || airWeapon.type() != WeaponType.None
 
     companion object {
@@ -84,35 +86,39 @@ class SimUnit(val name: String = "Unknown",
                 ground = unit.height(),
                 isUnderDarkSwarm = unit is MobileUnit && unit.isUnderDarkSwarm,
                 hitPoints = unit.hitPoints,
-                canHeal = unit.initialType == UnitType.Terran_Medic,
                 position = unit.position,
+                canHeal = unit.initialType == UnitType.Terran_Medic,
                 airWeapon = (unit as? AirAttacker)?.airWeapon
                         ?: if (unit is Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(WeaponType.None, 0),
                 groundWeapon = (unit as? GroundAttacker)?.groundWeapon
                         ?: if (unit is Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(WeaponType.None, 0),
-                airHits = unit.initialType.maxAirHits(),
-                groundHits = unit.initialType.maxGroundHits(),
                 isAir = unit.isFlyer,
+                topSpeed = (unit as? MobileUnit)?.topSpeed ?: 0.0,
                 armor = 0,
                 size = unit.size,
-                topSpeed = (unit as? MobileUnit)?.topSpeed ?: 0.0,
                 hidden = unit.isCloaked || unit is Burrowable && unit.isBurrowed,
                 detected = unit.isDetected,
                 isPowered = unit.isPowered,
-                type = unit.initialType)
+                type = unit.initialType,
+                airHits = unit.initialType.maxAirHits(),
+                groundHits = unit.initialType.maxGroundHits(),
+                groundBonusRange = if (unit is Bunker) 64 else 0,
+                airBonusRange = if (unit is Bunker) 64 else 0)
 
         fun of(type: UnitType): SimUnit = SimUnit(
                 name = type.name,
                 hitPoints = type.maxHitPoints(),
                 canHeal = type == UnitType.Terran_Medic,
-                airWeapon = Weapon(type.airWeapon(), 0),
-                groundWeapon = Weapon(type.groundWeapon(), 0),
+                airWeapon = if (type == UnitType.Terran_Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(type.airWeapon(), 0),
+                groundWeapon = if (type == UnitType.Terran_Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(type.airWeapon(), 0),
                 isAir = type.isFlyer,
                 topSpeed = type.topSpeed(),
                 size = type.size(),
                 type = type,
                 airHits = type.maxAirHits(),
-                groundHits = type.maxGroundHits()
+                groundHits = type.maxGroundHits(),
+                groundBonusRange = if (type == UnitType.Terran_Bunker) 2 else 0,
+                airBonusRange = if (type == UnitType.Terran_Bunker) 2 else 0
         )
     }
 

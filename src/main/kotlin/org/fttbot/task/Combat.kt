@@ -13,6 +13,7 @@ import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
 import kotlin.math.max
+import kotlin.math.min
 
 object Combat {
     fun attack(units: List<PlayerUnit>, targets: List<PlayerUnit>): Node<Any, Any> {
@@ -36,7 +37,7 @@ object Combat {
                                     else
                                         0.0) * 500 +
                                     (if (it is Attacker)
-                                        -100.0
+                                        -200.0
                                     else 0.0) +
                                     (if (it.isDetected || !it.exists()) 0 else 500)
                         }
@@ -123,8 +124,8 @@ object Combat {
                                         val distance = MyInfo.myBases.map { base -> base as PlayerUnit; base.getDistance(it.position) }.min()
                                                 ?: Double.MAX_VALUE
                                         val eval = CombatEval.probabilityToWin(myCluster.units.map { SimUnit.of(it) }, it.units.filter { it is Attacker }.map { SimUnit.of(it) })
-                                        it.position.getDistance(myCluster.position) * (1.0 - eval / 10) +
-                                                (if (distance < 1000) distance else 0.0)
+                                        it.position.getDistance(myCluster.position) - 500 * eval +
+                                                min(distance / 5.0, 300.0)
 
                                     }?.units?.toList() ?: return@Inline NodeStatus.RUNNING
                                     NodeStatus.SUCCEEDED
@@ -132,7 +133,7 @@ object Combat {
                                 Condition("Good combat eval?") {
                                     val combatEval = ClusterUnitInfo.getInfo(myCluster).combatEval
                                     combatEval > 0.55 ||
-                                            combatEval > 0.45 && myCluster.units.any { it.isAttacking }
+                                            combatEval > 0.45 && myCluster.units.any { me -> enemies.any { it.canAttack(me) } }
 
                                 },
                                 Delegate {

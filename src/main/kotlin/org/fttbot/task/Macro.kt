@@ -90,7 +90,9 @@ object Macro {
 
     fun preventSupplyBlock() = fallback(sequence(
             Condition("Enough minerals to prebuild supply?") {
-                max(0, MyInfo.pendingSupply()) < min(UnitQuery.myBases.size * 5, FTTBot.self.minerals() / 100)
+                val freeSupply = FTTBot.self.supplyTotal() - FTTBot.self.supplyUsed()
+                MyInfo.pendingSupply() + FTTBot.self.supplyTotal() < 400 &&
+                        max(0, MyInfo.pendingSupply() + freeSupply) < min(UnitQuery.myBases.size * 5, FTTBot.self.minerals() / 100)
             },
             produceSupply(),
             Sleep),

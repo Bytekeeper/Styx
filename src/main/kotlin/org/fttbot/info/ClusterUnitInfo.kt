@@ -35,7 +35,7 @@ class ClusterInfo(private val cluster: Cluster<*>) {
         val enemyUnits = combatRelevantUnits.filter { it.isEnemyUnit }.map { SimUnit.of(it) }
 
         CombatEval.probabilityToWin(
-                combatRelevantUnits.filter { it.isMyUnit && (it !is MobileUnit || it !is Worker) }.map { SimUnit.of(it) }, enemyUnits)
+                combatRelevantUnits.filter { it.isMyUnit && (it is Attacker) }.map { SimUnit.of(it) }, enemyUnits)
 
     }
 

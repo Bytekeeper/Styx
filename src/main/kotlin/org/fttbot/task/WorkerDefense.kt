@@ -17,8 +17,14 @@ data class WorkerDefenseBoard(val defendingWorkers: MutableList<Worker> = mutabl
 
 class WorkerDefense(val base: Position) : BaseNode<WorkerDefenseBoard>() {
     override fun tick(): NodeStatus {
+        val defendingWorkers = board!!.defendingWorkers
+
         val enemyCluster = Cluster.enemyClusters.minBy { it.position.getDistance(base) } ?: return NodeStatus.SUCCEEDED
-        if (enemyCluster.position.getDistance(base) > 300) return NodeStatus.SUCCEEDED
+        if (enemyCluster.position.getDistance(base) > 300) {
+            defendingWorkers.clear()
+            board!!.enemies.clear()
+            return NodeStatus.SUCCEEDED
+        }
         val myCluster = Cluster.myClusters.minBy { it.position.getDistance(base) } ?: return NodeStatus.SUCCEEDED
         val simUnitsOfEnemy = enemyCluster.units.map { SimUnit.of(it) }
         val successForCompleteDefense = CombatEval.probabilityToWin(myCluster.units.filter { it is Attacker }.map { SimUnit.of(it) }, simUnitsOfEnemy)
@@ -26,7 +32,6 @@ class WorkerDefense(val base: Position) : BaseNode<WorkerDefenseBoard>() {
             // TODO: FLEE - you fools!
             return NodeStatus.FAILED
         }
-        val defendingWorkers = board!!.defendingWorkers
         defendingWorkers.retainAll(Board.resources.units)
         val successForCurrentRatio = CombatEval.probabilityToWin(myCluster.units.filter {
             it is Attacker && (it !is Worker || defendingWorkers.contains(it))

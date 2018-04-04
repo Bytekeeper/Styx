@@ -27,6 +27,7 @@ import org.fttbot.task.Scouting.scout
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.Race
+import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Unit
 import java.util.concurrent.CompletableFuture
@@ -161,9 +162,9 @@ object FTTBot : BWEventListener {
                 .forEach {
                     game.mapDrawer.drawTextMap(it.center, "ua")
                 }
-        UnitQuery.myWorkers.forEach {
+        UnitQuery.myUnits.forEach {
             game.mapDrawer.drawTextMap(it.position, "${it.id}(${it.lastCommand})")
-            if (it.targetPosition != null) {
+            if (it is MobileUnit && it.targetPosition != null) {
                 game.mapDrawer.drawLineMap(it.position, it.targetPosition, Color.BLUE)
             }
         }
