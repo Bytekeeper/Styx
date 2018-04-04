@@ -32,7 +32,7 @@ object Actions {
 
     fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node<Any, Any> {
         // TODO: "Search" for a way
-        return MaxTries("$unit -> $position", 24 * 60,
+        return MaxFrames("$unit -> $position", 12 * 60,
                 fallback(
                         Condition("Reached $position with $unit") { hasReached(unit, position, tolerance) },
                         msequence("Order $unit to $position",

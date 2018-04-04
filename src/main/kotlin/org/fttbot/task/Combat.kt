@@ -29,17 +29,16 @@ object Combat {
                             val enemySim = SimUnit.of(it)
                             (it.hitPoints + it.shields) / max(simUnit.damagePerFrameTo(enemySim), 0.01) +
                                     (if (it is Larva || it is Egg) 5000 else 0) +
-                                    (if (it is Worker) -100 else 0)
-                            2 * it.getDistance(unit) +
-                                    2 * (MyInfo.myBases.map { base -> base as PlayerUnit; base.getDistance(it) }.min()
-                                    ?: 0) +
+                                    (if (it is Worker) -100 else 0) +
+                                    2 * it.getDistance(unit) +
                                     (if (it.canAttack(unit))
                                         -enemySim.damagePerFrameTo(simUnit)
                                     else
-                                        0.0) * 700 +
+                                        0.0) * 500 +
                                     (if (it is Attacker)
                                         -100.0
-                                    else 0.0)
+                                    else 0.0) +
+                                    (if (it.isDetected || !it.exists()) 0 else 500)
                         }
                         if (bestTarget == null)
                             NodeStatus.FAILED
@@ -102,7 +101,7 @@ object Combat {
             DispatchParallel({ MyInfo.myBases }) {
                 sequence<Any, WorkerDefenseBoard>({ WorkerDefenseBoard() },
                         WorkerDefense((it as PlayerUnit).position),
-                        parallel(2,
+                        parallel(1,
                                 Delegate {
                                     this!!
                                     attack(defendingWorkers, enemies)
@@ -120,7 +119,14 @@ object Combat {
                 fallback(
                         sequence(
                                 Inline("Find me some enemies") {
-                                    enemies = Cluster.enemyClusters.minBy { it.position.getDistance(myCluster.position) }?.units?.toList() ?: return@Inline NodeStatus.RUNNING
+                                    enemies = Cluster.enemyClusters.minBy {
+                                        val distance = MyInfo.myBases.map { base -> base as PlayerUnit; base.getDistance(it.position) }.min()
+                                                ?: Double.MAX_VALUE
+                                        val eval = CombatEval.probabilityToWin(myCluster.units.map { SimUnit.of(it) }, it.units.filter { it is Attacker }.map { SimUnit.of(it) })
+                                        it.position.getDistance(myCluster.position) * (1.0 - eval / 10) +
+                                                (if (distance < 1000) distance else 0.0)
+
+                                    }?.units?.toList() ?: return@Inline NodeStatus.RUNNING
                                     NodeStatus.SUCCEEDED
                                 },
                                 Condition("Good combat eval?") {
@@ -130,7 +136,10 @@ object Combat {
 
                                 },
                                 Delegate {
-                                    attack(myCluster.units.toList(), enemies)
+                                    val units = myCluster.units.toMutableList()
+                                    units.retainAll(Board.resources.units)
+                                    Board.resources.reserveUnits(units)
+                                    attack(units, enemies)
                                 }
                         ),
                         DispatchParallel({ myCluster.units }) {

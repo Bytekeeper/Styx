@@ -57,9 +57,11 @@ object Production {
                         msequence("executeBuild",
                                 Actions.reach(worker, at.toPosition(), 150),
                                 BuildCommand(worker, at, building),
-                                Await("worker constructing", 150) { worker.isConstructing },
-                                Sleep(100),
-                                Fail
+                                Await("worker constructing", 10) { worker.isConstructing },
+                                MaxFrames("Wait for construction start", 100,
+                                        sequence(Condition("Still constructing?") { worker.isConstructing },
+                                                Sleep)
+                                )
                         )
                 ))
     }
@@ -108,6 +110,10 @@ object Production {
         val safety = considerSafety ?: type.isResourceDepot
         return Retry(5, msequence({ BuildBoard() }, "build $type",
                 sequence<BuildBoard>(
+                        Inline("Mark $type as pending") {
+                            Board.pendingUnits.add(type)
+                            NodeStatus.SUCCEEDED
+                        },
                         ensureDependencies(type),
                         BlockResources(type.mineralPrice(), type.gasPrice()),
                         Await("canMake $type") { FTTBot.self.canMake(type) },

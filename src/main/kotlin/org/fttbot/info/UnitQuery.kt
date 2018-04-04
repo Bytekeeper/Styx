@@ -119,8 +119,16 @@ object UnitQuery {
     lateinit var myWorkers: List<Worker> private set
     lateinit var minerals : List<MineralPatch> private set
 
+    fun reset() {
+        andStayDown.clear()
+        update(emptyList())
+    }
+
     fun update(allUnits: Collection<Unit>) {
-        this.allUnits = allUnits.filter { it.isVisible }
+        if (allUnits.any { andStayDown.contains(Pair(it.id, it.initialType)) }) {
+            println("BUUH!")
+        }
+        this.allUnits = allUnits.filter { it.isVisible && !andStayDown.contains(Pair(it.id, it.initialType))}
         minerals = allUnits.filterIsInstance(MineralPatch::class.java)
         ownedUnits = this.allUnits.filterIsInstance(PlayerUnit::class.java)
         myUnits = ownedUnits.filter { it.player == FTTBot.self && it.exists()}
@@ -130,6 +138,8 @@ object UnitQuery {
 
     val geysers get() = allUnits.filter { it is VespeneGeyser }
     val myBases get() = myUnits.filter { it is Base }
+    // BWAPI sometimes "provides" units that aren't there - but those are also reported "hidden", so just ignore them
+    val andStayDown = mutableSetOf<Pair<Int, UnitType>>()
 
     fun allUnits(): List<Unit> = allUnits
     fun inRadius(position: Position, radius: Int) = allUnits.inRadius(position, radius)

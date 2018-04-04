@@ -91,7 +91,10 @@ object FTTBot : BWEventListener {
                         Inline("Crap Check") {
                             NodeStatus.SUCCEEDED
                         }
-                )
+                ),
+                Inline("Crap Check") {
+                    NodeStatus.SUCCEEDED
+                }
 
         )
         bot = fallback(
@@ -129,7 +132,8 @@ object FTTBot : BWEventListener {
                     NodeStatus.SUCCEEDED
                 }
         )
-        UnitQuery.update(emptyList())
+        UnitQuery.reset()
+
         EnemyInfo.reset()
     }
 
@@ -197,7 +201,10 @@ object FTTBot : BWEventListener {
     }
 
     override fun onUnitHide(unit: Unit) {
-        if (unit is PlayerUnit && unit.isEnemyUnit) EnemyInfo.onUnitHide(unit)
+        if (unit is PlayerUnit && unit.isEnemyUnit)
+            EnemyInfo.onUnitHide(unit)
+        if (unit is PlayerUnit && unit.isMyUnit)
+            UnitQuery.andStayDown += unit.id to unit.initialType
     }
 
     override fun onUnitRenegade(unit: Unit?) {

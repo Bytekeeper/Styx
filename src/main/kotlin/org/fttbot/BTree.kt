@@ -120,58 +120,48 @@ class Delegate<T>(val subtreeProducer: T?.() -> Node<T, *>) : BaseNode<T>() {
     }
 }
 
-class MaxTries<T>(val name: String, var maxTries: Int = Int.MAX_VALUE, child: Node<T, *>) : Decorator<T>(child) {
-    private var remaining = maxTries
+class MaxFrames<T>(val name: String, var maxFrames: Int = Int.MAX_VALUE, child: Node<T, *>) : Decorator<T>(child) {
+    private var startFrame = -1
     override fun tick(): NodeStatus {
-        if (remaining <= 0) {
+        if (startFrame < 0) {
+            startFrame = FTTBot.frameCount
+        }
+        if (FTTBot.frameCount - startFrame >= maxFrames)
             return NodeStatus.FAILED
-        }
-        val childResult = super.tick()
-        return when (childResult) {
-            NodeStatus.SUCCEEDED -> NodeStatus.SUCCEEDED
-            NodeStatus.FAILED -> NodeStatus.FAILED
-            NodeStatus.RUNNING -> {
-                remaining--
-                if (remaining == 0) {
-                    NodeStatus.FAILED
-                } else
-                    NodeStatus.RUNNING
-            }
-        }
+        return super.tick()
     }
 
     override fun parentFinished() {
-        remaining = maxTries
+        startFrame = -1
         super.parentFinished()
     }
 
-    override fun toString(): String = "Trying $name ($remaining ticks rem)"
+    override fun toString(): String = "Trying $name (${maxFrames - FTTBot.frameCount + startFrame} ticks rem)"
 }
 
 
 class Await<T>(val name: String, var toWait: Int = Int.MAX_VALUE, val condition: () -> Boolean) : BaseNode<T>() {
-    private var remaining = toWait
+    private var startFrame = -1
     override fun tick(): NodeStatus {
-        if (remaining <= 0) {
-            return NodeStatus.FAILED
+        if (startFrame < 0) {
+            startFrame = FTTBot.frameCount
         }
+        if (FTTBot.frameCount - startFrame >= toWait)
+            return NodeStatus.FAILED
+
         if (condition()) {
             return NodeStatus.SUCCEEDED
         }
 
-        remaining--
-        if (remaining == 0) {
-            return NodeStatus.FAILED
-        }
         return NodeStatus.RUNNING
     }
 
     override fun parentFinished() {
-        remaining = toWait
+        startFrame = -1
         super.parentFinished()
     }
 
-    override fun toString(): String = "Awaiting $name ($remaining frames rem)"
+    override fun toString(): String = "Awaiting $name (${startFrame - FTTBot.frameCount + toWait} frames rem)"
 }
 
 class Retry<T>(var times: Int, child: Node<T, *>) : Decorator<T>(child) {

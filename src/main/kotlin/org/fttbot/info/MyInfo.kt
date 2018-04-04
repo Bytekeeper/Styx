@@ -1,0 +1,35 @@
+package org.fttbot.info
+
+import bwem.area.Area
+import org.fttbot.Board
+import org.fttbot.FTTBot
+import org.fttbot.LazyOnFrame
+import org.openbw.bwapi4j.unit.*
+
+object MyInfo {
+    val occupiedAreas by LazyOnFrame<Map<Area, List<PlayerUnit>>> {
+        UnitQuery.myUnits.filter { it is Attacker }
+                .groupBy { FTTBot.bwem.getArea(it.tilePosition) }
+    }
+
+    val myBases: List<Base> by LazyOnFrame {
+        FTTBot.bwem.bases.mapNotNull { base ->
+            val myClosestBase = UnitQuery.myBases.minBy { it.tilePosition.getDistance(base.location) }
+                    ?: return@mapNotNull null
+            if (myClosestBase.tilePosition.getDistance(base.location) > 5)
+                null
+            else
+                myClosestBase as Base
+        }
+    }
+
+    fun pendingSupply(): Int = UnitQuery.myUnits
+            .filter {
+                !it.isCompleted && it is SupplyProvider
+                        || it is Egg && it.buildType.supplyProvided() > 0
+            }
+            .sumBy {
+                ((it as? SupplyProvider)?.supplyProvided() ?: 0) +
+                        ((it as? Egg)?.buildType?.supplyProvided() ?: 0)
+            } + Board.resources.supply
+}
