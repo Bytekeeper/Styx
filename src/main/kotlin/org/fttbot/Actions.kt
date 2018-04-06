@@ -2,7 +2,9 @@ package org.fttbot
 
 import org.apache.logging.log4j.LogManager
 import org.fttbot.info.UnitQuery
-import org.fttbot.info.canAttack
+import org.fttbot.task.Production.morph
+import org.fttbot.task.Production.research
+import org.fttbot.task.Production.train
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.TechType
@@ -77,10 +79,14 @@ class Heal(medic: Medic, target: Organic) : Order<Medic>(medic, { healing(target
 
 class ReserveUnit(val unit: PlayerUnit) : BaseNode<Any>() {
     override fun tick(): NodeStatus {
+        if (!unit.exists()) {
+            return NodeStatus.FAILED
+        }
         if (Board.resources.units.contains(unit)) {
             Board.resources.reserveUnit(unit)
             return NodeStatus.SUCCEEDED
         }
+        LogManager.getLogger().error("Failed to reserve $unit: ${getTreeTrace().joinToString("\n")}");
         return NodeStatus.FAILED
     }
 

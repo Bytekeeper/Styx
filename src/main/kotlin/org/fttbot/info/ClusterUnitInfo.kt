@@ -25,7 +25,7 @@ class ClusterInfo(private val cluster: Cluster<*>) {
                 .map { it as PlayerUnit }
     }
 
-    val combatRelevantUnits by lazy { unitsInArea.filter { it.getDistance(forceCenter) < 400 } }
+    val combatRelevantUnits by lazy { unitsInArea.filter { it.getDistance(forceCenter) < 300 } }
 
     val forceCenter by lazy {
         unitsInArea.fold(Position(0, 0)) { a, u -> a + u.position } / unitsInArea.size

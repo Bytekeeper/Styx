@@ -25,6 +25,10 @@ fun WeaponType.inRange(distance: Int, safety: Int): Boolean =
 fun <T : Unit> List<T>.inRadius(other: Unit, maxRadius: Int) = filter { other.getDistance(it) < maxRadius }
 fun <T : Unit> List<T>.inRadius(position: Position, maxRadius: Int) = filter { it.getDistance(position) < maxRadius }
 val Base.isReadyForResources get() = (this as PlayerUnit).isCompleted || this is Lair
+val PlayerUnit.isSuicideUnit get() = when (this) {
+    is Scourge, is SpiderMine, is Scarab -> true
+    else -> false
+}
 
 // From https://docs.google.com/spreadsheets/d/1bsvPvFil-kpvEUfSG74U3E5PLSTC02JxSkiR8QdLMuw/edit#gid=0 resp. PurpleWave
 val Attacker.stopFrames

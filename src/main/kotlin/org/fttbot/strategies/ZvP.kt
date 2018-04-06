@@ -42,6 +42,8 @@ object ZvP {
                     trainWorker(),
                     trainWorker(),
                     Macro.buildExpansion(),
+                    trainWorker(),
+                    trainWorker(),
                     build(UnitType.Zerg_Spawning_Pool)
             )
 
@@ -57,6 +59,7 @@ object ZvP {
                     buildGas(),
                     trainWorker(),
                     trainWorker(),
+                    train(UnitType.Zerg_Zergling),
                     train(UnitType.Zerg_Zergling),
                     train(UnitType.Zerg_Zergling),
                     Repeat(child = fallback(

@@ -23,7 +23,7 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableSet<U
         private fun <U : Unit> buildClusters(relevantUnits: List<U>): List<Cluster<U>> {
             val clusters: MutableList<Cluster<U>> = ArrayList()
             val clusterUnits = relevantUnits.map { unit ->
-                val cluster = clusters.filter { it.position.getDistance(unit.position) < 400 }
+                val cluster = clusters.filter { it.position.getDistance(unit.position) < 300 }
                         .maxBy { it.units.size }
                 if (cluster != null) {
                     cluster.units += unit

@@ -69,7 +69,7 @@ object Macro {
     fun moveSurplusWorkers() = DispatchParallel({ MyInfo.myBases.filter { it.isReadyForResources } }) { base ->
         base as PlayerUnit
         val minerals = UnitQuery.minerals.count { it.getDistance(base) < 300 }
-        val relevantWorkers = UnitQuery.myWorkers.filter { it.getDistance(base) < 300 && (it.isGatheringGas || it.isGatheringMinerals) }
+        val relevantWorkers = UnitQuery.myWorkers.filter { it.getDistance(base) < 300 && (it.isGatheringGas || it.isGatheringMinerals) && Board.resources.units.contains(it) }
         val workerDelta = relevantWorkers.size - minerals * 2
         if ((minerals < 3 && workerDelta > 0) || workerDelta > 5) {
             val targetBase = MyInfo.myBases.filter { it.isReadyForResources }.minBy { targetBase ->

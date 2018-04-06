@@ -19,11 +19,13 @@ object Strategies {
                     sequence(
                             Condition("should build workers") {
                                 UnitQuery.myUnits.count { it is Worker && !it.isCompleted || it is Egg && it.buildType.isWorker } <
-                                        MyInfo.myBases.count {
+                                        MyInfo.myBases.sumBy {
                                             it as PlayerUnit
-                                            it.isReadyForResources &&
-                                                    workerMineralDelta(it) > 0
-                                        } - FTTBot.self.minerals() / 1000 - FTTBot.self.gas() / 500
+                                            if (it.isReadyForResources)
+                                                workerMineralDelta(it) / 5
+                                             else
+                                                0
+                                        } - FTTBot.self.minerals() / 3000 - FTTBot.self.gas() / 1500
                             },
                             Production.trainWorker(),
                             Fail)

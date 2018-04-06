@@ -1,6 +1,7 @@
 package org.fttbot.estimation
 
 import org.fttbot.info.isMelee
+import org.fttbot.info.isSuicideUnit
 import org.fttbot.or
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.DamageType
@@ -51,7 +52,15 @@ object CombatEval {
 
     private fun averageDamageOf(unitsA: List<SimUnit>, unitsB: List<SimUnit>) = (unitsA.map { a ->
         if (!a.isPowered) 0.0 else
-            unitsB.map { b -> if (!b.hidden || b.detected) a.damagePerFrameTo(b) else 0.0 }.average()
+            unitsB.map { b ->
+                if (!b.hidden || b.detected) {
+                    val dmg = a.damagePerFrameTo(b)
+                    if (a.suicideUnit) {
+                        dmg / unitsB.size
+                    } else
+                        dmg
+                } else 0.0
+            }.average()
     }).average().or(0.1)
 }
 
@@ -77,8 +86,10 @@ class SimUnit(val name: String = "Unknown",
               val airHits: Int,
               val groundHits: Int,
               val groundBonusRange: Int,
-              val airBonusRange: Int) {
+              val airBonusRange: Int,
+              val suicideUnit: Boolean) {
     val isAttacker = groundWeapon.type() != WeaponType.None || airWeapon.type() != WeaponType.None
+
 
     companion object {
         fun of(unit: PlayerUnit): SimUnit = SimUnit(
@@ -103,7 +114,8 @@ class SimUnit(val name: String = "Unknown",
                 airHits = unit.initialType.maxAirHits(),
                 groundHits = unit.initialType.maxGroundHits(),
                 groundBonusRange = if (unit is Bunker) 64 else 0,
-                airBonusRange = if (unit is Bunker) 64 else 0)
+                airBonusRange = if (unit is Bunker) 64 else 0,
+                suicideUnit = unit.isSuicideUnit)
 
         fun of(type: UnitType): SimUnit = SimUnit(
                 name = type.name,
@@ -118,7 +130,9 @@ class SimUnit(val name: String = "Unknown",
                 airHits = type.maxAirHits(),
                 groundHits = type.maxGroundHits(),
                 groundBonusRange = if (type == UnitType.Terran_Bunker) 2 else 0,
-                airBonusRange = if (type == UnitType.Terran_Bunker) 2 else 0
+                airBonusRange = if (type == UnitType.Terran_Bunker) 2 else 0,
+                suicideUnit = when (type) { UnitType.Zerg_Scourge, UnitType.Terran_Vulture_Spider_Mine, UnitType.Protoss_Scarab -> true; else -> false
+                }
         )
     }
 

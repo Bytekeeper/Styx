@@ -1,9 +1,12 @@
 package org.fttbot.task
 
-import org.fttbot.*
+import org.fttbot.BaseNode
+import org.fttbot.Board
+import org.fttbot.NodeStatus
 import org.fttbot.info.MyInfo
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.isMyUnit
+import org.fttbot.info.isReadyForResources
 import org.openbw.bwapi4j.unit.*
 import kotlin.math.max
 
@@ -12,7 +15,7 @@ const val RESOURCE_RANGE = 300
 object GatherResources : BaseNode<Any>() {
     override fun tick(): NodeStatus {
         val available = Board.resources
-        val myBases = MyInfo.myBases.filterIsInstance(PlayerUnit::class.java).filter { it.isCompleted }
+        val myBases = MyInfo.myBases.filterIsInstance(PlayerUnit::class.java).filter { it as Base; it.isReadyForResources }
         val units = available.units
 
         val workerUnits = myBases.flatMap { base ->
@@ -26,7 +29,7 @@ object GatherResources : BaseNode<Any>() {
             if (gasMissing > 0) {
                 val refinery = refineries.first()
                 repeat(gasMissing) {
-                    val worker = workersToAssign.firstOrNull { !it.isCarryingMinerals && !it.isGatheringGas}
+                    val worker = workersToAssign.firstOrNull { !it.isCarryingMinerals && !it.isGatheringGas }
                             ?: workersToAssign.firstOrNull { !it.isGatheringGas } ?: return@repeat
                     worker.gather(refinery)
                     workersToAssign.remove(worker)
@@ -45,7 +48,7 @@ object GatherResources : BaseNode<Any>() {
                 }
             }
             workersToAssign
-                    .filter { !it.isGatheringMinerals && !it.isGatheringGas && it.isInterruptible}
+                    .filter { !it.isGatheringMinerals && !it.isGatheringGas && it.isInterruptible }
                     .forEach { worker ->
                         if (worker.targetUnit !is MineralPatch) {
                             val targetMineral = (minerals.filter { !it.isBeingGathered }.minBy { it.getDistance(worker) }

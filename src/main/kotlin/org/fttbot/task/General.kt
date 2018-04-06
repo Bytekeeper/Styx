@@ -9,9 +9,9 @@ import org.fttbot.info.MyInfo
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.canAttack
 import org.openbw.bwapi4j.Position
-import org.openbw.bwapi4j.unit.Burrowable
-import org.openbw.bwapi4j.unit.MobileUnit
+import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
+
 
 object Actions {
     fun hasReached(unit: MobileUnit, position: Position, tolerance: Int = 64) =
@@ -32,7 +32,7 @@ object Actions {
 
     fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node<Any, Any> {
         // TODO: "Search" for a way
-        return MaxFrames("$unit -> $position", 12 * 60,
+        return MaxTries("$unit -> $position", 12 * 60,
                 fallback(
                         Condition("Reached $position with $unit") { hasReached(unit, position, tolerance) },
                         msequence("Order $unit to $position",

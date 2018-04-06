@@ -26,7 +26,9 @@ import org.fttbot.task.Macro.preventSupplyBlock
 import org.fttbot.task.Scouting.scout
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Color
+import org.openbw.bwapi4j.type.Order
 import org.openbw.bwapi4j.type.Race
+import org.openbw.bwapi4j.type.UnitCommandType
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Unit
@@ -173,6 +175,16 @@ object FTTBot : BWEventListener {
             game.mapDrawer.drawCircleMap(it.position, 16, Color.RED)
             game.mapDrawer.drawTextMap(it.position, "${it.initialType}")
         }
+
+        UnitQuery.myWorkers.filter { it.lastCommand == UnitCommandType.Morph && !it.isMoving}
+                .forEach{
+                    LOG.error("OHOH")
+                }
+        Cluster.myClusters.forEach {
+            val eval = ClusterUnitInfo.getInfo(it)
+            game.mapDrawer.drawCircleMap(it.position, 300, Color.WHITE)
+            game.mapDrawer.drawTextMap(it.position.x, it.position.y - 200, "${eval.combatEval}")
+        }
     }
 
     override fun onUnitDestroy(unit: Unit) {
@@ -191,7 +203,7 @@ object FTTBot : BWEventListener {
 
     override fun onUnitComplete(unit: Unit) {
         if (unit !is PlayerUnit) return
-        LOG.info("Completed: ${unit}")
+        LOG.debug("Completed: ${unit}")
     }
 
     override fun onUnitShow(unit: Unit) {

@@ -37,7 +37,7 @@ class AwaitConstructionStart(val worker: Worker, val type: UnitType, val at: Til
         if (worker.buildType != UnitType.None) {
             started = true;
         }
-        return NodeStatus.RUNNING
+        return NodeStatus.FAILED
     }
 
     override fun parentFinished() {
@@ -53,12 +53,12 @@ object Production {
                 AwaitConstructionStart(worker, building, at),
                 sequence(
                         ReserveUnit(worker),
-                        fallback(ReserveResources(building.mineralPrice(), building.gasPrice()), Sleep),
+                        fallback(ReserveResources(building.mineralPrice(), building.gasPrice()), sequence(Sleep(48), Fail)),
                         msequence("executeBuild",
                                 Actions.reach(worker, at.toPosition(), 150),
                                 BuildCommand(worker, at, building),
                                 Await("worker constructing", 10) { worker.isConstructing },
-                                MaxFrames("Wait for construction start", 100,
+                                MaxTries("Wait for construction start", 100,
                                         sequence(Condition("Still constructing?") { worker.isConstructing },
                                                 Sleep)
                                 )
@@ -81,7 +81,8 @@ object Production {
 
     fun selectResearcher(currentResearcher: PlayerUnit?, tech: TechType): PlayerUnit? {
         if (currentResearcher?.exists() == true && !(currentResearcher as ResearchingFacility).isResearching
-                && !(currentResearcher as ResearchingFacility).isUpgrading) return currentResearcher
+                && !(currentResearcher as ResearchingFacility).isUpgrading
+                && Board.resources.units.contains(currentResearcher)) return currentResearcher
         return Board.resources.units
                 .firstOrNull {
                     it.isA(tech.whatResearches())
@@ -93,7 +94,8 @@ object Production {
 
     fun selectResearcher(currentResearcher: PlayerUnit?, upgrade: UpgradeType): PlayerUnit? {
         if (currentResearcher?.exists() == true && !(currentResearcher as ResearchingFacility).isResearching
-                && !(currentResearcher as ResearchingFacility).isUpgrading) return currentResearcher
+                && !(currentResearcher as ResearchingFacility).isUpgrading
+                && Board.resources.units.contains(currentResearcher)) return currentResearcher
         return Board.resources.units
                 .firstOrNull {
                     it.isA(upgrade.whatUpgrades())
@@ -139,6 +141,13 @@ object Production {
                         Condition("Safe to build or don't care?") {
                             this!!
                             !safety || builder !is MobileUnit || Actions.canReachSafely(builder as Worker, targetPosition!!.toPosition())
+                        },
+                        Condition("Target position available?") {
+                            this!!
+                            if (!builder!!.exists() || builder !is Worker || FTTBot.game.canBuildHere(targetPosition, type, builder as Worker)) {
+                                return@Condition true
+                            }
+                            return@Condition false
                         },
                         Delegate
                         {
@@ -255,7 +264,7 @@ object Production {
         var researcher: PlayerUnit? = null
         return fallback(
                 Condition("already researched $tech") { FTTBot.self.hasResearched(tech) },
-                msequence("research",
+                sequence(
                         ensureUnitDependencies(listOf(tech.requiredUnit())),
                         sequence(
                                 fallback(ReserveResources(tech.mineralPrice(), tech.gasPrice()), Sleep),
@@ -278,8 +287,8 @@ object Production {
         val level = FTTBot.self.getUpgradeLevel(upgradeType)
         return fallback(Condition("already upgraded $upgradeType") { FTTBot.self.getUpgradeLevel(upgradeType) > level || level >= upgradeType.maxRepeats() },
                 sequence(
-                        Delegate { ensureUnitDependencies(listOf(upgradeType.whatsRequired(level), upgradeType.whatUpgrades())) },
-                        Delegate { fallback(ReserveResources(upgradeType.mineralPrice(level), upgradeType.gasPrice(level)), Sleep) },
+                        ensureUnitDependencies(listOf(upgradeType.whatsRequired(level), upgradeType.whatUpgrades())),
+                        fallback(ReserveResources(upgradeType.mineralPrice(level), upgradeType.gasPrice(level)), Sleep),
                         Await("can upgrade $upgradeType") { FTTBot.self.canUpgrade(upgradeType) },
                         Inline("find researcher for $upgradeType") {
                             researcher = selectResearcher(researcher, upgradeType)

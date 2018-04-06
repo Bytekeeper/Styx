@@ -9,15 +9,29 @@ enum class NodeStatus {
     RUNNING
 }
 
+data class TreeTraceElement(val node: Node<*, *>)
+
 interface Node<in P, out T> {
     val board: T?
     fun setParent(parent: Node<*, P>)
     fun tick(): NodeStatus
     fun parentFinished() {}
+    fun getTreeTrace(): List<TreeTraceElement> {
+        val result = mutableListOf<TreeTraceElement>()
+        addTreeTrace(result)
+        return result
+    }
+
+    fun addTreeTrace(trace: MutableList<TreeTraceElement>)
 
     infix fun <X : P> onlyIf(condition: Node<X, *>): Node<X, T> = object : Node<X, T> {
         override val board: T?
             get() = this@Node.board
+
+        override fun addTreeTrace(trace: MutableList<TreeTraceElement>) {
+            trace.add(TreeTraceElement(this))
+            this@Node.addTreeTrace(trace)
+        }
 
         override fun setParent(parent: Node<*, X>) {
             this@Node.setParent(parent)
@@ -29,7 +43,7 @@ interface Node<in P, out T> {
                     this@Node.tick()
                 else NodeStatus.FAILED
 
-        override fun toString(): String = "${this@Node} only if ${condition}"
+        override fun toString(): String = "only if"
 
         override fun parentFinished() {
             this@Node.parentFinished()
@@ -43,6 +57,11 @@ abstract class BaseNode<T> : Node<T, T> {
 
     override fun setParent(parent: Node<*, T>) {
         this._parent = parent
+    }
+
+    override fun addTreeTrace(trace: MutableList<TreeTraceElement>) {
+        trace.add(TreeTraceElement(this))
+        _parent?.addTreeTrace(trace)
     }
 }
 
@@ -70,11 +89,16 @@ abstract class ParentNode<P, T>(protected val convert: (P?) -> T?, protected val
 
         super.parentFinished()
     }
+
+    override fun addTreeTrace(trace: MutableList<TreeTraceElement>) {
+        trace.add(TreeTraceElement(this))
+        parent?.addTreeTrace(trace)
+    }
 }
 
 class Condition<T>(val name: String, val condition: T?.() -> Boolean) : BaseNode<T>() {
     override fun tick(): NodeStatus = if (condition(_parent?.board)) NodeStatus.SUCCEEDED else NodeStatus.FAILED
-    override fun toString(): String = "require $name"
+    override fun toString(): String = "Condition $name"
 }
 
 open class Decorator<T>(val child: Node<T, *>) : BaseNode<T>() {
@@ -86,7 +110,7 @@ open class Decorator<T>(val child: Node<T, *>) : BaseNode<T>() {
 
     override fun setParent(parent: Node<*, T>) {
         super.setParent(parent)
-        child.setParent(parent)
+        child.setParent(this)
     }
 }
 
@@ -118,25 +142,26 @@ class Delegate<T>(val subtreeProducer: T?.() -> Node<T, *>) : BaseNode<T>() {
         this._parent = parent
         super.setParent(parent)
     }
+
+    override fun toString(): String = "Delegate"
 }
 
-class MaxFrames<T>(val name: String, var maxFrames: Int = Int.MAX_VALUE, child: Node<T, *>) : Decorator<T>(child) {
-    private var startFrame = -1
+class MaxTries<T>(val name: String, var maxTries: Int = Int.MAX_VALUE, child: Node<T, *>) : Decorator<T>(child) {
+    private var remaining = maxTries
     override fun tick(): NodeStatus {
-        if (startFrame < 0) {
-            startFrame = FTTBot.frameCount
-        }
-        if (FTTBot.frameCount - startFrame >= maxFrames)
+        if (remaining <= 0) {
             return NodeStatus.FAILED
+        }
+        remaining--
         return super.tick()
     }
 
     override fun parentFinished() {
-        startFrame = -1
+        remaining = maxTries
         super.parentFinished()
     }
 
-    override fun toString(): String = "Trying $name (${maxFrames - FTTBot.frameCount + startFrame} ticks rem)"
+    override fun toString(): String = "Trying $name ($remaining / $maxTries ticks rem)"
 }
 
 
@@ -161,7 +186,7 @@ class Await<T>(val name: String, var toWait: Int = Int.MAX_VALUE, val condition:
         super.parentFinished()
     }
 
-    override fun toString(): String = "Awaiting $name (${startFrame - FTTBot.frameCount + toWait} frames rem)"
+    override fun toString(): String = "Awaiting $name for max ${startFrame - FTTBot.frameCount + toWait} frames)"
 }
 
 class Retry<T>(var times: Int, child: Node<T, *>) : Decorator<T>(child) {
@@ -185,6 +210,8 @@ class Retry<T>(var times: Int, child: Node<T, *>) : Decorator<T>(child) {
         remaining = times
         super.parentFinished()
     }
+
+    override fun toString(): String = "Retrying $remaining / $times times"
 }
 
 class Repeat<T>(val times: Int = -1, child: Node<T, *>) : Decorator<T>(child) {
@@ -214,7 +241,7 @@ class Repeat<T>(val times: Int = -1, child: Node<T, *>) : Decorator<T>(child) {
         super.parentFinished()
     }
 
-    override fun toString(): String = "Repeat($remaining) -> $child"
+    override fun toString(): String = "Repeat $remaining / $times"
 }
 
 class Parallel<P, T>(val m: Int, convert: (P?) -> T?, children: List<Node<T, *>>) : ParentNode<P, T>(convert, children) {
@@ -231,7 +258,7 @@ class Parallel<P, T>(val m: Int, convert: (P?) -> T?, children: List<Node<T, *>>
         return NodeStatus.RUNNING
     }
 
-    override fun toString(): String = "parallel($m, ${children.joinToString(", ")})"
+    override fun toString(): String = "Parallel SUCCESS > $m => SUCCESS"
 
     companion object {
         fun <T> parallel(m: Int, vararg child: Node<T, *>) = Parallel<T, T>(m, { it }, children = child.toList())
@@ -243,7 +270,8 @@ class MParallel<P, T>(val m: Int, convert: (P?) -> T?, children: List<Node<T, *>
     var succeeded = 0
     var failed = 0
     override fun tick(): NodeStatus {
-        val result = activeChildren.map { it to it.tick() }.unzip()
+        val childResult = activeChildren.map { it to it.tick() }
+        val result = childResult.unzip()
         succeeded += result.second.count { it == NodeStatus.SUCCEEDED }
         failed += result.second.count { it == NodeStatus.FAILED }
         activeChildren = result.first.filterIndexed { index, node -> result.second[index] == NodeStatus.RUNNING }
@@ -252,7 +280,10 @@ class MParallel<P, T>(val m: Int, convert: (P?) -> T?, children: List<Node<T, *>
             return NodeStatus.SUCCEEDED
         }
         if (failed > max(0, children.size - m)) {
+            val failedChildren = childResult.filter { it.second == NodeStatus.FAILED }.map { it.first }
+            LogManager.getLogger().error("Failed: $this; failed children: ${failedChildren.joinToString(", ")}: ${getTreeTrace().joinToString("\n")}")
             parentFinished()
+            failedChildren[0].tick()
             return NodeStatus.FAILED
         }
         return NodeStatus.RUNNING
@@ -265,7 +296,7 @@ class MParallel<P, T>(val m: Int, convert: (P?) -> T?, children: List<Node<T, *>
         super.parentFinished()
     }
 
-    override fun toString(): String = "Mparallel($m, ${activeChildren.joinToString(", ")})"
+    override fun toString(): String = "Parallel SUCCESS > $m => SUCCESS, $succeeded successful children, $failed failed children and ${activeChildren.size} / ${children.size} remaining children"
 
     companion object {
         fun <T> mparallel(m: Int, vararg child: Node<T, T>) = MParallel<T, T>(m, { it }, children = child.toList())
@@ -306,7 +337,7 @@ class DispatchParallel<T : Any, X>(val childrenResolver: () -> Collection<X>, va
         super.parentFinished()
     }
 
-    override fun toString(): String = "$name(${children.values.joinToString(", ")})"
+    override fun toString(): String = "DispatchParallel $name with ${children.size} active child nodes"
 }
 
 
@@ -315,13 +346,15 @@ class NoFail<P, T>(child: Node<P, T>) : Decorator<P>(child) {
         val result = super.tick()
         return when (result) {
             NodeStatus.FAILED -> {
-                LogManager.getLogger().error("Unexpected fail: $child")
+                LogManager.getLogger().error("Unexpected fail: $child: ${getTreeTrace().joinToString("\n")}")
                 NodeStatus.SUCCEEDED
             }
             NodeStatus.RUNNING -> NodeStatus.RUNNING
             NodeStatus.SUCCEEDED -> NodeStatus.SUCCEEDED
         }
     }
+
+    override fun toString(): String = "NoFail"
 }
 
 object Success : BaseNode<Any>() {
@@ -351,7 +384,7 @@ class Sleep<T>(val timeOut: Int = Int.MAX_VALUE) : BaseNode<T>() {
         startFrame = -1
     }
 
-    override fun toString(): String = "Sleeping ${FTTBot.frameCount - startFrame} frames"
+    override fun toString(): String = "Sleep ${FTTBot.frameCount - startFrame + timeOut} frames"
 
     companion object : BaseNode<Any>() {
         override fun tick(): NodeStatus {
@@ -382,7 +415,7 @@ class Fallback<P, T>(convert: (P?) -> T?, children: List<Node<T, *>>) : ParentNo
         children.forEach(Node<T, *>::parentFinished)
     }
 
-    override fun toString(): String = "fallback(${children.joinToString(", ")})"
+    override fun toString(): String = "Fallback"
 
     companion object {
         fun <T> fallback(vararg child: Node<T, *>) = Fallback<T, T>({ it }, children = child.toList())
@@ -406,7 +439,7 @@ class Sequence<P, T>(convert: (P?) -> T?, children: List<Node<T, *>>) : ParentNo
         return NodeStatus.SUCCEEDED
     }
 
-    override fun toString(): String = "Seq(${children.joinToString(", ")})"
+    override fun toString(): String = "Sequence"
 
     companion object {
         fun <T> sequence(vararg child: Node<T, *>) = Sequence<T, T>({ it }, children = child.toList())
@@ -438,7 +471,7 @@ class MSequence<P, T>(val name: String, convert: (P?) -> T?, children: List<Node
         super.parentFinished()
     }
 
-    override fun toString(): String = "$name@$childIndex(${children.joinToString(",")})"
+    override fun toString(): String = "MSequence $name, active child $childIndex"
 
     companion object {
         fun <T> msequence(name: String, vararg child: Node<T, *>) = MSequence<T, T>(name, { it }, children = child.toList())

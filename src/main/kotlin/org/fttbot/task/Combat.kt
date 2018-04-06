@@ -132,8 +132,8 @@ object Combat {
                                 },
                                 Condition("Good combat eval?") {
                                     val combatEval = ClusterUnitInfo.getInfo(myCluster).combatEval
-                                    combatEval > 0.55 ||
-                                            combatEval > 0.45 && myCluster.units.any { me -> enemies.any { it.canAttack(me) } }
+                                    combatEval > 0.52 ||
+                                            combatEval > 0.40 && myCluster.units.any { me -> enemies.any { it.canAttack(me) } }
 
                                 },
                                 Delegate {
