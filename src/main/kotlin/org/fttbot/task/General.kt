@@ -1,16 +1,16 @@
 package org.fttbot.task
 
+import com.badlogic.gdx.math.Vector2
 import org.fttbot.*
 import org.fttbot.Fallback.Companion.fallback
 import org.fttbot.MSequence.Companion.msequence
 import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.info.EnemyInfo
 import org.fttbot.info.MyInfo
-import org.fttbot.info.UnitQuery
-import org.fttbot.info.canAttack
 import org.openbw.bwapi4j.Position
-import org.openbw.bwapi4j.unit.*
-import org.openbw.bwapi4j.unit.Unit
+import org.openbw.bwapi4j.TilePosition
+import org.openbw.bwapi4j.unit.Burrowable
+import org.openbw.bwapi4j.unit.MobileUnit
 
 
 object Actions {
@@ -32,38 +32,52 @@ object Actions {
 
     fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node<Any, Any> {
         // TODO: "Search" for a way
+        var nextWaypoint: Position? = null
         return MaxTries("$unit -> $position", 12 * 60,
                 fallback(
                         Condition("Reached $position with $unit") { hasReached(unit, position, tolerance) },
-                        msequence("Order $unit to $position",
+                        Repeat(child = msequence("Move $unit to $position",
                                 makeMobile(unit),
-                                MoveCommand(unit, position),
-                                CheckIsClosingIn(unit, position)
-                        )
+                                Inline("Next waypoint") {
+                                    if (unit.getDistance(position) < 200 || unit.isFlying) {
+                                        nextWaypoint = position
+                                    } else {
+                                        nextWaypoint = FTTBot.bwem.getPath(unit.position, position).firstOrNull { it.center.toPosition().getDistance(unit.position) >= 200 }?.center?.toPosition() ?: position
+                                    }
+                                    NodeStatus.SUCCEEDED
+                                },
+                                Delegate { MoveCommand(unit, nextWaypoint!!) },
+                                Delegate { CheckIsClosingIn(unit, nextWaypoint!!) }
+                        ))
                 ))
     }
 
-    fun reach(unit: List<MobileUnit>, position: Position, tolerance: Int = 128) : Node<Any, Any> =
-            DispatchParallel({unit}) {
+    fun reach(unit: List<MobileUnit>, position: Position, tolerance: Int = 128): Node<Any, Any> =
+            DispatchParallel<Any, MobileUnit>("Reach", { unit }) {
                 reach(it, position, tolerance)
             }
 
-    private fun CheckIsClosingIn(unit: MobileUnit, position: Position): Repeat<Any> {
-        return Repeat(child = sequence(
-                Delegate {
-                    val distance = unit.getDistance(position)
-                    val frame = FTTBot.frameCount
-                    Inline<Any>("Closing in?") {
-                        val deltaFrames = FTTBot.frameCount - frame
-                        if (deltaFrames > 10 * 24 || deltaFrames > 5 && !unit.isMoving)
-                            NodeStatus.FAILED
-                        else if (unit.getDistance(position) < distance)
-                            NodeStatus.SUCCEEDED
-                        else
-                            NodeStatus.RUNNING
+    private fun CheckIsClosingIn(unit: MobileUnit, position: Position): BaseNode<Any> {
+        return Delegate {
+            var distance = unit.getDistance(position)
+            var frame = FTTBot.frameCount
+            Inline("Closing in?") {
+                val deltaFrames = FTTBot.frameCount - frame
+                val currentDistance = unit.getDistance(position)
+                if (deltaFrames > 10 * 24 || deltaFrames > 5 && !unit.isMoving)
+                    NodeStatus.FAILED
+                else
+                    if (currentDistance <= TilePosition.SIZE_IN_PIXELS) {
+                        NodeStatus.SUCCEEDED
+                    } else {
+                        if (currentDistance < distance) {
+                            frame = FTTBot.frameCount
+                            distance = currentDistance
+                        }
+                        NodeStatus.RUNNING
                     }
-                })
-        )
+            }
+        }
     }
 
     private fun makeMobile(unit: MobileUnit): Fallback<Any, Any> {
@@ -73,13 +87,26 @@ object Actions {
         )
     }
 
-    fun flee(s: MobileUnit): Sequence<Any, Any> {
+    fun flee(unit: MobileUnit): Sequence<Any, Any> {
+        var targetPosition : Position = Position(0, 0)
         return sequence(
-                Condition("Any close enemy") {
-                    UnitQuery.enemyUnits.any { it.canAttack(s, 150) }
+                Inline("Threat Vector") {
+                    val force = Vector2()
+                    force.setZero()
+                    Potential.addThreatRepulsion(force, unit)
+                    if (force.isZero)
+                        return@Inline NodeStatus.FAILED
+                    if (!unit.isFlying) {
+                        Potential.addWallRepulsion(force, unit, 2f)
+                        Potential.addSafeAreaAttraction(force, unit, 2f)
+                    } else {
+                        Potential.addSafeAreaAttractionDirect(force, unit, 2f)
+                    }
+                    force.nor()
+                    targetPosition = unit.position + force.scl(64f).toPosition()
+                    NodeStatus.SUCCEEDED
                 },
-                Condition("Has base") { !MyInfo.myBases.isEmpty() },
-                Delegate { reach(s, (MyInfo.myBases[0] as Unit).position, 300) }
+                Delegate { reach(unit, targetPosition, 8) }
         )
     }
 }

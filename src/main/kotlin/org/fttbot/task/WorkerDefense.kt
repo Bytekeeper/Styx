@@ -28,13 +28,13 @@ class WorkerDefense(val base: Position) : BaseNode<WorkerDefenseBoard>() {
         val myCluster = Cluster.myClusters.minBy { it.position.getDistance(base) } ?: return NodeStatus.SUCCEEDED
         val simUnitsOfEnemy = enemyCluster.units.map { SimUnit.of(it) }
         val successForCompleteDefense = CombatEval.probabilityToWin(myCluster.units.filter { it is Attacker }.map { SimUnit.of(it) }, simUnitsOfEnemy)
-        if (successForCompleteDefense < 0.5) {
+        if (successForCompleteDefense < 0.4) {
             // TODO: FLEE - you fools!
             return NodeStatus.FAILED
         }
         defendingWorkers.retainAll(Board.resources.units)
         val successForCurrentRatio = CombatEval.probabilityToWin(myCluster.units.filter {
-            it is Attacker && (it !is Worker || defendingWorkers.contains(it))
+            it.isCompleted && it is Attacker && (it !is Worker || defendingWorkers.contains(it))
         }.map { SimUnit.of(it) }, simUnitsOfEnemy)
         if (successForCurrentRatio > 0.7) {
             defendingWorkers.minBy { it.hitPoints }?.let {

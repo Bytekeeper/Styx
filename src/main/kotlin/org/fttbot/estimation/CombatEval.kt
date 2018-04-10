@@ -1,5 +1,6 @@
 package org.fttbot.estimation
 
+import org.fttbot.fastsig
 import org.fttbot.info.isMelee
 import org.fttbot.info.isSuicideUnit
 import org.fttbot.or
@@ -9,59 +10,54 @@ import org.openbw.bwapi4j.type.UnitSizeType
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
+import java.lang.Math.pow
 import kotlin.math.exp
 import kotlin.math.max
+import kotlin.math.min
 
 const val MAX_FRAMES_TO_ATTACK = 25
 const val HEAL_SCORE = 50
 
 object CombatEval {
     fun probabilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>): Double {
-        val damageA = averageDamageOf(unitsOfPlayerA, unitsOfPlayerB)
-        val damageB = averageDamageOf(unitsOfPlayerB, unitsOfPlayerA)
-        val hpA = unitsOfPlayerA.filter { it.isAttacker }.map { it.hitPoints }.average().or(0.1) +
-                unitsOfPlayerA.count { it.canHeal } * HEAL_SCORE
-        val hpB = unitsOfPlayerB.filter { it.isAttacker }.map { it.hitPoints }.average().or(0.1) +
-                unitsOfPlayerB.count { it.canHeal } * HEAL_SCORE
-
-        val rangeA = (unitsOfPlayerA.map { max(it.groundWeapon.type().maxRange() + it.groundBonusRange, it.airWeapon.type().maxRange() + it.airBonusRange) } + 1).average()
-        val rangeB = (unitsOfPlayerB.map { max(it.groundWeapon.type().maxRange() + it.groundBonusRange, it.airWeapon.type().maxRange() + it.airBonusRange) } + 1).average()
-        val mobilityA = (unitsOfPlayerA.map { it.topSpeed } + 0.01).average()
-        val mobilityB = (unitsOfPlayerB.map { it.topSpeed } + 0.01).average()
-
         val amountOfUnits = max(1, unitsOfPlayerA.size + unitsOfPlayerB.size)
         val center = (unitsOfPlayerA + unitsOfPlayerB)
                 .map { it.position }.fold(Position(0, 0)) { s, t -> if (t != null) s.add(t) else s }
                 .divide(Position(amountOfUnits, amountOfUnits))
-        val distA = unitsOfPlayerA.map {
-            max(0, it.position?.getDistance(center) ?: 0-max(it.airWeapon.maxRange(), it.groundWeapon.maxRange()))
-        }
-                .average().or(1000.0)
-        val distB = unitsOfPlayerB.map {
-            max(0, it.position?.getDistance(center) ?: 0-max(it.airWeapon.maxRange(), it.groundWeapon.maxRange()))
-        }
-                .average().or(1000.0)
+
+        val medicFactorA = fastsig(unitsOfPlayerA.count { it.canHeal }.toDouble() * 2) + 1.0
+        val medicFactorB = fastsig(unitsOfPlayerB.count { it.canHeal }.toDouble() * 2) + 1.0
+
+        val alpha = strength(unitsOfPlayerA, unitsOfPlayerB, center, medicFactorA)
+        val beta = strength(unitsOfPlayerB, unitsOfPlayerA, center, medicFactorB)
 
         // Lanchester's Law
-//        val agg = 0.1 * ((distB / 100.0 + mobilityA / 100.0 + rangeA / 1000.0 + 4000.0 *  damageA / hpB) * unitsOfPlayerA.size * unitsOfPlayerA.size -
-//                (distA / 100.0 + mobilityB / 100.0 + rangeB / 1000.0 + 4000.0 * damageB / hpA) * unitsOfPlayerB.size * unitsOfPlayerB.size)
-        val agg = 0.1 * ((mobilityA / 80.0 + rangeA / 800.0 + damageA / 0.2 + hpA / 800.0 + distB / 8000.0) * unitsOfPlayerA.size * unitsOfPlayerA.size -
-                (mobilityB / 80.0 + rangeB / 800.0 + damageB / 0.2 + hpB / 800.0 + distA / 8000.0) * unitsOfPlayerB.size * unitsOfPlayerB.size)
+        val agg = (alpha.average().or(0.0) * pow(unitsOfPlayerA.size.toDouble(), 1.56) -
+                beta.average().or(0.0) * pow(unitsOfPlayerB.size.toDouble(), 1.56)) * 0.01
         return 1.0 / (exp(-agg) + 1)
     }
 
-    private fun averageDamageOf(unitsA: List<SimUnit>, unitsB: List<SimUnit>) = (unitsA.map { a ->
-        if (!a.isPowered) 0.0 else
-            unitsB.map { b ->
-                if (!b.hidden || b.detected) {
-                    val dmg = a.damagePerFrameTo(b)
-                    if (a.suicideUnit) {
-                        dmg / unitsB.size
-                    } else
-                        dmg
-                } else 0.0
-            }.average()
-    }).average().or(0.1)
+    private fun strength(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, center: Position, medicFactor: Double) =
+            unitsOfPlayerA.map {
+                val gunRange = max(it.airWeapon.maxRange(), it.groundWeapon.maxRange()) + 0.1
+                val distance = it.position?.getDistance(center)?.toDouble() ?: 64.0
+                val combatRangeFactor = min(1.0, (gunRange + it.topSpeed) / distance)
+                averageDamageOf(it, unitsOfPlayerB) *
+                        (if (it.isOrganic) it.hitPoints * medicFactor else it.hitPoints.toDouble() + it.shield) *
+                        combatRangeFactor
+            }
+
+    private fun averageDamageOf(a: SimUnit, unitsB: List<SimUnit>) =
+            if (!a.isPowered) 0.0 else
+                unitsB.map { b ->
+                    if (!b.hidden || b.detected) {
+                        val dmg = a.damagePerFrameTo(b)
+                        if (a.suicideUnit) {
+                            dmg / unitsB.size / 30
+                        } else
+                            dmg
+                    } else 0.0
+                }.average().or(0.1)
 }
 
 class SimUnit(val name: String = "Unknown",
@@ -71,6 +67,7 @@ class SimUnit(val name: String = "Unknown",
               val groundUpgrades: Int = 0,
               val armorUpgrades: Int = 0,
               var hitPoints: Int = 0,
+              var shield: Int = 0,
               var position: Position? = null,
               val canHeal: Boolean = false,
               var airWeapon: Weapon = Weapon(WeaponType.None, 0),
@@ -87,7 +84,8 @@ class SimUnit(val name: String = "Unknown",
               val groundHits: Int,
               val groundBonusRange: Int,
               val airBonusRange: Int,
-              val suicideUnit: Boolean) {
+              val suicideUnit: Boolean,
+              val isOrganic: Boolean) {
     val isAttacker = groundWeapon.type() != WeaponType.None || airWeapon.type() != WeaponType.None
 
 
@@ -97,6 +95,7 @@ class SimUnit(val name: String = "Unknown",
                 ground = unit.height(),
                 isUnderDarkSwarm = unit is MobileUnit && unit.isUnderDarkSwarm,
                 hitPoints = unit.hitPoints,
+                shield = unit.shields,
                 position = unit.position,
                 canHeal = unit.initialType == UnitType.Terran_Medic,
                 airWeapon = (unit as? AirAttacker)?.airWeapon
@@ -115,14 +114,16 @@ class SimUnit(val name: String = "Unknown",
                 groundHits = unit.initialType.maxGroundHits(),
                 groundBonusRange = if (unit is Bunker) 64 else 0,
                 airBonusRange = if (unit is Bunker) 64 else 0,
-                suicideUnit = unit.isSuicideUnit)
+                suicideUnit = unit.isSuicideUnit,
+                isOrganic = unit.initialType.isOrganic)
 
         fun of(type: UnitType): SimUnit = SimUnit(
                 name = type.name,
                 hitPoints = type.maxHitPoints(),
+                shield = type.maxShields(),
                 canHeal = type == UnitType.Terran_Medic,
                 airWeapon = if (type == UnitType.Terran_Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(type.airWeapon(), 0),
-                groundWeapon = if (type == UnitType.Terran_Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(type.airWeapon(), 0),
+                groundWeapon = if (type == UnitType.Terran_Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(type.groundWeapon(), 0),
                 isAir = type.isFlyer,
                 topSpeed = type.topSpeed(),
                 size = type.size(),
@@ -132,7 +133,8 @@ class SimUnit(val name: String = "Unknown",
                 groundBonusRange = if (type == UnitType.Terran_Bunker) 2 else 0,
                 airBonusRange = if (type == UnitType.Terran_Bunker) 2 else 0,
                 suicideUnit = when (type) { UnitType.Zerg_Scourge, UnitType.Terran_Vulture_Spider_Mine, UnitType.Protoss_Scarab -> true; else -> false
-                }
+                },
+                isOrganic = type.isOrganic
         )
     }
 

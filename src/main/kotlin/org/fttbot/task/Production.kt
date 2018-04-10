@@ -48,14 +48,17 @@ class AwaitConstructionStart(val worker: Worker, val type: UnitType, val at: Til
 }
 
 object Production {
-    fun buildWithWorker(worker: Worker, at: TilePosition, building: UnitType): Node<Any, Any> {
+    fun buildWithWorker(worker: Worker, at: TilePosition, building: UnitType, mindSafety: Boolean): Node<Any, Any> {
         return parallel(1,
                 AwaitConstructionStart(worker, building, at),
                 sequence(
                         ReserveUnit(worker),
                         fallback(ReserveResources(building.mineralPrice(), building.gasPrice()), sequence(Sleep(48), Fail)),
                         msequence("executeBuild",
-                                Actions.reach(worker, at.toPosition(), 150),
+                                if (mindSafety)
+                                    Actions.reachSafely(worker, at.toPosition(), 150)
+                                else
+                                    Actions.reach(worker, at.toPosition(), 150),
                                 BuildCommand(worker, at, building),
                                 Await("worker constructing", 10) { worker.isConstructing },
                                 MaxTries("Wait for construction start", 100,
@@ -154,7 +157,7 @@ object Production {
                             this!!
                             if (builder is Worker)
 //                        buildWithWorker(builder as Worker, targetPosition!!, type)
-                                buildWithWorker(builder as Worker, targetPosition!!, type)
+                                buildWithWorker(builder as Worker, targetPosition!!, type, safety)
                             else
                                 morph(builder as Morphable, type)
                         }
@@ -221,7 +224,7 @@ object Production {
     }
 
     fun ensureUnitDependencies(dependencies: List<UnitType>): Node<Any, Any> {
-        return DispatchParallel({
+        return DispatchParallel<Any, UnitType>("ensureDependencies", {
             val missing = PlayerUnit.getMissingUnits(UnitQuery.myUnits, dependencies).toMutableList()
             if (dependencies.any { it != UnitType.Zerg_Larva && it.gasPrice() > 0 && it.gasPrice() > Board.resources.gas })
                 missing.add(0, FTTConfig.GAS_BUILDING)
@@ -231,7 +234,7 @@ object Production {
             missing.removeIf { type -> UnitQuery.myUnits.any { it.isA(type) } }
             missing
 
-        }, "ensureDependencies")
+        })
         { produce(it) }
     }
 
@@ -263,7 +266,8 @@ object Production {
         if (tech == TechType.None) return Success
         var researcher: PlayerUnit? = null
         return fallback(
-                Condition("already researched $tech") { FTTBot.self.hasResearched(tech) },
+                sequence(Condition("Currently researching?") { FTTBot.self.isResearching(tech) }, Sleep),
+                Condition("already researched/ing $tech") { FTTBot.self.hasResearched(tech) },
                 sequence(
                         ensureUnitDependencies(listOf(tech.requiredUnit())),
                         sequence(
@@ -285,7 +289,9 @@ object Production {
         if (upgradeType == UpgradeType.None) return Success
         var researcher: PlayerUnit? = null
         val level = FTTBot.self.getUpgradeLevel(upgradeType)
-        return fallback(Condition("already upgraded $upgradeType") { FTTBot.self.getUpgradeLevel(upgradeType) > level || level >= upgradeType.maxRepeats() },
+        return fallback(
+                sequence(Condition("Currently upgrading?") { FTTBot.self.isUpgrading(upgradeType) }, Sleep),
+                Condition("already upgraded $upgradeType") { FTTBot.self.getUpgradeLevel(upgradeType) > level || level >= upgradeType.maxRepeats() },
                 sequence(
                         ensureUnitDependencies(listOf(upgradeType.whatsRequired(level), upgradeType.whatUpgrades())),
                         fallback(ReserveResources(upgradeType.mineralPrice(level), upgradeType.gasPrice(level)), Sleep),
@@ -299,7 +305,8 @@ object Production {
                         Delegate {
                             UpgradeCommand(researcher as ResearchingFacility, upgradeType)
                         }
-                ))
+                )
+        )
     }
 
     fun produce(unit: UnitType, near: () -> TilePosition? = { null }): Node<Any, Any> =
@@ -309,7 +316,7 @@ object Production {
                 train(unit, near)
 
 
-    fun produceSupply(near: () -> TilePosition? = { null }): Node<Any, Any> = produce(FTTConfig.SUPPLY)
+    fun produceSupply(near: () -> TilePosition? = { null }): Node<Any, Any> = produce(FTTConfig.SUPPLY, near)
 
     fun trainWorker(near: () -> TilePosition? = { bestPositionForNewWorker() }): Node<Any, Any> = train(FTTConfig.WORKER, near)
 
@@ -337,7 +344,7 @@ object Production {
         return tilePosition
     }
 
-    fun buildGas(near: () -> TilePosition? = { null }): Node<Any, Any> = build(FTTConfig.GAS_BUILDING)
+    fun buildGas(near: () -> TilePosition? = { null }): Node<Any, Any> = build(FTTConfig.GAS_BUILDING, at = near)
 }
 
 object BoSearch : BaseNode<Any>() {

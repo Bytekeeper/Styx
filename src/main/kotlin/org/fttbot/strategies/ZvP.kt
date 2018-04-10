@@ -6,6 +6,7 @@ import org.fttbot.Fallback.Companion.fallback
 import org.fttbot.MParallel.Companion.mparallel
 import org.fttbot.Parallel.Companion.parallel
 import org.fttbot.Sequence.Companion.sequence
+import org.fttbot.info.Cluster
 import org.fttbot.info.MyInfo
 import org.fttbot.task.Combat
 import org.fttbot.task.Macro
@@ -20,6 +21,8 @@ import org.fttbot.task.Production.trainWorker
 import org.fttbot.task.Production.upgrade
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.UpgradeType
+import org.openbw.bwapi4j.unit.Attacker
+import org.openbw.bwapi4j.unit.Base
 import org.openbw.bwapi4j.unit.PlayerUnit
 
 object ZvP {
@@ -56,24 +59,14 @@ object ZvP {
                             _12HatchB()
                         }
                     },
+                    Strategies.considerCanceling(),
                     buildGas(),
                     trainWorker(),
                     trainWorker(),
                     train(UnitType.Zerg_Zergling),
                     train(UnitType.Zerg_Zergling),
                     train(UnitType.Zerg_Zergling),
-                    Repeat(child = fallback(
-                            sequence(
-                                    DispatchParallel({ MyInfo.myBases })
-                                    {
-                                        val base = it as PlayerUnit
-                                        sequence(
-                                                Combat.shouldIncreaseDefense(base.position),
-                                                train(UnitType.Zerg_Zergling, { base.tilePosition })
-                                        )
-                                    }),
-                            Sleep
-                    )),
+                    considerBaseDefense(),
                     trainWorker(),
                     trainWorker(),
                     build(UnitType.Zerg_Lair),
@@ -89,18 +82,56 @@ object ZvP {
                     produceSupply(),
                     produceSupply(),
                     fallback(parallel(
-                            1,
-                            Repeat(child = Delegate { train(UnitType.Zerg_Mutalisk) }),
-                            Repeat(50, child = Delegate { train(UnitType.Zerg_Zergling) }),
+                            1000,
+                            Repeat(child = parallel(1000,
+                                    train(UnitType.Zerg_Mutalisk),
+                                    train(UnitType.Zerg_Mutalisk))),
                             Repeat(child = Delegate { considerExpansion() }),
+                            Repeat(50, child = Delegate { train(UnitType.Zerg_Zergling) }),
                             Repeat(child = Delegate { Macro.considerGas() }),
-                            Repeat(child = Delegate { train(UnitType.Zerg_Ultralisk) })
+                            Repeat(child = Delegate { train(UnitType.Zerg_Ultralisk) }),
+                            Repeat(child = Delegate { train(UnitType.Zerg_Zergling) })
+                    ), Sleep),
+                    Repeat(child = fallback(
+                            sequence(
+                                    Condition("Too much money?") { Board.resources.minerals > MyInfo.myBases.size * 300 },
+                                    build(UnitType.Zerg_Hatchery)
+                            ),
+                            Sleep
                     )),
                     upgrade(UpgradeType.Zerg_Flyer_Attacks),
                     upgrade(UpgradeType.Metabolic_Boost),
                     upgrade(UpgradeType.Adrenal_Glands),
-                    upgrade(UpgradeType.Zerg_Melee_Attacks),
-                    upgrade(UpgradeType.Zerg_Melee_Attacks),
-                    upgrade(UpgradeType.Zerg_Melee_Attacks)
+                    Repeat(UpgradeType.Zerg_Melee_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Melee_Attacks) }),
+                    Repeat(UpgradeType.Zerg_Flyer_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Attacks) }),
+                    Repeat(UpgradeType.Zerg_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Carapace) }),
+                    Repeat(UpgradeType.Zerg_Flyer_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Carapace) })
             )
+
+    private fun considerBaseDefense(): Repeat<Any> {
+        return Repeat(child = fallback(
+                sequence(
+                        DispatchParallel<Any, Base>("ConsiderBaseDefenders", { MyInfo.myBases })
+                        {
+                            val base = it as PlayerUnit
+                            sequence(
+                                    Combat.shouldIncreaseDefense(base.position),
+                                    parallel(1000,
+                                            Repeat(child = Delegate {
+                                                val enemies = Cluster.enemyClusters.minBy { base.getDistance(it.position) }
+                                                        ?: return@Delegate Fail
+                                                val flyers = enemies.units.count { it is Attacker && it.isFlying }
+                                                val ground = enemies.units.count { it is Attacker && !it.isFlying }
+                                                if (ground > flyers)
+                                                    build(UnitType.Zerg_Sunken_Colony, false, { base.tilePosition })
+                                                else
+                                                    build(UnitType.Zerg_Spore_Colony, false, { base.tilePosition })
+                                            }),
+                                            Repeat(child = train(UnitType.Zerg_Zergling, { base.tilePosition }))
+                                    )
+                            )
+                        }),
+                Sleep
+        ))
+    }
 }

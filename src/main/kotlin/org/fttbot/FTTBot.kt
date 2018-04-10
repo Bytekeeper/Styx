@@ -92,38 +92,20 @@ object FTTBot : BWEventListener {
 //                ZvP._massZergling()
                         ZvP._2HatchMuta(),
                         Inline("Crap Check") {
+                            LOG.error("The buildqueue SUCCEEDED, so we're more or less dead: ${buildQueue.tree}")
                             NodeStatus.SUCCEEDED
                         }
                 ),
                 Inline("Crap Check") {
+                    LOG.error("The buildqueue FAILED, so we're more or less dead: ${buildQueue.tree}")
                     NodeStatus.SUCCEEDED
                 }
 
         )
         bot = fallback(
                 parallel(100,
-//                Delegate {
-//                    Combat.attack(UnitQuery.myUnits.filter { it is MobileUnit && it !is Worker && it is Attacker },
-//                            UnitQuery.enemyUnits)
-//                },
                         buildQueue,
                         NoFail(scout()),
-//                fallback(sequence(
-//                        Sleep(24),
-//                        Delegate {
-//                            Combat.defendPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
-//                                    self.startLocation.toPosition(), (game.bwMap.startPositions - self.startLocation)[0].toPosition())
-//                        }
-//                ), Sleep),
-//                        msequence("",
-//                                Condition { !EnemyInfo.enemyBases.isEmpty() },
-//
-//                                MDelegate
-//                                {
-//                                    Combat.moveToStandOffPosition(UnitQuery.myUnits.filter { it !is Worker && it is Attacker }.filterIsInstance(MobileUnit::class.java),
-//                                            EnemyInfo.enemyBases[0].position)
-//                                })
-//                ),
                         NoFail(defending()),
                         NoFail(attacking()),
                         NoFail(preventSupplyBlock()),
@@ -176,14 +158,14 @@ object FTTBot : BWEventListener {
             game.mapDrawer.drawTextMap(it.position, "${it.initialType}")
         }
 
-        UnitQuery.myWorkers.filter { it.lastCommand == UnitCommandType.Morph && !it.isMoving}
-                .forEach{
-                    LOG.error("OHOH")
-                }
+//        UnitQuery.myWorkers.filter { it.lastCommand == UnitCommandType.Morph && !it.isMoving}
+//                .forEach{
+//                    LOG.error("OHOH")
+//                }
         Cluster.myClusters.forEach {
             val eval = ClusterUnitInfo.getInfo(it)
             game.mapDrawer.drawCircleMap(it.position, 300, Color.WHITE)
-            game.mapDrawer.drawTextMap(it.position.x, it.position.y - 200, "${eval.combatEval}")
+            game.mapDrawer.drawTextMap(it.position.x, it.position.y - 280, "${eval.combatEval}")
         }
     }
 

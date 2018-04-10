@@ -1,5 +1,8 @@
 package org.fttbot.estimation
 
+import org.hamcrest.CoreMatchers
+import org.hamcrest.CoreMatchers.`is`
+import org.hamcrest.MatcherAssert
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.openbw.bwapi4j.test.BWDataProvider
@@ -124,5 +127,116 @@ class CombatEvalTest {
         )
 
         System.err.println(CombatEval.probabilityToWin(a, b))
+    }
+
+    @Test
+    fun evalI() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot)
+        )
+
+        System.err.println(CombatEval.probabilityToWin(a, b))
+    }
+
+    @Test
+    fun evalEmptyEnemy() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk)
+        )
+        val b = listOf<SimUnit>()
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        assert(probabilityToWin > 0.5)
+    }
+
+    @Test
+    fun evalMutaVsZealotAlwaysgood() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Mutalisk)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        assert(probabilityToWin > 0.5)
+    }
+
+    @Test
+    fun evalMutaVsMM() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Medic),
+                SimUnit.of(UnitType.Terran_Medic)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        System.err.println(probabilityToWin)
+    }
+
+    @Test
+    fun evalZergVsMM() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Medic)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        System.err.println(probabilityToWin)
+    }
+
+    @Test
+    fun evalZergVsM() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        System.err.println(probabilityToWin)
     }
 }

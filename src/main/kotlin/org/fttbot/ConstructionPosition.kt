@@ -5,6 +5,7 @@ import com.badlogic.gdx.math.Polygon
 import com.badlogic.gdx.math.Rectangle
 import org.fttbot.info.MyInfo
 import org.fttbot.info.UnitQuery
+import org.fttbot.info.inRadius
 import org.fttbot.task.RESOURCE_RANGE
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
@@ -22,7 +23,7 @@ object ConstructionPosition {
         }
 
         val target = if (near != null) near.toTilePosition() else
-            if (!MyInfo.myBases.isEmpty()) (MyInfo.myBases[0] as Unit).tilePosition
+            if (!MyInfo.myBases.isEmpty()) (MyInfo.myBases.maxBy { UnitQuery.myWorkers.inRadius(it as Unit, 300).size } as Unit).tilePosition
             else return null
         var bestBuildPosition: TilePosition? = null
         var bestDistance: Int = Int.MAX_VALUE

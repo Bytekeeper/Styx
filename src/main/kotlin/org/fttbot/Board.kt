@@ -2,17 +2,20 @@ package org.fttbot
 
 import org.fttbot.FTTBot.self
 import org.fttbot.info.UnitQuery
+import org.openbw.bwapi4j.Position
+import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.PlayerUnit
 
 object Board {
     val resources = Resources()
-
+    val pendingLocations = ArrayList<TilePosition>()
     val pendingUnits = ArrayList<UnitType>()
 
     fun reset() {
         Board.resources.reset(self.minerals(), self.gas(), self.supplyTotal() - self.supplyUsed(), UnitQuery.myUnits.filter { it.isCompleted })
         pendingUnits.clear()
+        pendingLocations.clear()
     }
 }
 

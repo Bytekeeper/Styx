@@ -33,10 +33,16 @@ class ClusterInfo(private val cluster: Cluster<*>) {
 
     val combatEval: Double by lazy {
         val enemyUnits = combatRelevantUnits.filter { it.isEnemyUnit }.map { SimUnit.of(it) }
+        val myUnits = combatRelevantUnits.filter { it.isMyUnit && it is MobileUnit }.map { SimUnit.of(it) }
+        val result = CombatEval.probabilityToWin(myUnits, enemyUnits)
+        result
+    }
 
-        CombatEval.probabilityToWin(
-                combatRelevantUnits.filter { it.isMyUnit && (it is Attacker) }.map { SimUnit.of(it) }, enemyUnits)
-
+    val defenseEval: Double by lazy {
+        val enemyUnits = combatRelevantUnits.filter { it.isEnemyUnit }.map { SimUnit.of(it) }
+        val myUnits = combatRelevantUnits.filter { it.isMyUnit }.map { SimUnit.of(it) }
+        val result = CombatEval.probabilityToWin(myUnits, enemyUnits)
+        result
     }
 
     val needDetection: Double by lazy {

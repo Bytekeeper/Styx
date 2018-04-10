@@ -1,16 +1,16 @@
 package org.fttbot
 
 import bwem.CheckMode
-import com.badlogic.gdx.math.MathUtils.clamp
 import com.badlogic.gdx.math.Vector2
 import org.fttbot.info.Cluster
+import org.fttbot.info.EnemyInfo
 import org.fttbot.info.UnitQuery
-import org.fttbot.info.getWeaponAgainst
+import org.fttbot.info.canAttack
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.WalkPosition
-import org.openbw.bwapi4j.type.WeaponType
-import org.openbw.bwapi4j.unit.*
+import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.Unit
+import org.openbw.bwapi4j.unit.Worker
 import kotlin.math.max
 
 object Potential {
@@ -20,18 +20,13 @@ object Potential {
         return center.minus(unit.position).toVector().nor()
     }
 
-    fun threatsRepulsion(unit: MobileUnit): Vector2 {
-        val threatCluster = Cluster.enemyClusters.minBy { unit.getDistance(it.position) } ?: return Vector2.Zero.cpy()
-        return threatCluster.units.map { threatRepulsion(unit, it) }.reduce(Vector2::add).nor()
-    }
-
-    private fun threatRepulsion(unit: MobileUnit, enemy: PlayerUnit): Vector2 {
-        if (enemy !is Attacker) return Vector2.Zero.cpy()
-        val enemyWeaponType = if (unit is Bunker) WeaponType.Gauss_Rifle else enemy.getWeaponAgainst(unit).type()
-        val scale = clamp((enemyWeaponType.maxRange() - enemy.getDistance(unit) +
-                10 * ((enemy as? MobileUnit)?.topSpeed
-                ?: 0.0).toFloat()) / enemyWeaponType.maxRange().toFloat(), 0f, 1f)
-        return unit.position.toVector().sub(enemy.position.toVector()).setLength(enemy.getDamageTo(unit) * scale)
+    fun addThreatRepulsion(target: Vector2, unit: MobileUnit, scale: Float = 1f) {
+        val threats = (UnitQuery.enemyUnits + EnemyInfo.seenUnits).filter { it.canAttack(unit, 150) }
+        target.add(
+                threats.fold(Vector2()) { acc, playerUnit -> acc.sub(playerUnit.position.toVector()) }
+                        .mulAdd(unit.position.toVector(), threats.size.toFloat())
+                        .setLength(scale)
+        )
     }
 
     fun collisionRepulsion(unit: MobileUnit): Vector2 {
@@ -44,8 +39,7 @@ object Potential {
         }.reduce(Vector2::add).nor()
     }
 
-    fun wallRepulsion(unit: MobileUnit): Vector2 {
-        val result = Vector2()
+    fun addWallRepulsion(target: Vector2, unit: MobileUnit, scale: Float = 1f) {
         val pos = unit.position.toWalkPosition()
         var bestAltitude = 0
         var bestPos: WalkPosition? = null
@@ -62,13 +56,27 @@ object Potential {
                 }
             }
         }
-        return if (bestPos == null) return Vector2.Zero else bestPos.subtract(pos).toPosition().toVector().nor()
+        if (bestPos != null) {
+            target.add(
+                    bestPos.subtract(pos).toPosition().toVector().setLength(scale)
+            )
+        }
     }
 
-    fun safeAreaAttraction(unit: MobileUnit): Vector2 {
-        val map = FTTBot.bwem
-        val homePath = map.getPath(unit.position, UnitQuery.myBases.firstOrNull()?.position ?: return Vector2.Zero)
-        val targetChoke = if (homePath.isEmpty) return Vector2.Zero else homePath[0]
-        return (targetChoke.center.toPosition() - unit.position).toVector().nor()
+    fun addSafeAreaAttraction(target: Vector2, unit: MobileUnit, scale : Float = 1f) {
+        val homePath = FTTBot.bwem.getPath(unit.position,
+                reallySafePlace() ?: return)
+        val targetChoke = if (homePath.isEmpty) return else homePath[0]
+        target.add((targetChoke.center.toPosition() - unit.position).toVector().setLength(scale))
+    }
+
+    private fun reallySafePlace(): Position? {
+        return UnitQuery.myBases.maxBy {
+            UnitQuery.inRadius(it.position, 300).count { it is Worker }
+        }?.position
+    }
+
+    fun addSafeAreaAttractionDirect(target: Vector2, unit: MobileUnit, scale: Float = 1f) {
+        target.add(((reallySafePlace() ?: return) - unit.position).toVector().setLength(scale))
     }
 }

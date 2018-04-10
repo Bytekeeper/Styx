@@ -19,8 +19,6 @@ fun Attacker.getWeaponAgainst(target: Unit) = if (target.isFlying && this is Air
     if (!target.isFlying && this is GroundAttacker) groundWeapon else Weapon(WeaponType.None, -1)
 
 fun Weapon.isMelee() = this != WeaponType.None && type().maxRange() <= MAX_MELEE_RANGE
-fun WeaponType.inRange(distance: Int, safety: Int): Boolean =
-        minRange() <= distance && maxRange() >= distance - safety
 
 fun <T : Unit> List<T>.inRadius(other: Unit, maxRadius: Int) = filter { other.getDistance(it) < maxRadius }
 fun <T : Unit> List<T>.inRadius(position: Position, maxRadius: Int) = filter { it.getDistance(position) < maxRadius }
@@ -82,7 +80,8 @@ fun PlayerUnit.canAttack(target: Unit, safety: Int = 0): Boolean {
     if (!isCompleted) return false
     val weaponType = if (this is Bunker) UnitType.Terran_Marine.groundWeapon() else if (this is Attacker) getWeaponAgainst(target).type() else return false
     val distance = getDistance(target)
-    return weaponType.inRange(distance, safety) && target.isVisible && (target !is Cloakable && target !is Burrowable || target is PlayerUnit && target.isDetected)
+    val maxWeaponRange = player.unitStatCalculator.weaponMaxRange(weaponType)
+    return distance <= maxWeaponRange + safety && distance > weaponType.minRange() && target.isVisible && (target !is Cloakable && target !is Burrowable || target is PlayerUnit && target.isDetected)
 }
 
 fun Unit.potentialAttackers(safety: Int = 16): List<PlayerUnit> =
@@ -122,6 +121,7 @@ object UnitQuery {
     lateinit var enemyUnits: List<PlayerUnit> private set
     lateinit var myWorkers: List<Worker> private set
     lateinit var minerals : List<MineralPatch> private set
+    lateinit var myBuildings: List<Building> private set
 
     fun reset() {
         andStayDown.clear()
@@ -138,6 +138,7 @@ object UnitQuery {
         myUnits = ownedUnits.filter { it.player == FTTBot.self && it.exists()}
         enemyUnits = ownedUnits.filter { it.player == FTTBot.enemy }
         myWorkers = myUnits.filterIsInstance(Worker::class.java).filter { it.isCompleted }
+        myBuildings = myUnits.filterIsInstance(Building::class.java).filter { it.isCompleted }
     }
 
     val geysers get() = allUnits.filter { it is VespeneGeyser }

@@ -13,6 +13,8 @@ data class TreeTraceElement(val node: Node<*, *>)
 
 interface Node<in P, out T> {
     val board: T?
+    val tree: String get() = toString()
+
     fun setParent(parent: Node<*, P>)
     fun tick(): NodeStatus
     fun parentFinished() {}
@@ -68,10 +70,14 @@ abstract class BaseNode<T> : Node<T, T> {
 abstract class ParentNode<P, T>(protected val convert: (P?) -> T?, protected val children: List<Node<T, *>>) : Node<P, T> {
     override var board: T? = null
     private var parent: Node<*, P>? = null
+    private var lastFailedChildren = emptyList<Node<T, *>>()
 
     init {
         children.forEach { it.setParent(this) }
     }
+
+    override val tree: String
+        get() = "$this(${children.map { it.tree }.joinToString(";")})"
 
     override fun setParent(parent: Node<*, P>) {
         this.parent = parent
@@ -94,6 +100,10 @@ abstract class ParentNode<P, T>(protected val convert: (P?) -> T?, protected val
         trace.add(TreeTraceElement(this))
         parent?.addTreeTrace(trace)
     }
+
+    open protected fun childrenFailed(children: List<Node<T, *>>) {
+        lastFailedChildren = children
+    }
 }
 
 class Condition<T>(val name: String, val condition: T?.() -> Boolean) : BaseNode<T>() {
@@ -102,6 +112,9 @@ class Condition<T>(val name: String, val condition: T?.() -> Boolean) : BaseNode
 }
 
 open class Decorator<T>(val child: Node<T, *>) : BaseNode<T>() {
+    override val tree: String
+        get() = "Decorator(${child.tree})"
+
     override fun tick(): NodeStatus = child.tick()
 
     override fun parentFinished() {
@@ -251,7 +264,12 @@ class Parallel<P, T>(val m: Int, convert: (P?) -> T?, children: List<Node<T, *>>
             parentFinished()
             return NodeStatus.SUCCEEDED
         }
-        if (result.count { it == NodeStatus.FAILED } > max(0, result.size - m)) {
+
+        val failedChildren = result.count { it == NodeStatus.FAILED }
+        if (failedChildren > 0) {
+            childrenFailed(result.mapIndexedNotNull { index, nodeStatus -> if (nodeStatus != NodeStatus.FAILED) null else children[index] })
+        }
+        if (failedChildren > max(0, result.size - m)) {
             parentFinished()
             return NodeStatus.FAILED
         }
@@ -274,13 +292,16 @@ class MParallel<P, T>(val m: Int, convert: (P?) -> T?, children: List<Node<T, *>
         val result = childResult.unzip()
         succeeded += result.second.count { it == NodeStatus.SUCCEEDED }
         failed += result.second.count { it == NodeStatus.FAILED }
-        activeChildren = result.first.filterIndexed { index, node -> result.second[index] == NodeStatus.RUNNING }
+        activeChildren = result.first.filterIndexed { index, _ -> result.second[index] == NodeStatus.RUNNING }
         if (succeeded >= m) {
             parentFinished()
             return NodeStatus.SUCCEEDED
         }
-        if (failed > max(0, children.size - m)) {
             val failedChildren = childResult.filter { it.second == NodeStatus.FAILED }.map { it.first }
+        if (failed > 0) {
+            childrenFailed(failedChildren)
+        }
+        if (failed > max(0, children.size - m)) {
             LogManager.getLogger().error("Failed: $this; failed children: ${failedChildren.joinToString(", ")}: ${getTreeTrace().joinToString("\n")}")
             parentFinished()
             failedChildren[0].tick()
@@ -304,11 +325,11 @@ class MParallel<P, T>(val m: Int, convert: (P?) -> T?, children: List<Node<T, *>
 }
 
 
-class DispatchParallel<T : Any, X>(val childrenResolver: () -> Collection<X>, val name: String? = "", val nodeGen: (X) -> Node<T, *>) : BaseNode<T>() {
+class DispatchParallel<T : Any, X>(val name: String = "", val childrenResolver: T?.() -> Collection<X>, val nodeGen: (X) -> Node<T, *>) : BaseNode<T>() {
     private val LOG = LogManager.getLogger()
     private val children = HashMap<X, Node<T, *>>()
     override fun tick(): NodeStatus {
-        val toTransform = childrenResolver()
+        val toTransform = childrenResolver(board)
         val result = toTransform.map {
             val result = children.computeIfAbsent(it) {
                 val newNode = nodeGen(it)
@@ -406,13 +427,10 @@ class Fallback<P, T>(convert: (P?) -> T?, children: List<Node<T, *>>) : ParentNo
             if (result == NodeStatus.RUNNING) {
                 return NodeStatus.RUNNING
             }
+            childrenFailed(listOf(it))
         }
         parentFinished()
         return NodeStatus.FAILED
-    }
-
-    override fun parentFinished() {
-        children.forEach(Node<T, *>::parentFinished)
     }
 
     override fun toString(): String = "Fallback"
@@ -423,11 +441,12 @@ class Fallback<P, T>(convert: (P?) -> T?, children: List<Node<T, *>>) : ParentNo
     }
 }
 
-class Sequence<P, T>(convert: (P?) -> T?, children: List<Node<T, *>>) : ParentNode<P, T>(convert, children) {
+open class Sequence<P, T>(convert: (P?) -> T?, children: List<Node<T, *>>) : ParentNode<P, T>(convert, children) {
     override fun tick(): NodeStatus {
         children.forEach {
             val result = it.tick()
             if (result == NodeStatus.FAILED) {
+                childrenFailed(listOf(it))
                 parentFinished()
                 return NodeStatus.FAILED
             }
@@ -454,6 +473,7 @@ class MSequence<P, T>(val name: String, convert: (P?) -> T?, children: List<Node
         while (childIndex < children.size) {
             val result = children[childIndex].tick()
             if (result == NodeStatus.FAILED) {
+                childrenFailed(listOf(children[childIndex]))
                 parentFinished()
                 return NodeStatus.FAILED
             }
