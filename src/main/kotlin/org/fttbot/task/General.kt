@@ -23,14 +23,14 @@ object Actions {
                 .none { dangerAreas.contains(it.areas.first) || dangerAreas.contains(it.areas.second) }
     }
 
-    fun reachSafely(unit: MobileUnit, position: Position, tolerance: Int): Node<Any, Any> {
+    fun reachSafely(unit: MobileUnit, position: Position, tolerance: Int): Node {
         return sequence(
                 Condition("targetPosition $position safe?") { canReachSafely(unit, position) },
                 Delegate { reach(unit, position, tolerance) }
         )
     }
 
-    fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node<Any, Any> {
+    fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node {
         // TODO: "Search" for a way
         var nextWaypoint: Position? = null
         return MaxTries("$unit -> $position", 12 * 60,
@@ -52,12 +52,12 @@ object Actions {
                 ))
     }
 
-    fun reach(unit: List<MobileUnit>, position: Position, tolerance: Int = 128): Node<Any, Any> =
-            DispatchParallel<Any, MobileUnit>("Reach", { unit }) {
+    fun reach(unit: List<MobileUnit>, position: Position, tolerance: Int = 128): Node =
+            DispatchParallel("Reach", { unit }) {
                 reach(it, position, tolerance)
             }
 
-    private fun CheckIsClosingIn(unit: MobileUnit, position: Position): BaseNode<Any> {
+    private fun CheckIsClosingIn(unit: MobileUnit, position: Position): BaseNode {
         return Delegate {
             var distance = unit.getDistance(position)
             var frame = FTTBot.frameCount
@@ -80,15 +80,18 @@ object Actions {
         }
     }
 
-    private fun makeMobile(unit: MobileUnit): Fallback<Any, Any> {
+    private fun makeMobile(unit: MobileUnit): Fallback {
         return fallback(
                 Condition("$unit not burrowed") { unit !is Burrowable || !unit.isBurrowed },
-                Delegate { UnburrowCommand(unit) }
+                fallback(
+                        Condition("$unit is unborrowing?") { unit.order == org.openbw.bwapi4j.type.Order.Unburrowing },
+                        Delegate { UnburrowCommand(unit) }
+                )
         )
     }
 
-    fun flee(unit: MobileUnit): Sequence<Any, Any> {
-        var targetPosition : Position = Position(0, 0)
+    fun flee(unit: MobileUnit): Sequence {
+        var targetPosition: Position = Position(0, 0)
         return sequence(
                 Inline("Threat Vector") {
                     val force = Vector2()
@@ -98,9 +101,9 @@ object Actions {
                         return@Inline NodeStatus.FAILED
                     if (!unit.isFlying) {
                         Potential.addWallRepulsion(force, unit, 2f)
-                        Potential.addSafeAreaAttraction(force, unit, 2f)
+                        Potential.addSafeAreaAttraction(force, unit, 1.3f)
                     } else {
-                        Potential.addSafeAreaAttractionDirect(force, unit, 2f)
+                        Potential.addSafeAreaAttractionDirect(force, unit, 1.3f)
                     }
                     force.nor()
                     targetPosition = unit.position + force.scl(64f).toPosition()

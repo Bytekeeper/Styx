@@ -12,7 +12,7 @@ import kotlin.math.max
 
 const val RESOURCE_RANGE = 300
 
-object GatherResources : BaseNode<Any>() {
+object GatherResources : BaseNode() {
     override fun tick(): NodeStatus {
         val available = Board.resources
         val myBases = MyInfo.myBases.filterIsInstance(PlayerUnit::class.java).filter { it as Base; it.isReadyForResources }

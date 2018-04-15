@@ -9,6 +9,7 @@ import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
+import sun.management.snmp.jvminstr.JvmThreadInstanceEntryImpl.ThreadStateMap.Byte1.other
 
 const val MAX_MELEE_RANGE = 64
 
@@ -17,6 +18,7 @@ val PlayerUnit.isMyUnit get() = player == FTTBot.self
 val PlayerUnit.isEnemyUnit get() = player == FTTBot.enemy
 fun Attacker.getWeaponAgainst(target: Unit) = if (target.isFlying && this is AirAttacker) airWeapon else
     if (!target.isFlying && this is GroundAttacker) groundWeapon else Weapon(WeaponType.None, -1)
+fun Attacker.maxRangeVs(target: Unit) = (this as PlayerUnit).player.unitStatCalculator.weaponMaxRange(getWeaponAgainst(target).type())
 
 fun Weapon.isMelee() = this != WeaponType.None && type().maxRange() <= MAX_MELEE_RANGE
 
@@ -27,6 +29,10 @@ val PlayerUnit.isSuicideUnit get() = when (this) {
     is Scourge, is SpiderMine, is Scarab -> true
     else -> false
 }
+fun PlayerUnit.isFasterThan(other: PlayerUnit) =
+    (this is MobileUnit && other !is MobileUnit) ||
+            (this is MobileUnit && other is MobileUnit && this.topSpeed > other.topSpeed)
+
 
 // From https://docs.google.com/spreadsheets/d/1bsvPvFil-kpvEUfSG74U3E5PLSTC02JxSkiR8QdLMuw/edit#gid=0 resp. PurpleWave
 val Attacker.stopFrames

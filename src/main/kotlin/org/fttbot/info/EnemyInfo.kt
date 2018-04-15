@@ -11,7 +11,7 @@ const val DISCARD_HIDDEN_UNITS_AFTER = 480
 
 object EnemyInfo {
     private val statsCalc = HashMap<Player, UnitStatCalculator>()
-    val seenUnits = HashSet<PlayerUnit>()
+    val seenUnits = ArrayList<PlayerUnit>()
     val enemyBases = ArrayList<Cluster<PlayerUnit>>()
     var hasSeenBase = false
     var hasInvisibleUnits = false
@@ -53,7 +53,7 @@ object EnemyInfo {
         if (!hasSeenBase) {
             val unexploredLocations = FTTBot.game.bwMap.startPositions.filter { !FTTBot.game.bwMap.isExplored(it) }
             if (unexploredLocations.size == 1) {
-                enemyBases.add(Cluster(unexploredLocations.first().toPosition(), mutableSetOf()))
+                enemyBases.add(Cluster(unexploredLocations.first().toPosition(), ArrayList()))
             }
         }
         seenUnits.removeIf {

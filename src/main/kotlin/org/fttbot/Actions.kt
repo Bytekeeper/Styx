@@ -13,7 +13,7 @@ import org.openbw.bwapi4j.type.UpgradeType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 
-open class Order<E : kotlin.Any>(val unit: E, val order: E.() -> Boolean, val toleranceFrames: Int = 30) : BaseNode<Any>() {
+open class Order<E : kotlin.Any>(val unit: E, val order: E.() -> Boolean, val toleranceFrames: Int = 30) : BaseNode() {
     var orderFrame: Int = -1
 
     override fun tick(): NodeStatus {
@@ -77,7 +77,7 @@ class Repair(worker: SCV, target: Mechanical) : Order<SCV>(worker, { repair(targ
 class Heal(medic: Medic, target: Organic) : Order<Medic>(medic, { healing(target as PlayerUnit) })
 
 
-class ReserveUnit(val unit: PlayerUnit) : BaseNode<Any>() {
+class ReserveUnit(val unit: PlayerUnit) : BaseNode() {
     override fun tick(): NodeStatus {
         if (!unit.exists()) {
             return NodeStatus.FAILED
@@ -93,7 +93,7 @@ class ReserveUnit(val unit: PlayerUnit) : BaseNode<Any>() {
     override fun toString(): String = "Reserving unit $unit"
 }
 
-class ReserveResources(val minerals: Int, val gas: Int = 0) : BaseNode<Any>() {
+class ReserveResources(val minerals: Int, val gas: Int = 0) : BaseNode() {
     override fun tick(): NodeStatus {
         val availableResources = Board.resources
         availableResources.reserve(minerals, gas)
@@ -103,14 +103,14 @@ class ReserveResources(val minerals: Int, val gas: Int = 0) : BaseNode<Any>() {
     }
 }
 
-class ReserveSupply(val supply: Int) : BaseNode<Any>() {
+class ReserveSupply(val supply: Int) : BaseNode() {
     override fun tick(): NodeStatus =
             if (supply == 0 || Board.resources.reserve(supply = supply).supply >= 0)
                 NodeStatus.SUCCEEDED
             else NodeStatus.FAILED
 }
 
-class BlockResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) : BaseNode<Any>() {
+class BlockResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) : BaseNode() {
     override fun tick(): NodeStatus {
         if (Board.resources.isAvailable(minerals, gas, supply)) return NodeStatus.SUCCEEDED
         Board.resources.reserve(minerals, gas, supply)

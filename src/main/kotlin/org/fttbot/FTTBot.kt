@@ -2,14 +2,7 @@ package org.fttbot
 
 import bwem.BWEM
 import bwem.map.Map
-import bwta.BWTA
 import org.apache.logging.log4j.LogManager
-import org.fttbot.FTTBot.enemy
-import org.fttbot.FTTBot.frameCount
-import org.fttbot.FTTBot.game
-import org.fttbot.FTTBot.latency_frames
-import org.fttbot.FTTBot.remaining_latency_frames
-import org.fttbot.FTTBot.self
 import org.fttbot.Fallback.Companion.fallback
 import org.fttbot.MSequence.Companion.msequence
 import org.fttbot.Parallel.Companion.parallel
@@ -26,9 +19,7 @@ import org.fttbot.task.Macro.preventSupplyBlock
 import org.fttbot.task.Scouting.scout
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Color
-import org.openbw.bwapi4j.type.Order
 import org.openbw.bwapi4j.type.Race
-import org.openbw.bwapi4j.type.UnitCommandType
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Unit
@@ -53,9 +44,9 @@ object FTTBot : BWEventListener {
 
 //    private val combatManager = BehaviorTree(AttackEnemyBase())
 
-    private lateinit var bot: Node<Any, Any>
+    private lateinit var bot: Node
 
-    private lateinit var buildQueue: Node<Any, Any>
+    private lateinit var buildQueue: Node
 
     fun start() {
         game.startGame()
@@ -90,7 +81,9 @@ object FTTBot : BWEventListener {
         buildQueue = fallback(
                 msequence("buildQueue",
 //                ZvP._massZergling()
-                        ZvP._2HatchMuta(),
+//                        ZvP._2HatchMuta(),
+                        ZvP._3HatchLurker(),
+//                        ZvP._9Pool(),
                         Inline("Crap Check") {
                             LOG.error("The buildqueue SUCCEEDED, so we're more or less dead: ${buildQueue.tree}")
                             NodeStatus.SUCCEEDED
@@ -98,6 +91,7 @@ object FTTBot : BWEventListener {
                 ),
                 Inline("Crap Check") {
                     LOG.error("The buildqueue FAILED, so we're more or less dead: ${buildQueue.tree}")
+                    LOG.error("Last failed trace: ${buildQueue.getFailTrace()}")
                     NodeStatus.SUCCEEDED
                 }
 
@@ -134,7 +128,7 @@ object FTTBot : BWEventListener {
 //        Exporter.export()
             EnemyInfo.step()
             Cluster.step()
-            ClusterUnitInfo.step()
+            ClusterCombatInfo.step()
 
             Board.reset()
             bot.tick()
@@ -163,9 +157,10 @@ object FTTBot : BWEventListener {
 //                    LOG.error("OHOH")
 //                }
         Cluster.myClusters.forEach {
-            val eval = ClusterUnitInfo.getInfo(it)
+            val clusterInfo = ClusterCombatInfo.getInfo(it)
             game.mapDrawer.drawCircleMap(it.position, 300, Color.WHITE)
-            game.mapDrawer.drawTextMap(it.position.x, it.position.y - 280, "${eval.combatEval}")
+            game.mapDrawer.drawCircleMap(clusterInfo.forceCenter, 5, Color.GREEN, true)
+            game.mapDrawer.drawTextMap(clusterInfo.forceCenter, "${clusterInfo.attackEval}")
         }
     }
 

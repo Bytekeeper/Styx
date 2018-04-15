@@ -14,9 +14,9 @@ import java.lang.Math.pow
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.sqrt
 
-const val MAX_FRAMES_TO_ATTACK = 25
-const val HEAL_SCORE = 50
+const val MAX_FRAMES_TO_ATTACK = 3
 
 object CombatEval {
     fun probabilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>): Double {
@@ -33,7 +33,7 @@ object CombatEval {
 
         // Lanchester's Law
         val agg = (alpha.average().or(0.0) * pow(unitsOfPlayerA.size.toDouble(), 1.56) -
-                beta.average().or(0.0) * pow(unitsOfPlayerB.size.toDouble(), 1.56)) * 0.01
+                beta.average().or(0.0) * pow(unitsOfPlayerB.size.toDouble(), 1.56)) * 0.02
         return 1.0 / (exp(-agg) + 1)
     }
 
@@ -41,7 +41,7 @@ object CombatEval {
             unitsOfPlayerA.map {
                 val gunRange = max(it.airWeapon.maxRange(), it.groundWeapon.maxRange()) + 0.1
                 val distance = it.position?.getDistance(center)?.toDouble() ?: 64.0
-                val combatRangeFactor = min(1.0, (gunRange + it.topSpeed) / distance)
+                val combatRangeFactor = 0.3 + min(0.7, gunRange  / distance)
                 averageDamageOf(it, unitsOfPlayerB) *
                         (if (it.isOrganic) it.hitPoints * medicFactor else it.hitPoints.toDouble() + it.shield) *
                         combatRangeFactor

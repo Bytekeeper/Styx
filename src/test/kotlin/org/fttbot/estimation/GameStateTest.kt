@@ -1,10 +1,8 @@
 package org.fttbot.estimation
 
+import org.assertj.core.api.Assertions.assertThat
 import org.fttbot.GameState
-import org.hamcrest.CoreMatchers.`is`
-import org.hamcrest.MatcherAssert.assertThat
 import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.openbw.bwapi4j.test.BWDataProvider
 import org.openbw.bwapi4j.type.Race
@@ -26,7 +24,7 @@ class GameStateTest {
         val state = GameState(0, Race.Terran, 10, 20, 200, 50,
                 mutableMapOf(),
                 mutableMapOf(TechType.None to 0), mutableMapOf(UpgradeType.None to GameState.UpgradeState(0, 0, 0)))
-        assertThat(state.isValid(UnitType.Terran_Machine_Shop), `is`(false));
+        assertThat(state.isValid(UnitType.Terran_Machine_Shop)).isFalse()
     }
 
     @Test
@@ -34,7 +32,7 @@ class GameStateTest {
         val state = GameState(0, Race.Terran, 10, 20, 200, 50,
                 mutableMapOf(UnitType.Terran_Factory to mutableListOf(GameState.UnitState())),
                 mutableMapOf(TechType.None to 0), mutableMapOf(UpgradeType.None to GameState.UpgradeState()))
-        assertThat(state.isValid(UnitType.Terran_Machine_Shop), `is`(true));
+        assertThat(state.isValid(UnitType.Terran_Machine_Shop)).isTrue()
     }
 
     @Test
@@ -42,7 +40,7 @@ class GameStateTest {
         val state = GameState(0, Race.Terran, 10, 20, 200, 50,
                 mutableMapOf(UnitType.Terran_Factory to mutableListOf(GameState.UnitState())),
                 mutableMapOf(TechType.None to 0), mutableMapOf(UpgradeType.None to GameState.UpgradeState()))
-        assertThat(state.isValid(UnitType.Terran_Siege_Tank_Tank_Mode), `is`(false));
+        assertThat(state.isValid(UnitType.Terran_Siege_Tank_Tank_Mode)).isFalse()
     }
 
     @Test

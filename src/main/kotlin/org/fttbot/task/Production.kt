@@ -19,7 +19,7 @@ import java.util.logging.Level
 import java.util.logging.Logger
 
 
-class AwaitConstructionStart(val worker: Worker, val type: UnitType, val at: TilePosition) : BaseNode<Any>() {
+class AwaitConstructionStart(val worker: Worker, val type: UnitType, val at: TilePosition) : BaseNode() {
     var started = false
 
     override fun tick(): NodeStatus {
@@ -48,7 +48,7 @@ class AwaitConstructionStart(val worker: Worker, val type: UnitType, val at: Til
 }
 
 object Production {
-    fun buildWithWorker(worker: Worker, at: TilePosition, building: UnitType, mindSafety: Boolean): Node<Any, Any> {
+    fun buildWithWorker(worker: Worker, at: TilePosition, building: UnitType, mindSafety: Boolean): Node {
         return parallel(1,
                 AwaitConstructionStart(worker, building, at),
                 sequence(
@@ -108,13 +108,17 @@ object Production {
                 }
     }
 
-    data class BuildBoard(var targetPosition: TilePosition? = null, var builder: PlayerUnit? = null)
-
-    fun build(type: UnitType, considerSafety: Boolean? = null, at: () -> TilePosition? = { null }): Node<Any, Any> {
+    fun build(type: UnitType, considerSafety: Boolean? = null, at: () -> TilePosition? = { null }): Node {
         require(type.isBuilding && !type.isAddon)
         val safety = considerSafety ?: type.isResourceDepot
-        return Retry(5, msequence({ BuildBoard() }, "build $type",
-                sequence<BuildBoard>(
+        var targetPosition : TilePosition? = null
+        var builder : PlayerUnit? = null
+        return Retry(5, msequence("build $type",
+                sequence(
+                        Inline("Reset") {
+
+                            NodeStatus.SUCCEEDED
+                        },
                         Inline("Mark $type as pending") {
                             Board.pendingUnits.add(type)
                             NodeStatus.SUCCEEDED
@@ -123,7 +127,6 @@ object Production {
                         BlockResources(type.mineralPrice(), type.gasPrice()),
                         Await("canMake $type") { FTTBot.self.canMake(type) },
                         Inline("find build location and builder") {
-                            this!!
                             targetPosition = targetPosition ?: ConstructionPosition.findPositionFor(type, at()?.toPosition()) ?: ConstructionPosition.findPositionFor(type)
                                     ?: return@Inline NodeStatus.FAILED
                             builder = (if (builder != null && Board.resources.units.contains(builder!!)) builder else
@@ -165,7 +168,7 @@ object Production {
         ))
     }
 
-    fun morph(unit: Morphable, to: UnitType): Node<Any, Any> {
+    fun morph(unit: Morphable, to: UnitType): Node {
         return msequence("morph $to",
                 sequence(
                         ReserveUnit(unit as PlayerUnit),
@@ -177,11 +180,11 @@ object Production {
         )
     }
 
-    fun train(unit: UnitType, near: () -> TilePosition? = { null }): Node<Any, Any> {
+    fun train(unit: UnitType, near: () -> TilePosition? = { null }): Node {
         require(!unit.isBuilding || unit.isAddon)
         var trainer: PlayerUnit? = null
         val supplyUsed = if (unit.isTwoUnitsInOneEgg) 2 * unit.supplyRequired() else unit.supplyRequired()
-        return Retry(5,
+        return Retry(50,
                 msequence("train $unit",
                         Inline("reset") {
                             trainer = null
@@ -223,8 +226,8 @@ object Production {
         )
     }
 
-    fun ensureUnitDependencies(dependencies: List<UnitType>): Node<Any, Any> {
-        return DispatchParallel<Any, UnitType>("ensureDependencies", {
+    fun ensureUnitDependencies(dependencies: List<UnitType>): Node {
+        return DispatchParallel("ensureDependencies", {
             val missing = PlayerUnit.getMissingUnits(UnitQuery.myUnits, dependencies).toMutableList()
             if (dependencies.any { it != UnitType.Zerg_Larva && it.gasPrice() > 0 && it.gasPrice() > Board.resources.gas })
                 missing.add(0, FTTConfig.GAS_BUILDING)
@@ -238,7 +241,7 @@ object Production {
         { produce(it) }
     }
 
-    fun ensureResearchDependencies(tech: TechType): Node<Any, Any> {
+    fun ensureResearchDependencies(tech: TechType): Node {
         if (tech == TechType.None) return Success
         return msequence("resDep",
                 ensureDependencies(tech.requiredUnit()),
@@ -246,7 +249,7 @@ object Production {
         )
     }
 
-    fun ensureDependencies(unit: UnitType): Node<Any, Any> {
+    fun ensureDependencies(unit: UnitType): Node {
         if (unit == UnitType.None) return Success
         return parallel(2,
                 Delegate { ensureUnitDependencies(unit.requiredUnits()) },
@@ -254,7 +257,7 @@ object Production {
         )
     }
 
-    fun ensureSupply(supplyDemand: Int): Node<Any, Any> {
+    fun ensureSupply(supplyDemand: Int): Node {
         return fallback(
                 ReserveSupply(supplyDemand),
                 sequence(Condition("enough supply pending") { pendingSupply() >= 0 }, Sleep),
@@ -262,7 +265,7 @@ object Production {
         )
     }
 
-    fun research(tech: TechType): Node<Any, Any> {
+    fun research(tech: TechType): Node {
         if (tech == TechType.None) return Success
         var researcher: PlayerUnit? = null
         return fallback(
@@ -285,7 +288,7 @@ object Production {
         )
     }
 
-    fun upgrade(upgradeType: UpgradeType): Node<Any, Any> {
+    fun upgrade(upgradeType: UpgradeType): Node {
         if (upgradeType == UpgradeType.None) return Success
         var researcher: PlayerUnit? = null
         val level = FTTBot.self.getUpgradeLevel(upgradeType)
@@ -309,18 +312,18 @@ object Production {
         )
     }
 
-    fun produce(unit: UnitType, near: () -> TilePosition? = { null }): Node<Any, Any> =
+    fun produce(unit: UnitType, near: () -> TilePosition? = { null }): Node =
             if (unit.isBuilding && !unit.isAddon)
                 build(unit, false, near)
             else
                 train(unit, near)
 
 
-    fun produceSupply(near: () -> TilePosition? = { null }): Node<Any, Any> = produce(FTTConfig.SUPPLY, near)
+    fun produceSupply(near: () -> TilePosition? = { null }): Node= produce(FTTConfig.SUPPLY, near)
 
-    fun trainWorker(near: () -> TilePosition? = { bestPositionForNewWorker() }): Node<Any, Any> = train(FTTConfig.WORKER, near)
+    fun trainWorker(near: () -> TilePosition? = { bestPositionForNewWorker() }): Node = train(FTTConfig.WORKER, near)
 
-    fun cancel(type: UnitType): Node<Any, Any> {
+    fun cancel(type: UnitType): Node {
         require(type.isBuilding)
         var target: Building? = null
         return sequence(
@@ -344,10 +347,10 @@ object Production {
         return tilePosition
     }
 
-    fun buildGas(near: () -> TilePosition? = { null }): Node<Any, Any> = build(FTTConfig.GAS_BUILDING, at = near)
+    fun buildGas(near: () -> TilePosition? = { null }): Node = build(FTTConfig.GAS_BUILDING, at = near)
 }
 
-object BoSearch : BaseNode<Any>() {
+object BoSearch : BaseNode() {
     override fun tick(): NodeStatus {
         TODO("not implemented") //To change body flow created functions use File | Settings | File Templates.
     }

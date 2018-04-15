@@ -11,7 +11,7 @@ import java.util.*
 
 object Scouting {
     private val rnd = SplittableRandom()
-    fun scout(scout: MobileUnit, target: TilePosition): Node<Any, Any> {
+    fun scout(scout: MobileUnit, target: TilePosition): Node {
         return sequence(
                 Inline("Mark scout location") {
                     Board.pendingLocations.add(target)
@@ -21,7 +21,7 @@ object Scouting {
         )
     }
 
-    fun scout(): Node<Any, Any> {
+    fun scout(): Node {
         var scouts: List<MobileUnit> = emptyList()
         return fallback(
                 sequence(
@@ -32,7 +32,7 @@ object Scouting {
                             else
                                 NodeStatus.SUCCEEDED
                         },
-                        DispatchParallel<Any, MobileUnit>("Scouting", { scouts }) { s ->
+                        DispatchParallel("Scouting", { scouts }) { s ->
                             fallback(
                                     flee(s),
                                     sequence(

@@ -2,45 +2,41 @@ package org.fttbot.info
 
 import org.fttbot.div
 import org.openbw.bwapi4j.Position
+import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 
-class Cluster<U : Unit>(var position: Position, internal val units: MutableSet<U>, private var aggPosition: Position = Position(0,0), internal var lastUnitCount: Int = 1) {
+class Cluster<U : Unit>(var position: Position, internal val units: MutableList<U>, private var aggPosition: Position = Position(0, 0), internal var lastUnitCount: Int = 1) {
+    val byType: Map<UnitType, List<U>> by lazy {
+        units.groupBy { it.initialType }
+    }
+
     companion object {
-        var mobileCombatUnits: List<Cluster<MobileUnit>> = emptyList()
-        var myClusters: List<Cluster<PlayerUnit>> = emptyList()
-        var enemyClusters: List<Cluster<PlayerUnit>> = emptyList()
+        val mobileCombatUnits = ArrayList<Cluster<MobileUnit>>()
+        val myClusters = ArrayList<Cluster<PlayerUnit>>()
+        val enemyClusters = ArrayList<Cluster<PlayerUnit>>()
 
         fun getClusterOf(unit: PlayerUnit) = mobileCombatUnits.firstOrNull { it.units.contains(unit) }
 
         fun step() {
-            mobileCombatUnits = buildClusters(UnitQuery.myUnits.filterIsInstance(MobileUnit::class.java)
-                    .filter { it.isCompleted && it !is Worker && it is Attacker})
-            myClusters = buildClusters(UnitQuery.myUnits)
-            enemyClusters = buildClusters(UnitQuery.enemyUnits + EnemyInfo.seenUnits)
+            updateClusters(mobileCombatUnits, UnitQuery.myUnits.filterIsInstance(MobileUnit::class.java)
+                    .filter { it.isCompleted && it !is Worker && it is Attacker })
+            updateClusters(myClusters, UnitQuery.myUnits)
+            updateClusters(enemyClusters, UnitQuery.enemyUnits + EnemyInfo.seenUnits)
         }
 
-        private fun <U : Unit> buildClusters(relevantUnits: List<U>): List<Cluster<U>> {
-            val clusters: MutableList<Cluster<U>> = ArrayList()
-            val clusterUnits = relevantUnits.map { unit ->
-                val cluster = clusters.filter { it.position.getDistance(unit.position) < 300 }
-                        .maxBy { it.units.size }
-                if (cluster != null) {
-                    cluster.units += unit
-                    cluster.aggPosition = cluster.aggPosition.add(unit.position)
-                    UnitInCluster(cluster, unit)
-                } else {
-                    val newCluster = Cluster(unit.position, mutableSetOf(unit), unit.position)
-                    clusters.add(newCluster)
-                    UnitInCluster(newCluster, unit)
-                }
-            }
+        private fun <U : Unit> updateClusters(clusters: MutableList<Cluster<U>>, relevantUnits: List<U>): List<Cluster<U>> {
+            clusters.forEach { it.units.removeIf { !it.exists() }}
+            val newUnits = relevantUnits - clusters.flatMap { it.units }
+            val clusterForNewUnits = Cluster<U>(Position(0, 0), ArrayList())
+            clusters.add(clusterForNewUnits)
+            val clusterUnits = newUnits.map { UnitInCluster(clusterForNewUnits, it) } +
+                    clusters.flatMap { c -> c.units.map { UnitInCluster(c, it) } }
+
+            clusters.removeIf { it.units.isEmpty() }
             var maxTries = 3
             do {
                 clusters.forEach {
-                    val size = it.units.size
-                    it.position = it.aggPosition.div(size)
-                    it.lastUnitCount = size
                     it.units.clear()
                     it.aggPosition = Position(0, 0)
                 }
@@ -55,13 +51,18 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableSet<U
                             true
                         } else false
                     } else {
-                        val newCluster = Cluster(unit.position, mutableSetOf(unit), unit.position)
+                        val newCluster = Cluster(unit.position, mutableListOf(unit), unit.position)
                         clusters.add(newCluster)
                         cu.cluster = newCluster
                         true
                     }
                 }
                 clusters.removeIf { it.units.isEmpty() }
+                clusters.forEach {
+                    val size = it.units.size
+                    it.lastUnitCount = size
+                    it.position = it.aggPosition.div(size)
+                }
             } while (changes > 0 && maxTries-- > 0)
             return clusters.toList()
         }

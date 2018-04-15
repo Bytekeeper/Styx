@@ -45,7 +45,7 @@ object Macro {
         return targetBase?.location
     }
 
-    fun buildExpansion(): Node<Any, Any> {
+    fun buildExpansion(): Node {
         var expansionPosition: TilePosition? = null
         return sequence(
                 Inline("Find location to expand") {
@@ -67,19 +67,21 @@ object Macro {
         )
     }
 
-    fun considerGas(): Node<Any, Any> = fallback(
-            sequence(
-                    Condition("Not enough gas mines?") {
-                        (Board.pendingUnits.sumBy { it.gasPrice() } > 0 ||
-                                Board.resources.gas < 0) && (FTTBot.self.minerals() / 3 > FTTBot.self.gas())
-                                && MyInfo.myBases.any { base -> base as PlayerUnit; UnitQuery.geysers.any { it.getDistance(base) < 300 } }
-                    }, Delegate {
-                buildGas()
-            }, Sleep),
-            Sleep
-    )
+    fun considerGas(): Node =
+            Repeat(child = fallback(
+                    sequence(
+                            Condition("Not enough gas mines?") {
+                                (Board.pendingUnits.sumBy { it.gasPrice() } > 0 ||
+                                        Board.resources.gas < 0) && (FTTBot.self.minerals() / 3 > FTTBot.self.gas())
+                                        && MyInfo.myBases.any { base -> base as PlayerUnit; UnitQuery.geysers.any { it.getDistance(base) < 300 } }
+                            }, Delegate {
+                        buildGas()
+                    }),
+                    Sleep
+            )
+            )
 
-    fun moveSurplusWorkers() = DispatchParallel<Any, Base>("Consider worker transfer", { MyInfo.myBases.filter { it.isReadyForResources } }) { base ->
+    fun moveSurplusWorkers() = DispatchParallel("Consider worker transfer", { MyInfo.myBases.filter { it.isReadyForResources } }) { base ->
         base as PlayerUnit
         val minerals = UnitQuery.minerals.count { it.getDistance(base) < 300 }
         val relevantWorkers = UnitQuery.myWorkers.filter { it.getDistance(base) < 300 && (it.isGatheringGas || it.isGatheringMinerals) }
@@ -89,8 +91,8 @@ object Macro {
                 targetBase as PlayerUnit
                 UnitQuery.myWorkers.count { it.getDistance(targetBase) < 300 } - UnitQuery.minerals.count { it.getDistance(targetBase) < 300 } * 2
             } ?: return@DispatchParallel Sleep
-            Delegate<Any> {
-                DispatchParallel<Any, Worker>("Transfer workers", { relevantWorkers.filter { Board.resources.units.contains(it) }.take(workerDelta) }) {
+            Delegate {
+                DispatchParallel("Transfer workers", { relevantWorkers.filter { Board.resources.units.contains(it) }.take(workerDelta) }) {
                     fallback(sequence(
                             ReserveUnit(it),
                             fallback(
@@ -115,13 +117,11 @@ object Macro {
             Sleep
     )
 
-    fun considerExpansion() = fallback(
-            sequence(
-                    Delegate<Any> { Macro.buildExpansion() } onlyIf Condition("should build exe") {
-                        UnitQuery.myWorkers.size >= MyInfo.myBases.sumBy { it as PlayerUnit; UnitQuery.minerals.inRadius(it, 300).count() + 2 }
-                    },
-                    Fail),
-            Sleep
+    fun considerExpansion() = Repeat(child = fallback(
+            Delegate { Macro.buildExpansion() } onlyIf Condition("should build exe") {
+                UnitQuery.myWorkers.size >= MyInfo.myBases.sumBy { it as PlayerUnit; UnitQuery.minerals.inRadius(it, 300).count() + 2 }
+            },
+            Sleep)
     )
 
 }

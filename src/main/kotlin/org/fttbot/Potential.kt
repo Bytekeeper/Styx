@@ -66,7 +66,7 @@ object Potential {
     fun addSafeAreaAttraction(target: Vector2, unit: MobileUnit, scale : Float = 1f) {
         val homePath = FTTBot.bwem.getPath(unit.position,
                 reallySafePlace() ?: return)
-        val targetChoke = if (homePath.isEmpty) return else homePath[0]
+        val targetChoke = homePath.firstOrNull { it.center.toPosition().getDistance(unit.position) > 128 } ?: return
         target.add((targetChoke.center.toPosition() - unit.position).toVector().setLength(scale))
     }
 
