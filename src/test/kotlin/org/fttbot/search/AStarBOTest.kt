@@ -1,7 +1,6 @@
 package org.fttbot.search
 
 import org.fttbot.GameState
-import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.openbw.bwapi4j.test.BWDataProvider
@@ -10,7 +9,7 @@ import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.UpgradeType
 
-internal class AStarTest {
+internal class AStarBOTest {
     companion object {
         @BeforeAll
         @JvmStatic
@@ -29,7 +28,7 @@ internal class AStarTest {
                         GameState.UnitState(0, 0, 0)
                 ), UnitType.Terran_Command_Center to mutableListOf(GameState.UnitState(0, 0, 0))),
                 mutableMapOf(TechType.None to 0), mutableMapOf(UpgradeType.None to GameState.UpgradeState(0, 0, 0)))
-        val search = AStar(state, mapOf(UnitType.Terran_Marine to 7))
+        val search = AStarBO(state, mapOf(UnitType.Terran_Marine to 7))
         val result = search.run()
         println(result)
     }

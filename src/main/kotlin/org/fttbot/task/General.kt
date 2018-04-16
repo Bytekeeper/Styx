@@ -13,6 +13,8 @@ import org.openbw.bwapi4j.unit.Burrowable
 import org.openbw.bwapi4j.unit.MobileUnit
 
 
+data class ReachBoard(var position: Position? = null, var tolerance: Int)
+
 object Actions {
     fun hasReached(unit: MobileUnit, position: Position, tolerance: Int = 64) =
             unit.getDistance(position) <= tolerance
@@ -30,19 +32,23 @@ object Actions {
         )
     }
 
-    fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node {
+    fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node =
+            reach(unit, ReachBoard(position, tolerance))
+
+    fun reach(unit: MobileUnit, board: ReachBoard): Node {
         // TODO: "Search" for a way
         var nextWaypoint: Position? = null
-        return MaxTries("$unit -> $position", 12 * 60,
+        return MaxTries("$unit -> ${board.position}", 12 * 60,
                 fallback(
-                        Condition("Reached $position with $unit") { hasReached(unit, position, tolerance) },
-                        Repeat(child = msequence("Move $unit to $position",
+                        Condition("Reached ${board.position} with $unit") { hasReached(unit, board.position!!, board.tolerance) },
+                        Repeat(child = msequence("Move $unit to ${board.position}",
                                 makeMobile(unit),
                                 Inline("Next waypoint") {
-                                    if (unit.getDistance(position) < 200 || unit.isFlying) {
-                                        nextWaypoint = position
+                                    if (unit.getDistance(board.position) < 200 || unit.isFlying) {
+                                        nextWaypoint = board.position
                                     } else {
-                                        nextWaypoint = FTTBot.bwem.getPath(unit.position, position).firstOrNull { it.center.toPosition().getDistance(unit.position) >= 200 }?.center?.toPosition() ?: position
+                                        nextWaypoint = FTTBot.bwem.getPath(unit.position, board.position).firstOrNull { it.center.toPosition().getDistance(unit.position) >= 200 }?.center?.toPosition()
+                                                ?: board.position
                                     }
                                     NodeStatus.SUCCEEDED
                                 },

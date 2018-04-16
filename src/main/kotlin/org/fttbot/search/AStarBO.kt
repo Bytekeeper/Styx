@@ -8,7 +8,7 @@ import java.lang.Integer.compare
 import java.lang.Integer.max
 import java.util.*
 
-class AStar(val initialState: GameState, val units: Map<UnitType, Int>) {
+class AStarBO(val initialState: GameState, val units: Map<UnitType, Int>) {
     private val openSet = PriorityQueue<Node>()
     private val requiredSet: Set<UnitType>
     private var supplyTotalRequired: Int

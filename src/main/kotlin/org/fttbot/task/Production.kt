@@ -113,7 +113,7 @@ object Production {
         val safety = considerSafety ?: type.isResourceDepot
         var targetPosition : TilePosition? = null
         var builder : PlayerUnit? = null
-        return Retry(5, msequence("build $type",
+        return Retry(15, msequence("build $type",
                 sequence(
                         Inline("Reset") {
 
@@ -145,11 +145,9 @@ object Production {
                 ),
                 sequence(
                         Condition("Safe to build or don't care?") {
-                            this!!
                             !safety || builder !is MobileUnit || Actions.canReachSafely(builder as Worker, targetPosition!!.toPosition())
                         },
                         Condition("Target position available?") {
-                            this!!
                             if (!builder!!.exists() || builder !is Worker || FTTBot.game.canBuildHere(targetPosition, type, builder as Worker)) {
                                 return@Condition true
                             }
@@ -157,7 +155,6 @@ object Production {
                         },
                         Delegate
                         {
-                            this!!
                             if (builder is Worker)
 //                        buildWithWorker(builder as Worker, targetPosition!!, type)
                                 buildWithWorker(builder as Worker, targetPosition!!, type, safety)
@@ -198,7 +195,7 @@ object Production {
                                 ensureDependencies(unit),
                                 parallel(2,
                                         ensureSupply(supplyUsed),
-                                        fallback(ReserveResources(unit.mineralPrice(), unit.gasPrice()), Sleep)
+                                        BlockResources(unit.mineralPrice(), unit.gasPrice(), unit.supplyRequired())
                                 ),
                                 Await("can make $unit") { FTTBot.self.canMake(unit) },
                                 Inline("Finding trainer for $unit") {
@@ -208,6 +205,7 @@ object Production {
                                 }
                         ),
                         sequence(
+                                ReserveResources(unit.mineralPrice(), unit.gasPrice(), unit.supplyRequired()),
                                 Delegate { ReserveUnit(trainer!!) },
                                 Delegate {
                                     when (trainer) {

@@ -131,7 +131,7 @@ class MCTS(val units: Map<UnitType, Int>, val tech: Set<TechType>, val upgrades:
         if (node.children != null) return
         node.children = (unitsToTest.filter { state.isValid(it) }
                 .map { Node(node, UnitMove(it)) } +
-                upgrades.filter { (ut, lvl) -> state.getUpgradeLevel(ut) < lvl && state.isValid(ut) }.map { (ut, lvl) -> Node(node, UpgradeMove(ut)) })
+                upgrades.filter { (ut, lvl) -> state.getUpgradeLevel(ut) < lvl && state.isValid(ut) }.map { (ut, _) -> Node(node, UpgradeMove(ut)) })
                 .toMutableList()
     }
 

@@ -145,6 +145,9 @@ object FTTBot : BWEventListener {
             if (it is MobileUnit && it.targetPosition != null) {
                 game.mapDrawer.drawLineMap(it.position, it.targetPosition, Color.BLUE)
             }
+            if (it is MobileUnit && it.targetUnit != null) {
+                game.mapDrawer.drawLineMap(it.position, it.targetUnit.position, Color.RED)
+            }
         }
 
         EnemyInfo.seenUnits.forEach {

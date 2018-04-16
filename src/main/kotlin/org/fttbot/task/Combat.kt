@@ -56,11 +56,9 @@ object Combat {
                         -enemySim.damagePerFrameTo(simUnit)
                     else
                         0.0) * 900 +
-                    (if (it is Attacker)
-                        -200.0
-                    else 0.0) +
+                    (if (it is Attacker) -200.0 else 0.0) +
                     (if (it.isDetected || !it.exists()) 0 else 500) +
-                    (if (it is Addon) 8000 else 0) -
+                    (if (it is Addon) 8000 else 0) +
                     (if (unit.canAttack(it)) {
                         if (unit is Lurker && unit.isBurrowed) -1000 else -300
                     } else 0) +
@@ -69,29 +67,37 @@ object Combat {
     }
 
 
-    fun attack(unit: MobileUnit, board: AttackBoard) =
-            fallback(
-                    Condition("Target destroyed?") {
-                        !board.target!!.exists() && !EnemyInfo.seenUnits.contains(board.target!!)
-                    },
-                    fleeFromStorm(unit),
-                    sequence(
-                            fallback(
-                                    Condition("Can I see you?") { board.target!!.isVisible },
-                                    Delegate { reach(unit, board.target!!.lastKnownPosition, 100) }
-                            ),
-                            moveIntoAttackRange(unit, board),
-                            fallback(
-                                    prepareUnitForAttack(unit, board),
-                                    Condition("Already attacking that?") {
-                                        unit.targetUnit == board.target
-                                    },
-                                    Delegate {
-                                        AttackCommand(unit, board.target!!)
-                                    }
-                            )
-                    )
-            )
+    fun attack(unit: MobileUnit, board: AttackBoard): Node {
+        val reachEnemyBoard = ReachBoard(tolerance = 100)
+        return fallback(
+                Condition("Target destroyed?") {
+                    !board.target!!.exists() && !EnemyInfo.seenUnits.contains(board.target!!)
+                },
+                fleeFromStorm(unit),
+                sequence(
+                        fallback(
+                                Condition("Can I see you?") { board.target!!.isVisible },
+                                sequence(
+                                        Inline("Find enemy") {
+                                            reachEnemyBoard.position = board.target!!.lastKnownPosition
+                                            NodeStatus.SUCCEEDED
+                                        },
+                                        reach(unit, reachEnemyBoard)
+                                )
+                        ),
+                        moveIntoAttackRange(unit, board),
+                        fallback(
+                                prepareUnitForAttack(unit, board),
+                                Condition("Already attacking that?") {
+                                    unit.targetUnit == board.target
+                                },
+                                Delegate({ unit.targetUnit != board.target!! }) {
+                                    AttackCommand(unit, board.target!!)
+                                }
+                        )
+                )
+        )
+    }
 
     private fun prepareUnitForAttack(unit: MobileUnit, board: AttackBoard): Sequence {
         return sequence(
@@ -104,12 +110,19 @@ object Combat {
     }
 
     private fun moveIntoAttackRange(unit: MobileUnit, board: AttackBoard): Fallback {
+        val reachBoard = ReachBoard(tolerance = 8)
         return fallback(
                 Condition("Close enough?") {
                     val range = (unit as Attacker).maxRangeVs(board.target!!).toDouble() * (if (unit is Lurker && !unit.isBurrowed) 0.7 else 1.0)
                     range >= unit.getDistance(board.target)
                 },
-                Delegate { reach(unit, board.target!!.position, 8) }
+                sequence(
+                        Inline("Update reach position to ${board.target?.position}") {
+                            reachBoard.position = board.target!!.position
+                            NodeStatus.SUCCEEDED
+                        },
+                        reach(unit, reachBoard)
+                )
         )
     }
 

@@ -22,7 +22,8 @@ interface Node {
         addTreeTrace(result)
         return result
     }
-    fun getFailTrace() : List<TreeTraceElement> {
+
+    fun getFailTrace(): List<TreeTraceElement> {
         val result = mutableListOf<TreeTraceElement>()
         addFailTrace(result)
         return result
@@ -146,13 +147,13 @@ class Inline(val name: String, val delegate: () -> NodeStatus) : BaseNode() {
     override fun toString(): String = "Inline $name"
 }
 
-class Delegate(val subtreeProducer: () -> Node) : BaseNode() {
+class Delegate(val refresh: () -> Boolean = { false }, val subtreeProducer: () -> Node) : BaseNode() {
     private var subtree: Node? = null
 
     private var lastFailedDelegate: Node? = null
 
     override fun tick(): NodeStatus {
-        subtree = if (subtree != null) subtree else {
+        subtree = if (subtree != null && !refresh()) subtree else {
             val result = subtreeProducer()
             _parent?.let(result::setParent)
             result
@@ -315,7 +316,7 @@ class MParallel(val m: Int, children: List<Node>) : ParentNode(children) {
             parentFinished()
             return NodeStatus.SUCCEEDED
         }
-            val failedChildren = childResult.filter { it.second == NodeStatus.FAILED }.map { it.first }
+        val failedChildren = childResult.filter { it.second == NodeStatus.FAILED }.map { it.first }
         if (failed > 0) {
             childrenFailed(failedChildren)
         }
