@@ -18,6 +18,12 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableList<
 
         fun getClusterOf(unit: PlayerUnit) = mobileCombatUnits.firstOrNull { it.units.contains(unit) }
 
+        fun reset() {
+            mobileCombatUnits.clear()
+            myClusters.clear()
+            enemyClusters.clear()
+        }
+
         fun step() {
             updateClusters(mobileCombatUnits, UnitQuery.myUnits.filterIsInstance(MobileUnit::class.java)
                     .filter { it.isCompleted && it !is Worker && it is Attacker })

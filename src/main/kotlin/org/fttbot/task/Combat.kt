@@ -49,7 +49,7 @@ object Combat {
         }.minBy {
             val enemySim = SimUnit.of(it)
             (it.hitPoints + it.shields) / max(simUnit.damagePerFrameTo(enemySim), 0.01) +
-                    (if (it is Larva || it is Egg) 5000 else 0) +
+                    (if (it is Larva || it is Egg) 8000 else 0) +
                     (if (it is Worker) -100 else 0) +
                     2 * it.getDistance(unit) +
                     (if (it.canAttack(unit, 32))
@@ -60,7 +60,7 @@ object Combat {
                     (if (it.isDetected || !it.exists()) 0 else 500) +
                     (if (it is Addon) 8000 else 0) +
                     (if (unit.canAttack(it)) {
-                        if (unit is Lurker && unit.isBurrowed) -1000 else -300
+                        if (unit is Lurker && (unit.isBurrowed || unit.order == Order.Burrowing)) -1000 else -300
                     } else 0) +
                     (if (unit.isFasterThan(it)) -200 else 200)
         }
@@ -206,8 +206,8 @@ object Combat {
                                         val distance = MyInfo.myBases.map { base -> base as PlayerUnit; base.getDistance(it.position) }.min()
                                                 ?: Double.MAX_VALUE
                                         val eval = CombatEval.probabilityToWin(myCluster.units.map { SimUnit.of(it) }, it.units.filter { it is Attacker && it.isCompleted }.map { SimUnit.of(it) })
-                                        it.position.getDistance(myCluster.position) - 500 * eval +
-                                                min(distance / 5.0, 300.0)
+                                        it.position.getDistance(myCluster.position) - 600 * eval +
+                                                min(distance / 5.0, 400.0)
 
                                     }?.units?.toList() ?: return@Inline NodeStatus.RUNNING
                                     NodeStatus.SUCCEEDED

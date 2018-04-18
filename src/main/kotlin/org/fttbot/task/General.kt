@@ -97,7 +97,7 @@ object Actions {
     }
 
     fun flee(unit: MobileUnit): Sequence {
-        var targetPosition: Position = Position(0, 0)
+        var reachBoard = ReachBoard(tolerance = 8)
         return sequence(
                 Inline("Threat Vector") {
                     val force = Vector2()
@@ -106,16 +106,17 @@ object Actions {
                     if (force.isZero)
                         return@Inline NodeStatus.FAILED
                     if (!unit.isFlying) {
-                        Potential.addWallRepulsion(force, unit, 2f)
-                        Potential.addSafeAreaAttraction(force, unit, 1.3f)
+                        Potential.addWallRepulsion(force, unit, 1f)
+                        Potential.addSafeAreaAttraction(force, unit, 0.8f)
                     } else {
+                        Potential.addWallAttraction(force, unit, 0.5f)
                         Potential.addSafeAreaAttractionDirect(force, unit, 1.3f)
                     }
                     force.nor()
-                    targetPosition = unit.position + force.scl(64f).toPosition()
+                    reachBoard.position = unit.position + force.scl(64f).toPosition()
                     NodeStatus.SUCCEEDED
                 },
-                Delegate { reach(unit, targetPosition, 8) }
+                Delegate { reach(unit, reachBoard) }
         )
     }
 }

@@ -57,8 +57,10 @@ object EnemyInfo {
             }
         }
         seenUnits.removeIf {
-            it is MobileUnit && (FTTBot.frameCount - it.lastSpotted > DISCARD_HIDDEN_UNITS_AFTER)
-                    || FTTBot.game.bwMap.isVisible(it.tilePosition)
+            it is MobileUnit &&
+                    ((FTTBot.frameCount - it.lastSpotted > DISCARD_HIDDEN_UNITS_AFTER * 2) ||
+                    (FTTBot.frameCount - it.lastSpotted > DISCARD_HIDDEN_UNITS_AFTER ) && (it !is SiegeTank || !it.isSieged))
+                    FTTBot.game.bwMap.isVisible(it.tilePosition)
         }
     }
 }

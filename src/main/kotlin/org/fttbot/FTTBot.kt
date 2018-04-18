@@ -82,7 +82,7 @@ object FTTBot : BWEventListener {
                 msequence("buildQueue",
 //                ZvP._massZergling()
 //                        ZvP._2HatchMuta(),
-                        ZvP._3HatchLurker(),
+                        ZvP.raceChoice(),
 //                        ZvP._9Pool(),
                         Inline("Crap Check") {
                             LOG.error("The buildqueue SUCCEEDED, so we're more or less dead: ${buildQueue.tree}")
@@ -112,7 +112,7 @@ object FTTBot : BWEventListener {
                 }
         )
         UnitQuery.reset()
-
+        Cluster.reset()
         EnemyInfo.reset()
     }
 
@@ -122,6 +122,8 @@ object FTTBot : BWEventListener {
         frameCount = game.interactionHandler.frameCount
 
 //        val result = bwem.GetMap().GetPath(game.bwMap.startPositions[0].toPosition(), game.bwMap.startPositions[1].toPosition())
+
+        Eliza.step()
 
         if (game.interactionHandler.frameCount % latency_frames == 0) {
             UnitQuery.update(game.allUnits)
@@ -217,7 +219,8 @@ object FTTBot : BWEventListener {
     override fun onSendText(text: String?) {
     }
 
-    override fun onReceiveText(player: Player?, text: String?) {
+    override fun onReceiveText(player: Player, text: String) {
+        Eliza.reply(player, text)
     }
 
     override fun onNukeDetect(target: Position?) {

@@ -56,7 +56,7 @@ object Scouting {
                                             }
                                     ),
                                     sequence(
-                                            Condition("Any 'hidden' bases?") {
+                                            Condition("Any 'hiddenAttack' bases?") {
                                                 FTTBot.bwem.bases.any { !org.fttbot.FTTBot.game.bwMap.isVisible(it.location) }
                                             },
                                             Delegate {

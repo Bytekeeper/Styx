@@ -149,7 +149,7 @@ object UnitQuery {
 
     val geysers get() = allUnits.filter { it is VespeneGeyser }
     val myBases get() = myUnits.filter { it is Base }
-    // BWAPI sometimes "provides" units that aren't there - but those are also reported "hidden", so just ignore them
+    // BWAPI sometimes "provides" units that aren't there - but those are also reported "hiddenAttack", so just ignore them
     val andStayDown = mutableSetOf<Pair<Int, UnitType>>()
 
     fun allUnits(): List<Unit> = allUnits

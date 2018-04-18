@@ -16,7 +16,7 @@ class CombatEvalTest {
     }
 
     @Test
-    fun `1 Spore colony should be slightly beaten by 4 Mutas`() {
+    fun `1 Spore colony should be beaten by 4 Mutas`() {
         val a = listOf(
                 SimUnit.of(UnitType.Zerg_Spore_Colony)
         )
@@ -72,7 +72,7 @@ class CombatEvalTest {
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
         assertThat(probabilityToWin).isGreaterThan(0.45)
-        assertThat(probabilityToWin).isLessThan(0.55)
+        assertThat(probabilityToWin).isLessThan(0.65)
     }
 
     @Test
@@ -308,6 +308,42 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
+        assertThat(probabilityToWin).isLessThan(0.35)
+    }
+
+    @Test
+    fun `2 Zerglings are no match for a Firebat`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Terran_Firebat)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        assertThat(probabilityToWin).isLessThan(0.4)
+    }
+
+    @Test
+    fun `7 Zerglings are no match for 2 sieged tank`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Terran_Siege_Tank_Siege_Mode),
+                SimUnit.of(UnitType.Terran_Siege_Tank_Siege_Mode)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
         assertThat(probabilityToWin).isLessThan(0.4)
     }
 
@@ -336,6 +372,34 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isLessThan(0.4)
+        assertThat(probabilityToWin).isLessThan(0.5)
     }
+
+    @Test
+    fun `5 Lurkers can win against 6 Marines, 2 Medics and 3 Tanks`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Lurker),
+                SimUnit.of(UnitType.Zerg_Lurker),
+                SimUnit.of(UnitType.Zerg_Lurker),
+                SimUnit.of(UnitType.Zerg_Lurker),
+                SimUnit.of(UnitType.Zerg_Lurker)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Medic),
+                SimUnit.of(UnitType.Terran_Medic),
+                SimUnit.of(UnitType.Terran_Siege_Tank_Siege_Mode),
+                SimUnit.of(UnitType.Terran_Siege_Tank_Siege_Mode)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        assertThat(probabilityToWin).isGreaterThan(0.6)
+    }
+
 }

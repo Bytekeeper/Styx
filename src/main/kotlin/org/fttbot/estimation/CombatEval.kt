@@ -5,16 +5,12 @@ import org.fttbot.info.isMelee
 import org.fttbot.info.isSuicideUnit
 import org.fttbot.or
 import org.openbw.bwapi4j.Position
-import org.openbw.bwapi4j.type.DamageType
-import org.openbw.bwapi4j.type.UnitSizeType
-import org.openbw.bwapi4j.type.UnitType
-import org.openbw.bwapi4j.type.WeaponType
+import org.openbw.bwapi4j.type.*
 import org.openbw.bwapi4j.unit.*
 import java.lang.Math.pow
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
-import kotlin.math.sqrt
 
 const val MAX_FRAMES_TO_ATTACK = 3
 
@@ -41,16 +37,21 @@ object CombatEval {
             unitsOfPlayerA.map {
                 val gunRange = max(it.airWeapon.maxRange(), it.groundWeapon.maxRange()) + 0.1
                 val distance = it.position?.getDistance(center)?.toDouble() ?: 64.0
-                val combatRangeFactor = 0.3 + min(0.7, gunRange  / distance)
-                averageDamageOf(it, unitsOfPlayerB) *
+                val combatRangeFactor = 0.1 + min(0.9, gunRange  / distance)
+                val hiddenFactor = if (it.hiddenAttack) 1.3 else 1.0
+                val splashFactor = if (it.groundWeapon.type().explosionType() == ExplosionType.Enemy_Splash ||
+                        it.groundWeapon.type().explosionType() == ExplosionType.Radial_Splash ||
+                        it.airWeapon.type().explosionType() == DamageType.Explosive)
+                    (fastsig(unitsOfPlayerB.size * 0.2 ) + 1.0) else 1.0
+                averageDamageOf(it, unitsOfPlayerB) * splashFactor *
                         (if (it.isOrganic) it.hitPoints * medicFactor else it.hitPoints.toDouble() + it.shield) *
-                        combatRangeFactor
+                        combatRangeFactor * hiddenFactor
             }
 
     private fun averageDamageOf(a: SimUnit, unitsB: List<SimUnit>) =
             if (!a.isPowered) 0.0 else
                 unitsB.map { b ->
-                    if (!b.hidden || b.detected) {
+                    if (!b.hiddenAttack || b.detected) {
                         val dmg = a.damagePerFrameTo(b)
                         if (a.suicideUnit) {
                             dmg / unitsB.size / 30
@@ -76,7 +77,7 @@ class SimUnit(val name: String = "Unknown",
               val topSpeed: Double = 0.0,
               val armor: Int = 0,
               val size: UnitSizeType = UnitSizeType.None,
-              val hidden: Boolean = false,
+              val hiddenAttack: Boolean = false,
               val detected: Boolean = false,
               val isPowered: Boolean = true,
               val type: UnitType,
@@ -106,7 +107,7 @@ class SimUnit(val name: String = "Unknown",
                 topSpeed = (unit as? MobileUnit)?.topSpeed ?: 0.0,
                 armor = 0,
                 size = unit.size,
-                hidden = unit.isCloaked || unit is Burrowable && unit.isBurrowed,
+                hiddenAttack = unit.isCloaked || unit is Lurker,
                 detected = unit.isDetected,
                 isPowered = unit.isPowered,
                 type = unit.initialType,
@@ -127,6 +128,8 @@ class SimUnit(val name: String = "Unknown",
                 isAir = type.isFlyer,
                 topSpeed = type.topSpeed(),
                 size = type.size(),
+                hiddenAttack = type == UnitType.Zerg_Lurker,
+                detected = true,
                 type = type,
                 airHits = type.maxAirHits(),
                 groundHits = type.maxGroundHits(),

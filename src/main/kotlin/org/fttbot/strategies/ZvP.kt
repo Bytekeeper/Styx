@@ -5,6 +5,7 @@ import org.fttbot.*
 import org.fttbot.Fallback.Companion.fallback
 import org.fttbot.MParallel.Companion.mparallel
 import org.fttbot.Parallel.Companion.parallel
+import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.strategies.Strategies.considerBaseDefense
 import org.fttbot.strategies.Strategies.considerMoreTrainers
 import org.fttbot.strategies.Strategies.considerWorkers
@@ -20,6 +21,7 @@ import org.fttbot.task.Production.research
 import org.fttbot.task.Production.train
 import org.fttbot.task.Production.trainWorker
 import org.fttbot.task.Production.upgrade
+import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.UpgradeType
@@ -59,6 +61,13 @@ object ZvP {
                     Repeat(3, train(UnitType.Zerg_Zergling))
             )
 
+    fun raceChoice(): Node = fallback(
+            sequence(
+                    Condition("Terran?") { FTTBot.enemy.race == Race.Terran},
+                    _3HatchLurker()
+            ),
+            _2HatchMuta()
+    )
 
     fun _3HatchLurker(): Node =
             mparallel(1000,
@@ -85,7 +94,7 @@ object ZvP {
                     Repeat(8, train(UnitType.Zerg_Lurker)),
                     upgrade(UpgradeType.Zerg_Carapace),
                     parallel(1000,
-                            Repeat(1, train(UnitType.Zerg_Lurker)),
+                            Repeat(child = train(UnitType.Zerg_Lurker)),
                             Repeat(child = train(UnitType.Zerg_Hydralisk))
                     ),
                     upgrade(UpgradeType.Muscular_Augments),
@@ -107,12 +116,12 @@ object ZvP {
                         }
                     },
                     Strategies.considerCanceling(),
+                    train(UnitType.Zerg_Zergling),
+                    train(UnitType.Zerg_Zergling),
+                    train(UnitType.Zerg_Zergling),
                     buildGas(),
                     trainWorker(),
                     trainWorker(),
-                    train(UnitType.Zerg_Zergling),
-                    train(UnitType.Zerg_Zergling),
-                    train(UnitType.Zerg_Zergling),
                     considerBaseDefense(),
                     trainWorker(),
                     trainWorker(),
@@ -126,8 +135,6 @@ object ZvP {
                     Macro.buildExpansion(),
                     Strategies.considerWorkers(),
                     fallback(buildGas(), Success),
-                    produceSupply(),
-                    produceSupply(),
                     fallback(parallel(
                             1000,
                             Repeat(child = parallel(1000,

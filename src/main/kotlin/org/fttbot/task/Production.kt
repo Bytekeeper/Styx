@@ -151,6 +151,7 @@ object Production {
                             if (!builder!!.exists() || builder !is Worker || FTTBot.game.canBuildHere(targetPosition, type, builder as Worker)) {
                                 return@Condition true
                             }
+                            targetPosition = null
                             return@Condition false
                         },
                         Delegate
