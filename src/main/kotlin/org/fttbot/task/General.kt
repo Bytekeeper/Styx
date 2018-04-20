@@ -14,6 +14,7 @@ import org.openbw.bwapi4j.unit.MobileUnit
 
 
 data class ReachBoard(var position: Position? = null, var tolerance: Int)
+data class FleeBoard(var position: Position? = null, var sinceFrame: Int = 0)
 
 object Actions {
     fun hasReached(unit: MobileUnit, position: Position, tolerance: Int = 64) =
@@ -26,10 +27,11 @@ object Actions {
     }
 
     fun reachSafely(unit: MobileUnit, position: Position, tolerance: Int): Node {
-        return sequence(
-                Condition("targetPosition $position safe?") { canReachSafely(unit, position) },
-                Delegate { reach(unit, position, tolerance) }
-        )
+        return fallback(flee(unit),
+                sequence(
+                        Condition("targetPosition $position safe?") { canReachSafely(unit, position) },
+                        Delegate { reach(unit, position, tolerance) }
+                ))
     }
 
     fun reach(unit: MobileUnit, position: Position, tolerance: Int): Node =
@@ -57,6 +59,11 @@ object Actions {
                         ))
                 ))
     }
+
+    fun reach(unit: List<MobileUnit>, reachBoard: ReachBoard): Node =
+            DispatchParallel("Reach", { unit }) {
+                reach(it, reachBoard)
+            }
 
     fun reach(unit: List<MobileUnit>, position: Position, tolerance: Int = 128): Node =
             DispatchParallel("Reach", { unit }) {
@@ -97,8 +104,21 @@ object Actions {
     }
 
     fun flee(unit: MobileUnit): Sequence {
-        var reachBoard = ReachBoard(tolerance = 8)
+        val reachBoard = ReachBoard(tolerance = 8)
+        val fleeBoard = FleeBoard()
         return sequence(
+                Inline("Stuck?") {
+                    if (fleeBoard.position?.getDistance(unit.position) ?: Int.MAX_VALUE < 32) {
+                        if (FTTBot.frameCount - fleeBoard.sinceFrame > 24) {
+                            NodeStatus.FAILED
+                        } else
+                            NodeStatus.SUCCEEDED
+                    } else {
+                        fleeBoard.position = unit.position
+                        fleeBoard.sinceFrame = FTTBot.frameCount
+                        NodeStatus.SUCCEEDED
+                    }
+                },
                 Inline("Threat Vector") {
                     val force = Vector2()
                     force.setZero()
@@ -106,10 +126,10 @@ object Actions {
                     if (force.isZero)
                         return@Inline NodeStatus.FAILED
                     if (!unit.isFlying) {
-                        Potential.addWallRepulsion(force, unit, 1f)
-                        Potential.addSafeAreaAttraction(force, unit, 0.8f)
+                        Potential.addWallRepulsion(force, unit, 2.3f)
+                        Potential.addSafeAreaAttraction(force, unit, 0.7f)
                     } else {
-                        Potential.addWallAttraction(force, unit, 0.5f)
+                        Potential.addWallAttraction(force, unit, 1.5f)
                         Potential.addSafeAreaAttractionDirect(force, unit, 1.3f)
                     }
                     force.nor()

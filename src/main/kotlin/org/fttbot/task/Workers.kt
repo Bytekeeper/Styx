@@ -9,6 +9,7 @@ import org.fttbot.info.isMyUnit
 import org.fttbot.info.isReadyForResources
 import org.openbw.bwapi4j.unit.*
 import kotlin.math.max
+import kotlin.math.min
 
 const val RESOURCE_RANGE = 300
 
@@ -25,7 +26,7 @@ object GatherResources : BaseNode() {
             val workersToAssign = remainingWorkers.toMutableList()
             val minerals = relevantUnits.filterIsInstance(MineralPatch::class.java).toMutableList()
 
-            val gasMissing = refineries.size * 3 - workersToAssign.count { it.isGatheringGas } - max(0, 3 - workersToAssign.count())
+            val gasMissing = min(refineries.size * 3, max(0, workersToAssign.count() - 3)) - workersToAssign.count { it.isGatheringGas }
             if (gasMissing > 0) {
                 val refinery = refineries.first()
                 repeat(gasMissing) {

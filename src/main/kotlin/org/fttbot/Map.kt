@@ -1,6 +1,7 @@
 package org.fttbot
 
 import org.openbw.bwapi4j.WalkPosition
+import org.openbw.bwapi4j.type.Color
 import java.util.*
 import kotlin.collections.ArrayList
 import kotlin.math.min
@@ -34,13 +35,17 @@ object Map {
                 WalkPosition(0, 1)
         )
 //        val wpComp: (WalkPosition, WalkPosition) -> Int = { w1, w2 -> Integer.compare(w1.x, w2.x) * 2 + Integer.compare(w1.y, w2.y) }
-        val openList = PairingHeap<WalkPosition> { p1, p2 -> fmap[p1.y][p1.x].compareTo(fmap[p2.y][p2.x]) }
+        val openList = PriorityQueue<WalkPosition> { p1, p2 -> fmap[p1.y][p1.x].compareTo(fmap[p2.y][p2.x]) }
         gmap[from.y][from.x] = 0
         openList.add(from)
         mClosed++
         mOpen++
+        var v = 0
         do {
             val node = openList.poll()!!
+            if (fmap[node.y][node.x] > v) {
+                v = fmap[node.y][node.x]
+            }
             if (node == to) {
                 val result = ArrayList<WalkPosition>()
                 var currentNode = node
@@ -48,12 +53,18 @@ object Map {
                     result.add(currentNode)
                     currentNode = pred[currentNode.y][currentNode.x]
                 } while (currentNode != from)
-//                gmap.entries.forEach { (wp, len) ->
-//                    val rem = fmap[wp]
-//                    if (wp.x % 8 == 0 && wp.y % 8 == 0)
-//                        FTTBot.game.mapDrawer.drawTextMap(wp.toPosition(), "$len+$rem")
-//                }
-//                FTTBot.game.mapDrawer.drawLineMap(from.toPosition(), to.toPosition(), Color.BROWN)
+                open.forEachIndexed { y, a ->
+                    a.forEachIndexed { x, _ ->
+                        val len = fmap[y][x]
+                        val g = gmap[y][x]
+                        if (x % 8 == 0 && y % 8 == 0) {
+                            val c = closed[y][x] == mClosed
+                            FTTBot.game.mapDrawer.drawTextMap(x * 8, y * 8, "$len/$g,$c")
+                        }
+
+                    }
+                }
+                FTTBot.game.mapDrawer.drawLineMap(from.toPosition(), to.toPosition(), Color.BROWN)
                 return result.reversed()
             }
             closed[node.y][node.x] = mClosed
@@ -66,8 +77,8 @@ object Map {
                     if (open[wp.y][wp.x] < mOpen || g < gmap[wp.y][wp.x]) {
                         gmap[wp.y][wp.x] = g
                         val d = to.subtract(wp)
-                        val h = Math.sqrt((d.x * d.x + d.y * d.y).toDouble()).toInt()
-                        val f = g + h * 10
+                        val h = (Math.sqrt((d.x * d.x + d.y * d.y).toDouble()) * 10).toInt()
+                        val f = g + h
                         if (open[wp.y][wp.x] == mOpen) {
                             openList.remove(wp)
                             fmap[wp.y][wp.x] = min(fmap[wp.y][wp.x], f)

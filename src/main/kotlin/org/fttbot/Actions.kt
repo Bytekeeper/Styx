@@ -101,7 +101,18 @@ class ReserveUnit(val unit: PlayerUnit) : BaseNode() {
     override fun toString(): String = "Reserving unit $unit"
 }
 
-class ReserveResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) : BaseNode() {
+class ReleaseUnit(val unit: PlayerUnit) : BaseNode() {
+    override fun tick(): NodeStatus {
+        if (!unit.exists()) {
+            return NodeStatus.FAILED
+        }
+        Board.resources.release(unit)
+        return NodeStatus.SUCCEEDED
+    }
+
+}
+
+class ReserveResources(val minerals: Int = 0, val gas: Int = 0, val supply: Int = 0) : BaseNode() {
     override fun tick(): NodeStatus {
         val availableResources = Board.resources
         availableResources.reserve(minerals, gas, supply)
@@ -112,18 +123,10 @@ class ReserveResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0)
     }
 }
 
-class ReserveSupply(val supply: Int) : BaseNode() {
-    override fun tick(): NodeStatus =
-            if (supply == 0 || Board.resources.reserve(supply = supply).supply >= 0)
-                NodeStatus.SUCCEEDED
-            else NodeStatus.FAILED
-}
-
-class BlockResources(val minerals: Int, val gas: Int = 0, val supply: Int = 0) : BaseNode() {
+class ReleaseResources(val minerals: Int = 0, val gas: Int = 0, val supply: Int = 0) : BaseNode() {
     override fun tick(): NodeStatus {
-        if (Board.resources.isAvailable(minerals, gas, supply)) return NodeStatus.SUCCEEDED
-        Board.resources.reserve(minerals, gas, supply)
-        return NodeStatus.RUNNING
+        val availableResources = Board.resources
+        availableResources.release(minerals, gas, supply)
+        return NodeStatus.SUCCEEDED
     }
 }
-

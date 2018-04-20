@@ -6,6 +6,7 @@ import org.fttbot.Fallback.Companion.fallback
 import org.fttbot.MParallel.Companion.mparallel
 import org.fttbot.Parallel.Companion.parallel
 import org.fttbot.Sequence.Companion.sequence
+import org.fttbot.info.EnemyInfo
 import org.fttbot.strategies.Strategies.considerBaseDefense
 import org.fttbot.strategies.Strategies.considerMoreTrainers
 import org.fttbot.strategies.Strategies.considerWorkers
@@ -25,6 +26,7 @@ import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.UpgradeType
+import org.openbw.bwapi4j.unit.Attacker
 
 object ZvP {
     fun _12HatchA(): Node =
@@ -61,10 +63,40 @@ object ZvP {
                     Repeat(3, train(UnitType.Zerg_Zergling))
             )
 
+    fun overpool() : Node = mparallel(Int.MAX_VALUE,
+            Repeat(5, trainWorker()),
+            produceSupply(),
+            build(UnitType.Zerg_Spawning_Pool),
+            trainWorker(),
+            buildGas(),
+            trainWorker(),
+            trainWorker(),
+            Repeat(6, train(UnitType.Zerg_Zergling)),
+            considerWorkers(),
+            considerBaseDefense(),
+            build(UnitType.Zerg_Spire),
+            build(UnitType.Zerg_Creep_Colony),
+            Repeat(child = train(UnitType.Zerg_Mutalisk)),
+            Repeat(child = train(UnitType.Zerg_Zergling)),
+            build(UnitType.Zerg_Hatchery),
+            Repeat(child = fallback(sequence(
+                    Condition(   "Enemy has air?") { EnemyInfo.seenUnits.any { it.isFlying } },
+                    train(UnitType.Zerg_Scourge)), Sleep)),
+            considerExpansion(),
+            considerMoreTrainers(),
+            Repeat(UpgradeType.Zerg_Flyer_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Attacks) }),
+            upgrade(UpgradeType.Metabolic_Boost),
+            upgrade(UpgradeType.Adrenal_Glands)
+    )
+
     fun raceChoice(): Node = fallback(
             sequence(
-                    Condition("Terran?") { FTTBot.enemy.race == Race.Terran},
+                    Condition("Terran?") { FTTBot.enemy.race == Race.Terran },
                     _3HatchLurker()
+            ),
+            sequence(
+                    Condition("Zerg?") { FTTBot.enemy.race == Race.Zerg },
+                    overpool()
             ),
             _2HatchMuta()
     )
@@ -95,7 +127,8 @@ object ZvP {
                     upgrade(UpgradeType.Zerg_Carapace),
                     parallel(1000,
                             Repeat(child = train(UnitType.Zerg_Lurker)),
-                            Repeat(child = train(UnitType.Zerg_Hydralisk))
+                            Repeat(child = train(UnitType.Zerg_Hydralisk)),
+                            Repeat(child = train(UnitType.Zerg_Zergling))
                     ),
                     upgrade(UpgradeType.Muscular_Augments),
                     upgrade(UpgradeType.Grooved_Spines),
@@ -137,9 +170,10 @@ object ZvP {
                     fallback(buildGas(), Success),
                     fallback(parallel(
                             1000,
-                            Repeat(child = parallel(1000,
-                                    train(UnitType.Zerg_Mutalisk),
-                                    train(UnitType.Zerg_Mutalisk))),
+                            Repeat(child = fallback(sequence(
+                                    Condition(   "Enemy has air?") { EnemyInfo.seenUnits.any { it.isFlying } },
+                                    train(UnitType.Zerg_Scourge)), Sleep)),
+                            Repeat(child = train(UnitType.Zerg_Mutalisk)),
                             Repeat(50, child = Delegate { train(UnitType.Zerg_Zergling) }),
                             Macro.considerGas(),
                             Repeat(child = train(UnitType.Zerg_Ultralisk)),

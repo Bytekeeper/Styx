@@ -83,6 +83,7 @@ object FTTBot : BWEventListener {
 //                ZvP._massZergling()
 //                        ZvP._2HatchMuta(),
                         ZvP.raceChoice(),
+//                        ZvP.overpool(),
 //                        ZvP._9Pool(),
                         Inline("Crap Check") {
                             LOG.error("The buildqueue SUCCEEDED, so we're more or less dead: ${buildQueue.tree}")
@@ -114,6 +115,7 @@ object FTTBot : BWEventListener {
         UnitQuery.reset()
         Cluster.reset()
         EnemyInfo.reset()
+//        org.fttbot.Map.init()
     }
 
     override fun onFrame() {
@@ -151,6 +153,12 @@ object FTTBot : BWEventListener {
                 game.mapDrawer.drawLineMap(it.position, it.targetUnit.position, Color.RED)
             }
         }
+
+//        val x = org.fttbot.Map.path(game.bwMap.startPositions[0].toWalkPosition(), game.bwMap.startPositions[1].toWalkPosition())
+//
+//        x.zipWithNext {
+//            a, b -> game.mapDrawer.drawLineMap(a.toPosition(), b.toPosition(), Color.GREEN)
+//        }
 
         EnemyInfo.seenUnits.forEach {
             game.mapDrawer.drawCircleMap(it.position, 16, Color.RED)

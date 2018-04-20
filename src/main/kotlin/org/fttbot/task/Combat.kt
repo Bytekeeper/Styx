@@ -197,7 +197,6 @@ object Combat {
 
     fun attacking(): Node = fallback(
             DispatchParallel("Attacking", { Cluster.mobileCombatUnits }) { myCluster ->
-                val allies: Position? = null
                 val board = AttackersBoard()
                 fallback(
                         sequence(
@@ -227,19 +226,19 @@ object Combat {
                                 attack(board)
                         ),
                         DispatchParallel("Flee", { myCluster.units.filter { Board.resources.units.contains(it) } }) {
-                            sequence(ReserveUnit(it), flee(it))
+                            sequence(ReserveUnit(it), fallback(flee(it), sequence(ReleaseUnit(it), Fail)))
                         },
-                        joinUp(allies, myCluster),
+                        joinUp(myCluster),
                         Sleep)
             },
             Sleep
     )
 
-    private fun joinUp(allies: Position?, myCluster: Cluster<MobileUnit>): Sequence {
-        var allies1 = allies
+    private fun joinUp(myCluster: Cluster<MobileUnit>): Sequence {
+        val reachBoard = ReachBoard(tolerance = 32)
         return sequence(
                 Inline("Find me some allies") {
-                    allies1 = Cluster.mobileCombatUnits.filter {
+                    reachBoard.position = Cluster.mobileCombatUnits.filter {
                         it != myCluster &&
                                 FTTBot.bwem.data.getMiniTile(it.position.toWalkPosition()).isWalkable
                     }.minBy { it.position.getDistance(myCluster.position) }?.position
@@ -249,7 +248,7 @@ object Combat {
                 Delegate {
                     val available = myCluster.units.filter { Board.resources.units.contains(it) }
                     Board.resources.reserveUnits(available)
-                    reach(available, allies1!!)
+                    reach(available, reachBoard)
                 }
         )
     }

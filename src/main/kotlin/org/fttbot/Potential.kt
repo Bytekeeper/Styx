@@ -22,7 +22,7 @@ object Potential {
     }
 
     fun addThreatRepulsion(target: Vector2, unit: MobileUnit, scale: Float = 1f) {
-        val threats = (UnitQuery.enemyUnits + EnemyInfo.seenUnits).filter { it.canAttack(unit, 150) }
+        val threats = (UnitQuery.enemyUnits + EnemyInfo.seenUnits).filter { it.canAttack(unit, 32 * 3) }
         target.add(
                 threats.fold(Vector2()) { acc, playerUnit -> acc.sub(playerUnit.position.toVector()) }
                         .mulAdd(unit.position.toVector(), threats.size.toFloat())
@@ -65,7 +65,27 @@ object Potential {
     }
 
     fun addWallAttraction(target: Vector2, unit: MobileUnit, scale: Float = 1f) {
-        addWallRepulsion(target, unit, -scale)
+        val pos = unit.position.toWalkPosition()
+        var bestAltitude = Int.MAX_VALUE
+        var bestPos: WalkPosition? = null
+        for (i in -3..3) {
+            for (j in -3..3) {
+                val wp = WalkPosition(pos.x + i * 2, pos.y + j * 2)
+                if ((i != 0 || j != 0) && FTTBot.game.bwMap.isValidPosition(wp)) {
+                    val miniTile = FTTBot.bwem.data.getMiniTile(wp, CheckMode.NO_CHECK)
+                    val altitude = miniTile.altitude
+                    if (altitude.intValue() < bestAltitude) {
+                        bestAltitude = altitude.intValue()
+                        bestPos = wp
+                    }
+                }
+            }
+        }
+        if (bestPos != null) {
+            val tmp = bestPos.subtract(pos).toPosition().toVector()
+            tmp.setLength((scale * (1.0 - fastsig(bestAltitude / 50.0))).toFloat())
+            target.add(tmp)
+        }
     }
 
     fun addSafeAreaAttraction(target: Vector2, unit: MobileUnit, scale : Float = 1f) {

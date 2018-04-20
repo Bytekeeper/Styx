@@ -47,6 +47,17 @@ class Resources {
         return this
     }
 
+    fun release(unit: PlayerUnit) {
+        require(!_units.contains(unit))
+        _units.add(unit)
+    }
+
+    fun release(minerals: Int, gas: Int, supply: Int) {
+        this.minerals += minerals
+        this.gas += gas
+        this.supply += supply
+    }
+
     fun reserveUnit(unit: PlayerUnit): Resources {
         require(_units.contains(unit))
         _units.remove(unit)
@@ -60,7 +71,6 @@ class Resources {
         this._units.clear()
         this._units.addAll(units)
     }
-
     fun enough(): Boolean = minerals >= 0 && gas >= 0 && supply >= 0
 }
 

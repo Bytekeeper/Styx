@@ -79,7 +79,11 @@ object Production {
                     it.isA(trainerType)
                             && (it !is TrainingFacility || !it.isTraining)
                 }
-                .minBy { near?.getDistance(it.position) ?: 0 }
+                .minBy {
+                    near?.getDistance(it.position)
+                            ?: MyInfo.myBases.map { b -> b as PlayerUnit; b.getDistance(it) }.min()
+                            ?: 0
+                }
     }
 
     fun selectResearcher(currentResearcher: PlayerUnit?, tech: TechType): PlayerUnit? {
@@ -111,8 +115,8 @@ object Production {
     fun build(type: UnitType, considerSafety: Boolean? = null, at: () -> TilePosition? = { null }): Node {
         require(type.isBuilding && !type.isAddon)
         val safety = considerSafety ?: type.isResourceDepot
-        var targetPosition : TilePosition? = null
-        var builder : PlayerUnit? = null
+        var targetPosition: TilePosition? = null
+        var builder: PlayerUnit? = null
         return Retry(15, msequence("build $type",
                 sequence(
                         Inline("Reset") {
@@ -123,8 +127,10 @@ object Production {
                             Board.pendingUnits.add(type)
                             NodeStatus.SUCCEEDED
                         },
-                        ensureDependencies(type),
-                        BlockResources(type.mineralPrice(), type.gasPrice()),
+                        parallel(2,
+                                ensureDependencies(type),
+                                fallback(ReserveResources(type.mineralPrice(), type.gasPrice()), Sleep)
+                        ),
                         Await("canMake $type") { FTTBot.self.canMake(type) },
                         Inline("find build location and builder") {
                             targetPosition = targetPosition ?: ConstructionPosition.findPositionFor(type, at()?.toPosition()) ?: ConstructionPosition.findPositionFor(type)
@@ -141,7 +147,8 @@ object Production {
                                     Board.resources.units.firstOrNull { it.isA(type.whatBuilds().first) && it is Building && it.remainingBuildTime == 0 }
                                     ) ?: return@Inline NodeStatus.RUNNING
                             NodeStatus.SUCCEEDED
-                        }
+                        },
+                        ReleaseResources(type.mineralPrice(), type.gasPrice())
                 ),
                 sequence(
                         Condition("Safe to build or don't care?") {
@@ -193,17 +200,18 @@ object Production {
                                     Board.pendingUnits.add(unit)
                                     NodeStatus.SUCCEEDED
                                 },
-                                ensureDependencies(unit),
-                                parallel(2,
+                                parallel(3,
+                                        ensureDependencies(unit),
                                         ensureSupply(supplyUsed),
-                                        BlockResources(unit.mineralPrice(), unit.gasPrice(), unit.supplyRequired())
+                                        fallback(ReserveResources(unit.mineralPrice(), unit.gasPrice()), Sleep)
                                 ),
                                 Await("can make $unit") { FTTBot.self.canMake(unit) },
                                 Inline("Finding trainer for $unit") {
                                     trainer = selectTrainer(trainer, unit, near()?.toPosition())
                                             ?: return@Inline NodeStatus.RUNNING
                                     NodeStatus.SUCCEEDED
-                                }
+                                },
+                                ReleaseResources(unit.mineralPrice(), unit.gasPrice(), unit.supplyRequired())
                         ),
                         sequence(
                                 ReserveResources(unit.mineralPrice(), unit.gasPrice(), unit.supplyRequired()),
@@ -258,9 +266,9 @@ object Production {
 
     fun ensureSupply(supplyDemand: Int): Node {
         return fallback(
-                ReserveSupply(supplyDemand),
+                ReserveResources(supply = supplyDemand),
                 sequence(Condition("enough supply pending") { pendingSupply() >= 0 }, Sleep),
-                Delegate { produceSupply() }
+                sequence(Delegate { produceSupply() }, Sleep)
         )
     }
 
@@ -318,7 +326,7 @@ object Production {
                 train(unit, near)
 
 
-    fun produceSupply(near: () -> TilePosition? = { null }): Node= produce(FTTConfig.SUPPLY, near)
+    fun produceSupply(near: () -> TilePosition? = { null }): Node = produce(FTTConfig.SUPPLY, near)
 
     fun trainWorker(near: () -> TilePosition? = { bestPositionForNewWorker() }): Node = train(FTTConfig.WORKER, near)
 
