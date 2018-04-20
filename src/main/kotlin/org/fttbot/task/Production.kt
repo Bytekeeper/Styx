@@ -346,11 +346,11 @@ object Production {
 
     fun cancelGas() = cancel(FTTConfig.GAS_BUILDING)
 
-    fun bestPositionForNewWorker(): TilePosition {
+    fun bestPositionForNewWorker(): TilePosition? {
         val tilePosition = (MyInfo.myBases.filter { it.isReadyForResources }.minBy {
             it as PlayerUnit
             it.getUnitsInRadius(300, UnitQuery.myWorkers).size
-        } as PlayerUnit).tilePosition
+        } as? PlayerUnit)?.tilePosition
         return tilePosition
     }
 
