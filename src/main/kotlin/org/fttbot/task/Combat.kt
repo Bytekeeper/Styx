@@ -200,6 +200,12 @@ object Combat {
                 val board = AttackersBoard()
                 fallback(
                         sequence(
+                                Inline("Who is ready to attack?") {
+                                    val units = myCluster.units.toMutableList()
+                                    units.retainAll(Board.resources.units)
+                                    board.attackers = units
+                                    NodeStatus.SUCCEEDED
+                                },
                                 Inline("Find me some enemies") {
                                     board.enemies = Cluster.enemyClusters.minBy {
                                         val distance = MyInfo.myBases.map { base -> base as PlayerUnit; base.getDistance(it.position) }.min()
@@ -217,15 +223,12 @@ object Combat {
                                             combatEval > 0.40 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me) } }
                                 },
                                 Inline("Who should attack?") {
-                                    val units = myCluster.units.toMutableList()
-                                    units.retainAll(Board.resources.units)
-                                    board.attackers = units
-                                    Board.resources.reserveUnits(units)
+                                    Board.resources.reserveUnits(board.attackers)
                                     NodeStatus.SUCCEEDED
                                 },
                                 attack(board)
                         ),
-                        DispatchParallel("Flee", { myCluster.units.filter { Board.resources.units.contains(it) } }) {
+                        DispatchParallel("Flee", { board.attackers.filterIsInstance(MobileUnit::class.java) }) {
                             sequence(ReserveUnit(it), fallback(flee(it), sequence(ReleaseUnit(it), Fail)))
                         },
                         joinUp(myCluster),
