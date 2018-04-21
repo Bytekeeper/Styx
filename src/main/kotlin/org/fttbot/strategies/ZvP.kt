@@ -27,7 +27,8 @@ import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.UpgradeType
-import org.openbw.bwapi4j.unit.Attacker
+import org.openbw.bwapi4j.unit.Hydralisk
+import org.openbw.bwapi4j.unit.Lurker
 import org.openbw.bwapi4j.unit.Scourge
 
 object ZvP {
@@ -65,7 +66,7 @@ object ZvP {
                     Repeat(3, train(UnitType.Zerg_Zergling))
             )
 
-    fun overpool() : Node = mparallel(Int.MAX_VALUE,
+    fun overpool(): Node = mparallel(Int.MAX_VALUE,
             Repeat(5, trainWorker()),
             produceSupply(),
             build(UnitType.Zerg_Spawning_Pool),
@@ -82,7 +83,7 @@ object ZvP {
             Repeat(child = train(UnitType.Zerg_Zergling)),
             build(UnitType.Zerg_Hatchery),
             Repeat(child = fallback(sequence(
-                    Condition(   "Enemy has air?") { EnemyInfo.seenUnits.any { it.isFlying } },
+                    Condition("Enemy has air?") { EnemyInfo.seenUnits.any { it.isFlying } },
                     train(UnitType.Zerg_Scourge)), Sleep)),
             considerExpansion(),
             considerMoreTrainers(),
@@ -100,7 +101,13 @@ object ZvP {
                     Condition("Zerg?") { FTTBot.enemy.race == Race.Zerg },
                     overpool()
             ),
-            _2HatchMuta()
+            Delegate {
+                if (MathUtils.randomBoolean()) {
+                    _2HatchMuta()
+                } else {
+                    overpool()
+                }
+            }
     )
 
     fun _3HatchLurker(): Node =
@@ -128,7 +135,9 @@ object ZvP {
                     Repeat(8, train(UnitType.Zerg_Lurker)),
                     upgrade(UpgradeType.Zerg_Carapace),
                     parallel(1000,
-                            Repeat(child = train(UnitType.Zerg_Lurker)),
+                            Repeat(child = fallback(Condition("Enough Lurkers?") {
+                                UnitQuery.myUnits.count { it is Lurker } > UnitQuery.myUnits.count { it is Hydralisk }
+                            }, train(UnitType.Zerg_Lurker))),
                             Repeat(child = train(UnitType.Zerg_Hydralisk)),
                             Repeat(child = train(UnitType.Zerg_Zergling))
                     ),
@@ -183,7 +192,8 @@ object ZvP {
     private fun considerScourge(): Node {
         return Repeat(child = fallback(sequence(
                 Condition("Enemy has air?") { UnitQuery.myUnits.count { it is Scourge } < EnemyInfo.seenUnits.count { it.isFlying } },
-                train(UnitType.Zerg_Scourge)), Sleep))
+                train(UnitType.Zerg_Scourge)
+        ), Sleep))
     }
 
 }

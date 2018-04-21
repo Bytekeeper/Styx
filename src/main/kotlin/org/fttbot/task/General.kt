@@ -54,7 +54,7 @@ object Actions {
                                     }
                                     NodeStatus.SUCCEEDED
                                 },
-                                Delegate { MoveCommand(unit, nextWaypoint!!) },
+                                fallback(Condition("Correct targetpos?") { nextWaypoint!!.getDistance(unit.targetPosition) <= board.tolerance }, Delegate { MoveCommand(unit, nextWaypoint!!) }),
                                 Delegate { CheckIsClosingIn(unit, nextWaypoint!!) }
                         ))
                 ))

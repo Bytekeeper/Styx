@@ -15,6 +15,22 @@ import kotlin.math.min
 const val MAX_FRAMES_TO_ATTACK = 3
 
 object CombatEval {
+    fun bestProbilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>): Pair<List<SimUnit>, Double> {
+        var best = unitsOfPlayerA
+        var bestEval = probabilityToWin(best, unitsOfPlayerB)
+        val typesRemaining = best.map { it.type }.toMutableSet()
+        while (!typesRemaining.isEmpty()) {
+            val bestType = typesRemaining.map { toTest -> toTest to probabilityToWin(best.filter { it.type != toTest }, unitsOfPlayerB) }
+                    .maxBy { it.second }!!
+            if (bestType.second < bestEval)
+                break
+            typesRemaining.remove(bestType.first)
+            bestEval = bestType.second
+            best = best.filter { it.type != bestType.first }
+        }
+        return best to bestEval
+    }
+
     fun probabilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>): Double {
         val amountOfUnits = max(1, unitsOfPlayerA.size + unitsOfPlayerB.size)
         val center = (unitsOfPlayerA + unitsOfPlayerB)
@@ -37,12 +53,12 @@ object CombatEval {
             unitsOfPlayerA.map {
                 val gunRange = max(it.airWeapon.maxRange(), it.groundWeapon.maxRange()) + 0.1
                 val distance = it.position?.getDistance(center)?.toDouble() ?: 64.0
-                val combatRangeFactor = 0.1 + min(0.9, gunRange  / distance)
+                val combatRangeFactor = 0.1 + min(0.9, gunRange / distance)
                 val hiddenFactor = if (it.hiddenAttack) 1.3 else 1.0
                 val splashFactor = if (it.groundWeapon.type().explosionType() == ExplosionType.Enemy_Splash ||
                         it.groundWeapon.type().explosionType() == ExplosionType.Radial_Splash ||
                         it.airWeapon.type().explosionType() == DamageType.Explosive)
-                    (fastsig(unitsOfPlayerB.size * 0.2 ) + 1.0) else 1.0
+                    (fastsig(unitsOfPlayerB.size * 0.2) + 1.0) else 1.0
                 averageDamageOf(it, unitsOfPlayerB) * splashFactor *
                         (if (it.isOrganic) it.hitPoints * medicFactor else it.hitPoints.toDouble() + it.shield) *
                         combatRangeFactor * hiddenFactor
@@ -61,7 +77,8 @@ object CombatEval {
                 }.average().or(0.1)
 }
 
-class SimUnit(val name: String = "Unknown",
+class SimUnit(val id: Int? = 0,
+              val name: String = "Unknown",
               val ground: Int = 0,
               val isUnderDarkSwarm: Boolean = false,
               val airUpgrades: Int = 0,
@@ -92,6 +109,7 @@ class SimUnit(val name: String = "Unknown",
 
     companion object {
         fun of(unit: PlayerUnit): SimUnit = SimUnit(
+                id = unit.id,
                 name = unit.toString(),
                 ground = unit.height(),
                 isUnderDarkSwarm = unit is MobileUnit && unit.isUnderDarkSwarm,

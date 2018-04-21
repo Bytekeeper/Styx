@@ -16,8 +16,13 @@ import org.openbw.bwapi4j.unit.*
 import kotlin.math.max
 import kotlin.math.min
 
-data class AttackersBoard(var attackers: List<PlayerUnit> = emptyList(), var enemies: List<PlayerUnit> = emptyList())
+data class AttackersBoard(var attackers: List<PlayerUnit> = emptyList(),
+                          var reluctant: List<PlayerUnit> = emptyList(),
+                          var enemies: List<PlayerUnit> = emptyList(),
+                          var eval: Double = 0.5)
+
 data class AttackBoard(val unit: MobileUnit, var target: PlayerUnit? = null)
+data class CombatInfo(val myUnits: List<PlayerUnit>, val enemy: Cluster<PlayerUnit>, val eval: Double)
 
 object Combat {
     fun attack(board: AttackersBoard): Node {
@@ -207,28 +212,44 @@ object Combat {
                                     NodeStatus.SUCCEEDED
                                 },
                                 Inline("Find me some enemies") {
-                                    board.enemies = Cluster.enemyClusters.minBy {
-                                        val distance = MyInfo.myBases.map { base -> base as PlayerUnit; base.getDistance(it.position) }.min()
+                                    val combatInfos = Cluster.enemyClusters.map {
+                                        val relevantEnemies = it.units.filter { it is Attacker && it.isCompleted }
+                                        val eval = CombatEval.bestProbilityToWin(board.attackers.map { SimUnit.of(it) }, relevantEnemies.map { SimUnit.of(it) })
+                                        CombatInfo(board.attackers.filter { eval.first.map { it.id }.contains(it.id) }, it, eval.second)
+                                    }
+                                    val bestCombat = combatInfos.minBy {
+                                        val enemyPosition = it.enemy.position
+                                        val distance = MyInfo.myBases.map { base -> base as PlayerUnit; base.getDistance(enemyPosition) }.min()
                                                 ?: Double.MAX_VALUE
-                                        val eval = CombatEval.probabilityToWin(myCluster.units.map { SimUnit.of(it) }, it.units.filter { it is Attacker && it.isCompleted }.map { SimUnit.of(it) })
-                                        it.position.getDistance(myCluster.position) - 600 * eval +
-                                                min(distance / 5.0, 400.0)
-
-                                    }?.units?.toList() ?: return@Inline NodeStatus.RUNNING
+                                        enemyPosition.getDistance(myCluster.position) - 600 * it.eval + min(distance / 5.0, 400.0)
+                                    }
+                                    board.enemies = bestCombat?.enemy?.units ?: return@Inline NodeStatus.RUNNING
+                                    board.reluctant = board.attackers - bestCombat.myUnits
+                                    board.attackers = bestCombat.myUnits
+                                    board.eval = bestCombat.eval
                                     NodeStatus.SUCCEEDED
                                 },
                                 Condition("Good combat eval?") {
-                                    val combatEval = ClusterCombatInfo.getInfo(myCluster).attackEval
+                                    val clusterCombatInfo = ClusterCombatInfo(board.attackers, myCluster.position)
+                                    val combatEval = clusterCombatInfo.attackEval
                                     combatEval > 0.6 ||
-                                            combatEval > 0.40 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me) } }
+                                            combatEval > 0.40 && myCluster.units.any { me -> clusterCombatInfo.enemyUnits.any { it.canAttack(me) } }
                                 },
                                 Inline("Who should attack?") {
                                     Board.resources.reserveUnits(board.attackers)
                                     NodeStatus.SUCCEEDED
                                 },
-                                attack(board)
+                                parallel(2,
+                                        attack(board),
+                                        fallback(
+                                                DispatchParallel("Let reluctants fall back", { board.reluctant.filterIsInstance(MobileUnit::class.java) }) {
+                                                    sequence(ReserveUnit(it), fallback(flee(it), sequence(ReleaseUnit(it), Fail)))
+                                                },
+                                                Sleep
+                                        )
+                                )
                         ),
-                        DispatchParallel("Flee", { board.attackers.filterIsInstance(MobileUnit::class.java) }) {
+                        DispatchParallel("Flee", { (board.attackers + board.reluctant).filterIsInstance(MobileUnit::class.java) }) {
                             sequence(ReserveUnit(it), fallback(flee(it), sequence(ReleaseUnit(it), Fail)))
                         },
                         joinUp(myCluster),

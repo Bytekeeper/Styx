@@ -402,4 +402,33 @@ class CombatEvalTest {
         assertThat(probabilityToWin).isGreaterThan(0.6)
     }
 
+    @Test
+    fun `Attack with Muta only for 2 Mutas, 4 Zerglings vs 8 Zealots`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot)
+        )
+
+        val bestProbabilityToWin = CombatEval.bestProbilityToWin(a, b)
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        assertThat(probabilityToWin).isLessThan(0.1)
+        assertThat(bestProbabilityToWin.second).isGreaterThan(0.8)
+        assertThat(bestProbabilityToWin.first).allMatch{ it.type == UnitType.Zerg_Mutalisk}
+    }
+
 }

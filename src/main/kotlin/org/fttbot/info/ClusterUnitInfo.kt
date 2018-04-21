@@ -8,16 +8,19 @@ import org.fttbot.plus
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.unit.*
 
-class ClusterCombatInfo(private val cluster: Cluster<*>) {
+class ClusterCombatInfo(val plannedAttackers: List<PlayerUnit>, val position: Position) {
     val unitsInArea by LazyOnFrame {
-        (UnitQuery.inRadius(cluster.position, 600) +
-                EnemyInfo.seenUnits.filter { it.getDistance(cluster.position) < 600 })
+        (UnitQuery.inRadius(position, 600) +
+                EnemyInfo.seenUnits.filter { it.getDistance(position) < 600 })
                 .filterIsInstance(PlayerUnit::class.java)
     }
 
     val combatRelevantUnits by LazyOnFrame {
         unitsInArea.filter { it.getDistance(forceCenter) < 300 }
-                .filter { (it !is Worker || it.isAttacking) && (it is Attacker || it is Bunker) && it.isCompleted }
+                .filter {
+                    (it !is Worker || it.isAttacking) && (it is Attacker || it is Bunker) && it.isCompleted
+                            && (it.isEnemyUnit || plannedAttackers.contains(it))
+                }
     }
 
     val enemyUnits: List<PlayerUnit> by LazyOnFrame { combatRelevantUnits.filter { it.isEnemyUnit } }
@@ -31,7 +34,7 @@ class ClusterCombatInfo(private val cluster: Cluster<*>) {
     }
 
     val attackEval: Double by LazyOnFrame {
-         CombatEval.probabilityToWin(myUnits.filter { it is MobileUnit }.map { SimUnit.of(it) }, enemyUnits.map { SimUnit.of(it) })
+        CombatEval.probabilityToWin(myUnits.filter { it is MobileUnit }.map { SimUnit.of(it) }, enemyUnits.map { SimUnit.of(it) })
     }
 
     val defenseEval: Double by LazyOnFrame {
@@ -53,6 +56,6 @@ class ClusterCombatInfo(private val cluster: Cluster<*>) {
             unitInfo.clear()
         }
 
-        fun getInfo(cluster: Cluster<*>) = unitInfo.computeIfAbsent(cluster) { ClusterCombatInfo(cluster) }
+        fun getInfo(cluster: Cluster<PlayerUnit>) = unitInfo.computeIfAbsent(cluster) { ClusterCombatInfo(cluster.units, cluster.position) }
     }
 }
