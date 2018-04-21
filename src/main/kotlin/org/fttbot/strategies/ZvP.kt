@@ -7,6 +7,7 @@ import org.fttbot.MParallel.Companion.mparallel
 import org.fttbot.Parallel.Companion.parallel
 import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.info.EnemyInfo
+import org.fttbot.info.UnitQuery
 import org.fttbot.strategies.Strategies.considerBaseDefense
 import org.fttbot.strategies.Strategies.considerMoreTrainers
 import org.fttbot.strategies.Strategies.considerWorkers
@@ -27,6 +28,7 @@ import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.UpgradeType
 import org.openbw.bwapi4j.unit.Attacker
+import org.openbw.bwapi4j.unit.Scourge
 
 object ZvP {
     fun _12HatchA(): Node =
@@ -156,30 +158,18 @@ object ZvP {
                     trainWorker(),
                     trainWorker(),
                     considerBaseDefense(),
-                    trainWorker(),
-                    trainWorker(),
+                    Strategies.considerWorkers(),
                     build(UnitType.Zerg_Lair),
-                    trainWorker(),
-                    trainWorker(),
-                    produceSupply(),
-                    trainWorker(),
-                    trainWorker(),
                     produce(UnitType.Zerg_Spire),
                     Macro.buildExpansion(),
-                    Strategies.considerWorkers(),
                     fallback(buildGas(), Success),
-                    fallback(parallel(
-                            1000,
-                            Repeat(child = fallback(sequence(
-                                    Condition(   "Enemy has air?") { EnemyInfo.seenUnits.any { it.isFlying } },
-                                    train(UnitType.Zerg_Scourge)), Sleep)),
-                            Repeat(child = train(UnitType.Zerg_Mutalisk)),
-                            Repeat(50, child = Delegate { train(UnitType.Zerg_Zergling) }),
-                            Macro.considerGas(),
-                            Repeat(child = train(UnitType.Zerg_Ultralisk)),
-                            Repeat(child = train(UnitType.Zerg_Zergling))
-                    ), Sleep),
+                    considerScourge(),
+                    Repeat(child = train(UnitType.Zerg_Mutalisk)),
                     considerExpansion(),
+                    Repeat(50, child = Delegate { train(UnitType.Zerg_Zergling) }),
+                    Macro.considerGas(),
+                    Repeat(child = train(UnitType.Zerg_Ultralisk)),
+                    Repeat(child = train(UnitType.Zerg_Zergling)),
                     considerMoreTrainers(),
                     upgrade(UpgradeType.Zerg_Flyer_Attacks),
                     upgrade(UpgradeType.Metabolic_Boost),
@@ -189,5 +179,11 @@ object ZvP {
                     Repeat(UpgradeType.Zerg_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Carapace) }),
                     Repeat(UpgradeType.Zerg_Flyer_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Carapace) })
             )
+
+    private fun considerScourge(): Node {
+        return Repeat(child = fallback(sequence(
+                Condition("Enemy has air?") { UnitQuery.myUnits.count { it is Scourge } < EnemyInfo.seenUnits.count { it.isFlying } },
+                train(UnitType.Zerg_Scourge)), Sleep))
+    }
 
 }

@@ -1,8 +1,9 @@
 package org.fttbot.task
 
-import org.fttbot.BaseNode
-import org.fttbot.Board
-import org.fttbot.NodeStatus
+import com.badlogic.gdx.math.Vector2
+import org.fttbot.*
+import org.fttbot.Fallback.Companion.fallback
+import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.info.MyInfo
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.isMyUnit
@@ -12,6 +13,38 @@ import kotlin.math.max
 import kotlin.math.min
 
 const val RESOURCE_RANGE = 300
+
+object Workers {
+    fun returnWanderingWorkers(): Node {
+        return fallback(
+                DispatchParallel("Send workers home", { Board.resources.units.filterIsInstance(Worker::class.java) }) {
+                    val reachBoard = ReachBoard(tolerance = 32)
+                    sequence(
+                            Inline("Home Vector") {
+                                val force = Vector2()
+                                Potential.addWallRepulsion(force, it, 2.3f)
+                                Potential.addSafeAreaAttraction(force, it, 0.7f)
+                                force.nor()
+                                reachBoard.position = it.position + force.scl(64f).toPosition()
+                                NodeStatus.SUCCEEDED
+                            },
+                            Delegate { Actions.reach(it, reachBoard) }
+                    )
+                },
+                Sleep
+        )
+    }
+
+}
+
+object ReturnWanderingWorkers : BaseNode() {
+    override fun tick(): NodeStatus {
+        val toReturn = Board.resources.units.filterIsInstance(Worker::class.java)
+        Board.resources.reserveUnits(toReturn)
+        return NodeStatus.SUCCEEDED
+    }
+
+}
 
 object GatherResources : BaseNode() {
     override fun tick(): NodeStatus {

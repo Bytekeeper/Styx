@@ -17,6 +17,7 @@ import org.fttbot.task.GatherResources
 import org.fttbot.task.Macro.moveSurplusWorkers
 import org.fttbot.task.Macro.preventSupplyBlock
 import org.fttbot.task.Scouting.scout
+import org.fttbot.task.Workers
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.Race
@@ -105,7 +106,8 @@ object FTTBot : BWEventListener {
                         NoFail(attacking()),
                         NoFail(preventSupplyBlock()),
                         NoFail(moveSurplusWorkers()),
-                        NoFail(sequence(GatherResources, Sleep))
+                        NoFail(sequence(GatherResources, Sleep)),
+                        NoFail(Workers.returnWanderingWorkers())
                 ),
                 Inline("This shouldn't have happened") {
                     LOG.error("Main loop failed!")

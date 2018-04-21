@@ -121,15 +121,14 @@ object Actions {
                 },
                 Inline("Threat Vector") {
                     val force = Vector2()
-                    force.setZero()
                     Potential.addThreatRepulsion(force, unit)
                     if (force.isZero)
                         return@Inline NodeStatus.FAILED
                     if (!unit.isFlying) {
-                        Potential.addWallRepulsion(force, unit, 2.3f)
+                        Potential.addWallRepulsion(force, unit, 2.8f)
                         Potential.addSafeAreaAttraction(force, unit, 0.7f)
                     } else {
-                        Potential.addWallAttraction(force, unit, 1.5f)
+                        Potential.addWallAttraction(force, unit, 0.7f)
                         Potential.addSafeAreaAttractionDirect(force, unit, 1.3f)
                     }
                     force.nor()

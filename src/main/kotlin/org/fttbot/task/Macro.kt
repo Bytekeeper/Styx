@@ -11,9 +11,7 @@ import org.fttbot.task.Production.build
 import org.fttbot.task.Production.buildGas
 import org.fttbot.task.Production.produceSupply
 import org.openbw.bwapi4j.TilePosition
-import org.openbw.bwapi4j.unit.Base
 import org.openbw.bwapi4j.unit.PlayerUnit
-import org.openbw.bwapi4j.unit.Worker
 import java.util.*
 import kotlin.math.max
 import kotlin.math.min
