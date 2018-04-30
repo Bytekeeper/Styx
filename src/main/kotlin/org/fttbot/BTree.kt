@@ -246,7 +246,7 @@ class Retry(var times: Int, child: Node) : Decorator(child) {
     override fun toString(): String = "Retrying $remaining / $times times"
 }
 
-class Repeat(val times: Int = -1, child: Node) : Decorator(child) {
+class Repeat(val times: Int = -1, child: Node, val name: String= "") : Decorator(child) {
     protected val LOG = LogManager.getLogger()
     var remaining = times
     override fun tick(): NodeStatus {
@@ -273,7 +273,7 @@ class Repeat(val times: Int = -1, child: Node) : Decorator(child) {
         super.parentFinished()
     }
 
-    override fun toString(): String = "Repeat $remaining / $times"
+    override fun toString(): String = "Repeat $name $remaining / $times"
 }
 
 class Parallel(val m: Int, children: List<Node>) : ParentNode(children) {
@@ -347,6 +347,7 @@ class MParallel(val m: Int, children: List<Node>) : ParentNode(children) {
 class DispatchParallel<T>(val name: String = "", val boardsToDispatch: () -> Collection<T>, val nodeGen: (T) -> Node) : BaseNode() {
     private val LOG = LogManager.getLogger()
     private val children = HashMap<T, Node>()
+    private var lastFailedChildren = emptyList<Node>()
     override fun tick(): NodeStatus {
         val toTransform = boardsToDispatch()
         val result = toTransform.map {
@@ -362,6 +363,7 @@ class DispatchParallel<T>(val name: String = "", val boardsToDispatch: () -> Col
         }
         children.keys.removeIf { !toTransform.contains(it) }
         return if (result.contains(NodeStatus.FAILED)) {
+            lastFailedChildren = toTransform.map { children[it] }.filterNotNull()
             parentFinished()
             return NodeStatus.FAILED
         } else if (result.contains(NodeStatus.RUNNING))
@@ -378,6 +380,12 @@ class DispatchParallel<T>(val name: String = "", val boardsToDispatch: () -> Col
     }
 
     override fun toString(): String = "DispatchParallel $name with ${children.size} active child nodes"
+
+
+    override fun addFailTrace(trace: MutableList<TreeTraceElement>) {
+        trace.add(TreeTraceElement(this))
+        lastFailedChildren.forEach { it.addFailTrace(trace) }
+    }
 }
 
 

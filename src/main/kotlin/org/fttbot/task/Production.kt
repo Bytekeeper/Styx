@@ -17,6 +17,7 @@ import org.openbw.bwapi4j.type.UpgradeType
 import org.openbw.bwapi4j.unit.*
 import java.util.logging.Level
 import java.util.logging.Logger
+import kotlin.math.max
 
 
 class AwaitConstructionStart(val worker: Worker, val type: UnitType, val at: TilePosition) : BaseNode() {
@@ -49,6 +50,8 @@ class AwaitConstructionStart(val worker: Worker, val type: UnitType, val at: Til
 
 object Production {
     fun buildWithWorker(worker: Worker, at: TilePosition, building: UnitType, mindSafety: Boolean): Node {
+        val centerPos = at.add(TilePosition(building.tileWidth() / 2, building.tileHeight() / 2)).toPosition()
+        val tolerance = max(building.tileWidth(), building.tileHeight()) * 14 * 2
         return parallel(1,
                 AwaitConstructionStart(worker, building, at),
                 sequence(
@@ -56,9 +59,9 @@ object Production {
                         fallback(ReserveResources(building.mineralPrice(), building.gasPrice()), sequence(Sleep(48), Fail)),
                         msequence("executeBuild",
                                 if (mindSafety)
-                                    Actions.reachSafely(worker, at.toPosition(), 150)
+                                    Actions.reachSafely(worker, centerPos, tolerance)
                                 else
-                                    Actions.reach(worker, at.toPosition(), 150),
+                                    Actions.reach(worker, centerPos, tolerance),
                                 BuildCommand(worker, at, building),
                                 Await("worker constructing", 10) { worker.isConstructing },
                                 MaxTries("Wait for construction start", 100,

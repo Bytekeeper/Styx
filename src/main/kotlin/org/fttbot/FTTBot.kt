@@ -9,11 +9,13 @@ import org.fttbot.Parallel.Companion.parallel
 import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.estimation.BOPrediction
 import org.fttbot.info.*
+import org.fttbot.strategies.Strategies
 import org.fttbot.strategies.ZvP
 import org.fttbot.task.BoSearch
 import org.fttbot.task.Combat.attacking
 import org.fttbot.task.Combat.defending
 import org.fttbot.task.GatherResources
+import org.fttbot.task.Macro.considerGas
 import org.fttbot.task.Macro.moveSurplusWorkers
 import org.fttbot.task.Macro.preventSupplyBlock
 import org.fttbot.task.Scouting.scout
@@ -45,11 +47,15 @@ object FTTBot : BWEventListener {
 
 //    private val combatManager = BehaviorTree(AttackEnemyBase())
 
+    private var showDebug: Boolean = false
+
     private lateinit var bot: Node
 
     private lateinit var buildQueue: Node
 
-    fun start() {
+
+    fun start(showDebug: Boolean) {
+        this.showDebug = showDebug
         game.startGame()
     }
 
@@ -101,13 +107,15 @@ object FTTBot : BWEventListener {
         bot = fallback(
                 parallel(100,
                         buildQueue,
+                        NoFail(considerGas()),
                         NoFail(scout()),
                         NoFail(defending()),
                         NoFail(attacking()),
-                        NoFail(preventSupplyBlock()),
                         NoFail(moveSurplusWorkers()),
+                        NoFail(Workers.avoidDamageToWorkers()),
                         NoFail(sequence(GatherResources, Sleep)),
-                        NoFail(Workers.returnWanderingWorkers())
+                        NoFail(Workers.returnWanderingWorkers()),
+                        NoFail(Strategies.considerCanceling())
                 ),
                 Inline("This shouldn't have happened") {
                     LOG.error("Main loop failed!")
@@ -134,7 +142,6 @@ object FTTBot : BWEventListener {
 //        Exporter.export()
             EnemyInfo.step()
             Cluster.step()
-            ClusterCombatInfo.step()
 
             Board.reset()
             bot.tick()
@@ -142,19 +149,20 @@ object FTTBot : BWEventListener {
                 throw IllegalStateException()
             }
         }
-        bwem.neutralData.minerals.filter { mineral -> bwem.areas.none { area -> area.minerals.contains(mineral) } }
-                .forEach {
-                    game.mapDrawer.drawTextMap(it.center, "ua")
+        if (showDebug) {
+            bwem.neutralData.minerals.filter { mineral -> bwem.areas.none { area -> area.minerals.contains(mineral) } }
+                    .forEach {
+                        game.mapDrawer.drawTextMap(it.center, "ua")
+                    }
+            UnitQuery.myUnits.forEach {
+                game.mapDrawer.drawTextMap(it.position, "${it.id}(${it.lastCommand})")
+                if (it is MobileUnit && it.targetPosition != null) {
+                    game.mapDrawer.drawLineMap(it.position, it.targetPosition, Color.BLUE)
                 }
-        UnitQuery.myUnits.forEach {
-            game.mapDrawer.drawTextMap(it.position, "${it.id}(${it.lastCommand})")
-            if (it is MobileUnit && it.targetPosition != null) {
-                game.mapDrawer.drawLineMap(it.position, it.targetPosition, Color.BLUE)
+                if (it is MobileUnit && it.targetUnit != null) {
+                    game.mapDrawer.drawLineMap(it.position, it.targetUnit.position, Color.RED)
+                }
             }
-            if (it is MobileUnit && it.targetUnit != null) {
-                game.mapDrawer.drawLineMap(it.position, it.targetUnit.position, Color.RED)
-            }
-        }
 
 //        val x = org.fttbot.Map.path(game.bwMap.startPositions[0].toWalkPosition(), game.bwMap.startPositions[1].toWalkPosition())
 //
@@ -162,20 +170,25 @@ object FTTBot : BWEventListener {
 //            a, b -> game.mapDrawer.drawLineMap(a.toPosition(), b.toPosition(), Color.GREEN)
 //        }
 
-        EnemyInfo.seenUnits.forEach {
-            game.mapDrawer.drawCircleMap(it.position, 16, Color.RED)
-            game.mapDrawer.drawTextMap(it.position, "${it.initialType}")
-        }
+            UnitQuery.enemyUnits.forEach {
+//                game.mapDrawer.drawCircleMap(it.position, 16, Color.RED)
+//                game.mapDrawer.drawTextMap(it.position, "${it.initialType}")
+                val predictedPos = EnemyInfo.predictedPositionOf(it, 24)
+                if (it is MobileUnit && it.targetPosition != null) {
+                    game.mapDrawer.drawLineMap(it.position, predictedPos, Color.WHITE)
+                }
+            }
 
 //        UnitQuery.myWorkers.filter { it.lastCommand == UnitCommandType.Morph && !it.isMoving}
 //                .forEach{
 //                    LOG.error("OHOH")
 //                }
-        Cluster.myClusters.forEach {
-            val clusterInfo = ClusterCombatInfo.getInfo(it)
-            game.mapDrawer.drawCircleMap(it.position, 300, Color.WHITE)
-            game.mapDrawer.drawCircleMap(clusterInfo.forceCenter, 5, Color.GREEN, true)
-            game.mapDrawer.drawTextMap(clusterInfo.forceCenter, "${clusterInfo.attackEval}")
+            Cluster.myClusters.forEach {
+                game.mapDrawer.drawCircleMap(it.position, 300, Color.WHITE)
+            }
+            Cluster.enemyClusters.forEach {
+                game.mapDrawer.drawCircleMap(it.position, 300, Color.RED)
+            }
         }
     }
 

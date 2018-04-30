@@ -12,5 +12,5 @@ fun main(args: Array<String>) {
     // SC will be autostarted at this moment
     ProcessHelper.startChaosLauncherProcess()
 
-    FTTBot.start()
+    FTTBot.start(args.contains("debug"))
 }

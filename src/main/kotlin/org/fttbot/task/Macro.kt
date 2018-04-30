@@ -72,12 +72,11 @@ object Macro {
                                 (Board.pendingUnits.sumBy { it.gasPrice() } > 0 ||
                                         Board.resources.gas < 0) && (FTTBot.self.minerals() / 3 > FTTBot.self.gas())
                                         && MyInfo.myBases.any { base -> base as PlayerUnit; UnitQuery.geysers.any { it.getDistance(base) < 300 } }
-                            }, Delegate {
-                        buildGas()
-                    }),
+                            },
+                            buildGas()
+                    ),
                     Sleep
-            )
-            )
+            ))
 
     fun moveSurplusWorkers() = DispatchParallel("Consider worker transfer", { MyInfo.myBases.filter { it.isReadyForResources } }) { base ->
         base as PlayerUnit
@@ -108,7 +107,7 @@ object Macro {
             Condition("Enough minerals to prebuild supply?") {
                 val freeSupply = FTTBot.self.supplyTotal() - FTTBot.self.supplyUsed()
                 MyInfo.pendingSupply() + FTTBot.self.supplyTotal() < 400 &&
-                        max(0, MyInfo.pendingSupply() + freeSupply) < min(UnitQuery.myBases.size * 6, FTTBot.self.minerals() / 90)
+                        max(0, MyInfo.pendingSupply() + freeSupply) < min(UnitQuery.myBases.size * 4, FTTBot.self.minerals() / 35)
             },
             produceSupply(),
             Sleep),

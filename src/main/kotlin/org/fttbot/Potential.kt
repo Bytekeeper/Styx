@@ -13,6 +13,7 @@ import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.Unit
 import org.openbw.bwapi4j.unit.Worker
 import kotlin.math.max
+import kotlin.math.min
 
 object Potential {
     fun joinAttraction(unit: MobileUnit, others: List<Unit>, tolerance: Int = 32): Vector2 {
@@ -30,14 +31,12 @@ object Potential {
         )
     }
 
-    fun collisionRepulsion(unit: MobileUnit): Vector2 {
-        val myCluster = Cluster.mobileCombatUnits.firstOrNull { it.units.contains(unit) } ?: return Vector2.Zero
-        return myCluster.units.map {
-            if (unit == it) Vector2.Zero
-            val diff = (unit.position - it.position).toVector()
-            val len = diff.len()
-            diff.setLength(max(0f, (1f - len / 2 / unit.topSpeed).toFloat()))
-        }.reduce(Vector2::add).nor()
+    fun addCollisionRepulsion(target: Vector2, unit: MobileUnit, scale: Float = 1f) {
+        val relevantUnits = UnitQuery.allUnits
+                .filter { it != unit && !it.isFlying && it.getDistance(unit) < 32 }
+        val force = unit.position.toVector().scl(relevantUnits.size.toFloat())
+        relevantUnits.forEach { force.sub(it.position.toVector() ) }
+        target.add(force.setLength(scale))
     }
 
     fun addWallRepulsion(target: Vector2, unit: MobileUnit, scale: Float = 1f) {
@@ -59,7 +58,7 @@ object Potential {
         }
         if (bestPos != null) {
             val tmp = bestPos.subtract(pos).toPosition().toVector()
-            tmp.setLength((scale * (1.0 - fastsig(bestAltitude / 50.0))).toFloat())
+            tmp.setLength((scale * min(1.0, 32.0 / bestAltitude)).toFloat())
             target.add(tmp)
         }
     }
@@ -83,15 +82,16 @@ object Potential {
         }
         if (bestPos != null) {
             val tmp = bestPos.subtract(pos).toPosition().toVector()
-            tmp.setLength((scale * (1.0 - fastsig(bestAltitude / 50.0))).toFloat())
+            tmp.setLength((scale * (1.0 - min(1.0, bestAltitude / 92.0))).toFloat())
             target.add(tmp)
         }
     }
 
-    fun addSafeAreaAttraction(target: Vector2, unit: MobileUnit, scale : Float = 1f) {
+    fun addSafeAreaAttraction(target: Vector2, unit: MobileUnit, scale: Float = 1f) {
         val homePath = FTTBot.bwem.getPath(unit.position,
                 reallySafePlace() ?: return)
-        val targetChoke = homePath.firstOrNull{ it.center.toPosition().getDistance(unit.position) >= 4 * BW.TILE_SIZE } ?: return
+        val targetChoke = homePath.firstOrNull { it.center.toPosition().getDistance(unit.position) >= 4 * BW.TILE_SIZE }
+                ?: return
         target.add((targetChoke.center.toPosition() - unit.position).toVector().setLength(scale))
     }
 

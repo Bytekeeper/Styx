@@ -4,10 +4,8 @@ import com.badlogic.gdx.math.Vector2
 import org.fttbot.*
 import org.fttbot.Fallback.Companion.fallback
 import org.fttbot.Sequence.Companion.sequence
-import org.fttbot.info.MyInfo
-import org.fttbot.info.UnitQuery
-import org.fttbot.info.isMyUnit
-import org.fttbot.info.isReadyForResources
+import org.fttbot.info.*
+import org.fttbot.task.Actions.flee
 import org.openbw.bwapi4j.unit.*
 import kotlin.math.max
 import kotlin.math.min
@@ -35,13 +33,20 @@ object Workers {
         )
     }
 
-}
-
-object ReturnWanderingWorkers : BaseNode() {
-    override fun tick(): NodeStatus {
-        val toReturn = Board.resources.units.filterIsInstance(Worker::class.java)
-        Board.resources.reserveUnits(toReturn)
-        return NodeStatus.SUCCEEDED
+    fun avoidDamageToWorkers(): Node {
+        return fallback(
+                DispatchParallel("Avoid damage to workers", { Board.resources.units.filterIsInstance(Worker::class.java) }) {
+                    fallback(
+                            sequence(
+                                    Condition("Threatened?") { it.canBeAttacked() },
+                                    flee(it),
+                                    ReserveUnit(it)
+                            ),
+                            Sleep
+                    )
+                },
+                Sleep
+        )
     }
 
 }

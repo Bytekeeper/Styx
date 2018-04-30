@@ -84,10 +84,14 @@ object Strategies {
                                     Combat.shouldIncreaseDefense(base.position),
                                     Parallel.parallel(1000,
                                             Repeat(child = Delegate {
-                                                val enemies = Cluster.enemyClusters.minBy { base.getDistance(it.position) }
-                                                        ?: return@Delegate Fail
-                                                val flyers = enemies.units.count { it is Attacker && it.isFlying }
-                                                val ground = enemies.units.count { it is Attacker && !it.isFlying }
+                                                val enemies = UnitQuery.enemyUnits.filter {
+                                                    base.getDistance(it.position) < 1500 &&
+                                                            it is Attacker
+                                                }
+                                                val flyers = enemies.count { it.isFlying } -
+                                                        UnitQuery.myUnits.count { it is SunkenColony && it.getDistance(base) < 300 } * 3
+                                                val ground = enemies.count { !it.isFlying } -
+                                                        UnitQuery.myUnits.count { it is SporeColony && it.getDistance(base) < 300 } * 3
                                                 if (ground > flyers)
                                                     Production.build(UnitType.Zerg_Sunken_Colony, false, { base.tilePosition })
                                                 else

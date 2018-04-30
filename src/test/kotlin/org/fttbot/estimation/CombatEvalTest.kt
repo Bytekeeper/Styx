@@ -1,6 +1,7 @@
 package org.fttbot.estimation
 
 import org.assertj.core.api.Assertions.assertThat
+import org.fttbot.task.Combat
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.openbw.bwapi4j.test.BWDataProvider
@@ -127,7 +128,7 @@ class CombatEvalTest {
     }
 
     @Test
-    fun `2 Marines easily beat 1 Hydralisk`() {
+    fun `2 Marines beat 1 Hydralisk`() {
         val a = listOf(
                 SimUnit.of(UnitType.Terran_Marine),
                 SimUnit.of(UnitType.Terran_Marine)
@@ -138,8 +139,8 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isLessThan(0.8)
-        assertThat(probabilityToWin).isGreaterThan(0.6)
+        assertThat(probabilityToWin).isLessThan(0.7)
+        assertThat(probabilityToWin).isGreaterThan(0.5)
     }
 
     @Test
@@ -376,8 +377,9 @@ class CombatEvalTest {
     }
 
     @Test
-    fun `5 Lurkers can win against 6 Marines, 2 Medics and 3 Tanks`() {
+    fun `6 Lurkers are loosin vs 6 Marines, 2 Medics and 2 Tanks`() {
         val a = listOf(
+                SimUnit.of(UnitType.Zerg_Lurker),
                 SimUnit.of(UnitType.Zerg_Lurker),
                 SimUnit.of(UnitType.Zerg_Lurker),
                 SimUnit.of(UnitType.Zerg_Lurker),
@@ -399,7 +401,7 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isGreaterThan(0.6)
+        assertThat(probabilityToWin).isLessThan(0.4)
     }
 
     @Test
@@ -426,9 +428,75 @@ class CombatEvalTest {
         val bestProbabilityToWin = CombatEval.bestProbilityToWin(a, b)
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isLessThan(0.1)
-        assertThat(bestProbabilityToWin.second).isGreaterThan(0.8)
+        assertThat(probabilityToWin).isLessThan(0.3)
+        assertThat(bestProbabilityToWin.second).isGreaterThan(0.75)
         assertThat(bestProbabilityToWin.first).allMatch{ it.type == UnitType.Zerg_Mutalisk}
     }
+
+    @Test
+    fun `3 zerglings vs 3 medics, no challenge`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Terran_Medic),
+                SimUnit.of(UnitType.Terran_Medic),
+                SimUnit.of(UnitType.Terran_Medic)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        assertThat(probabilityToWin).isGreaterThan(0.6)
+    }
+
+
+    @Test
+    fun `5 zerglings vs 1 bunker, no challenge`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling),
+                SimUnit.of(UnitType.Zerg_Zergling)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Terran_Bunker)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        assertThat(probabilityToWin).isLessThan(0.41)
+    }
+
+    @Test
+    fun `2 Mutas lose vs 2 Goons`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Protoss_Dragoon),
+                SimUnit.of(UnitType.Protoss_Dragoon)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b, 192.0)
+
+        assertThat(probabilityToWin).isLessThan(0.41)
+    }
+
+    @Test
+    fun `1 Zergling vs nothing should win`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Zergling)
+        )
+        val b = listOf<SimUnit>()
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b, 192.0)
+
+        assertThat(probabilityToWin).isGreaterThan(0.6)
+    }
+
 
 }

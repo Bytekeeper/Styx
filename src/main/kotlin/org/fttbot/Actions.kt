@@ -57,11 +57,7 @@ class MorphCommand(morphable: Morphable, unit: UnitType) : Order<Morphable>(morp
     if (Board.resources.minerals < 0) {
         LogManager.getLogger().warn("Why would you even do that?")
     }
-    if (morph(unit)) {
-        true
-    } else {
-        false
-    }
+    morph(unit)
 })
 
 class ResearchCommand(researcher: ResearchingFacility, tech: TechType) : Order<ResearchingFacility>(researcher,
@@ -72,9 +68,7 @@ class ResearchCommand(researcher: ResearchingFacility, tech: TechType) : Order<R
         })
 
 class UpgradeCommand(researcher: ResearchingFacility, upgrade: UpgradeType) : Order<ResearchingFacility>(researcher, {
-    if (upgrade(upgrade)) true else {
-        false
-    }
+    upgrade(upgrade)
 })
 class AttackCommand(unit: PlayerUnit, target: Unit) : Order<PlayerUnit>(unit, { (this as Attacker).attack(target) })
 class BurrowCommand(unit: PlayerUnit) : Order<PlayerUnit>(unit, { (this as Burrowable).burrow() })
@@ -99,17 +93,6 @@ class ReserveUnit(val unit: PlayerUnit) : BaseNode() {
     }
 
     override fun toString(): String = "Reserving unit $unit"
-}
-
-class ReleaseUnit(val unit: PlayerUnit) : BaseNode() {
-    override fun tick(): NodeStatus {
-        if (!unit.exists()) {
-            return NodeStatus.FAILED
-        }
-        Board.resources.release(unit)
-        return NodeStatus.SUCCEEDED
-    }
-
 }
 
 class ReserveResources(val minerals: Int = 0, val gas: Int = 0, val supply: Int = 0) : BaseNode() {

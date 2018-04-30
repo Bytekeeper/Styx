@@ -85,6 +85,7 @@ val Attacker.canMoveWithoutBreakingAttack
 fun PlayerUnit.canAttack(target: Unit, safety: Int = 0): Boolean {
     if (!isCompleted) return false
     val weaponType = if (this is Bunker) UnitType.Terran_Marine.groundWeapon() else if (this is Attacker) getWeaponAgainst(target).type() else return false
+    if (weaponType == WeaponType.None) return false
     val distance = getDistance(target)
     val maxWeaponRange = player.unitStatCalculator.weaponMaxRange(weaponType)
     return distance <= maxWeaponRange + safety && distance > weaponType.minRange() && target.isVisible && (target !is Cloakable && target !is Burrowable || target is PlayerUnit && target.isDetected)

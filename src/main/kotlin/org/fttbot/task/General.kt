@@ -18,7 +18,7 @@ data class FleeBoard(var position: Position? = null, var sinceFrame: Int = 0)
 
 object Actions {
     fun hasReached(unit: MobileUnit, position: Position, tolerance: Int = 64) =
-            unit.getDistance(position) <= tolerance
+            unit.position.getDistance(position) <= tolerance
 
     fun canReachSafely(unit: MobileUnit, position: Position): Boolean {
         val dangerAreas = EnemyInfo.occupiedAreas.keys - MyInfo.occupiedAreas.keys
@@ -46,7 +46,7 @@ object Actions {
                         Repeat(child = msequence("Move $unit to ${board.position}",
                                 makeMobile(unit),
                                 Inline("Next waypoint") {
-                                    if (unit.getDistance(board.position) < 200 || unit.isFlying) {
+                                    if (unit.position.getDistance(board.position) < 200 || unit.isFlying) {
                                         nextWaypoint = board.position
                                     } else {
                                         nextWaypoint = FTTBot.bwem.getPath(unit.position, board.position).firstOrNull { it.center.toPosition().getDistance(unit.position) >= 200 }?.center?.toPosition()
@@ -54,7 +54,10 @@ object Actions {
                                     }
                                     NodeStatus.SUCCEEDED
                                 },
-                                fallback(Condition("Correct targetpos?") { nextWaypoint!!.getDistance(unit.targetPosition) <= board.tolerance }, Delegate { MoveCommand(unit, nextWaypoint!!) }),
+                                fallback(
+                                        Condition("Correct targetpos?") { nextWaypoint!!.getDistance(unit.targetPosition) <= board.tolerance },
+                                        sequence(Delegate { MoveCommand(unit, nextWaypoint!!) })
+                                ),
                                 Delegate { CheckIsClosingIn(unit, nextWaypoint!!) }
                         ))
                 ))
@@ -65,18 +68,13 @@ object Actions {
                 reach(it, reachBoard)
             }
 
-    fun reach(unit: List<MobileUnit>, position: Position, tolerance: Int = 128): Node =
-            DispatchParallel("Reach", { unit }) {
-                reach(it, position, tolerance)
-            }
-
     private fun CheckIsClosingIn(unit: MobileUnit, position: Position): BaseNode {
         return Delegate {
-            var distance = unit.getDistance(position)
+            var distance = unit.position.getDistance(position)
             var frame = FTTBot.frameCount
             Inline("Closing in?") {
                 val deltaFrames = FTTBot.frameCount - frame
-                val currentDistance = unit.getDistance(position)
+                val currentDistance = unit.position.getDistance(position)
                 if (deltaFrames > 10 * 24 || deltaFrames > 5 && !unit.isMoving)
                     NodeStatus.FAILED
                 else
@@ -104,7 +102,7 @@ object Actions {
     }
 
     fun flee(unit: MobileUnit): Sequence {
-        val reachBoard = ReachBoard(tolerance = 8)
+        val reachBoard = ReachBoard(tolerance = 4)
         val fleeBoard = FleeBoard()
         return sequence(
                 Inline("Stuck?") {
@@ -127,15 +125,19 @@ object Actions {
                     if (!unit.isFlying) {
                         Potential.addWallRepulsion(force, unit, 2.8f)
                         Potential.addSafeAreaAttraction(force, unit, 0.7f)
+                        Potential.addCollisionRepulsion(force, unit, 1f)
                     } else {
                         Potential.addWallAttraction(force, unit, 0.7f)
                         Potential.addSafeAreaAttractionDirect(force, unit, 1.3f)
                     }
                     force.nor()
-                    reachBoard.position = unit.position + force.scl(64f).toPosition()
+                    reachBoard.position = unit.position + force.scl(92f).toPosition()
                     NodeStatus.SUCCEEDED
                 },
-                Delegate { reach(unit, reachBoard) }
+                Inline("Move move move") {
+                    unit.move(reachBoard.position)
+                    NodeStatus.SUCCEEDED
+                }
         )
     }
 }
