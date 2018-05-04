@@ -35,9 +35,13 @@ object Macro {
                 }.min()
                 if (minDist == null) null else
                     base to (minDist - (EnemyInfo.enemyBases.map {
-                        val distance = MutableInt()
-                        FTTBot.bwem.getPath(it.position, base.center, distance)
-                        distance.toInt()
+                        try {
+                            val distance = MutableInt()
+                            FTTBot.bwem.getPath(it.position, base.center, distance)
+                            distance.toInt()
+                        } catch (e: IllegalStateException) {
+                            Int.MAX_VALUE
+                        }
                     }.min() ?: 0))
             }.minBy { it.second }?.first
         return targetBase?.location

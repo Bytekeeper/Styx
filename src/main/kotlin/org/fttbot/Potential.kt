@@ -8,6 +8,7 @@ import org.fttbot.info.UnitQuery
 import org.fttbot.info.canAttack
 import org.openbw.bwapi4j.BW
 import org.openbw.bwapi4j.Position
+import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.WalkPosition
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.Unit
@@ -90,7 +91,7 @@ object Potential {
     fun addSafeAreaAttraction(target: Vector2, unit: MobileUnit, scale: Float = 1f) {
         val homePath = FTTBot.bwem.getPath(unit.position,
                 reallySafePlace() ?: return)
-        val targetChoke = homePath.firstOrNull { it.center.toPosition().getDistance(unit.position) >= 4 * BW.TILE_SIZE }
+        val targetChoke = homePath.firstOrNull { it.center.toPosition().getDistance(unit.position) >= 4 * TilePosition.SIZE_IN_PIXELS }
                 ?: return
         target.add((targetChoke.center.toPosition() - unit.position).toVector().setLength(scale))
     }

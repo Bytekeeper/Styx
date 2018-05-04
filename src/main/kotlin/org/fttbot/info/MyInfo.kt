@@ -8,7 +8,7 @@ import org.openbw.bwapi4j.unit.*
 
 object MyInfo {
     val occupiedAreas by LazyOnFrame<Map<Area, List<PlayerUnit>>> {
-        UnitQuery.myUnits.filter { it is Attacker }
+        UnitQuery.myUnits.filter { it is Attacker && it !is Worker }
                 .groupBy { FTTBot.bwem.getArea(it.tilePosition) }
     }
 

@@ -14,7 +14,6 @@ import org.fttbot.strategies.Strategies.gasTrick
 import org.fttbot.task.Macro
 import org.fttbot.task.Macro.buildExpansion
 import org.fttbot.task.Macro.considerExpansion
-import org.fttbot.task.Macro.considerGas
 import org.fttbot.task.Production
 import org.fttbot.task.Production.build
 import org.fttbot.task.Production.buildGas
@@ -81,18 +80,9 @@ object ZvP {
             trainWorker(),
             trainWorker(),
             Repeat(3, train(UnitType.Zerg_Zergling)),
-            considerWorkers(),
             considerBaseDefense(),
             buildExpansion(),
-            Repeat(child = train(UnitType.Zerg_Mutalisk)),
-            considerExpansion(),
-            considerMoreTrainers(),
-            Repeat(child = train(UnitType.Zerg_Zergling)),
-            Repeat(UpgradeType.Zerg_Flyer_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Attacks) }),
-            Repeat(UpgradeType.Zerg_Flyer_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Carapace) }),
-            upgrade(UpgradeType.Metabolic_Boost),
-            upgrade(UpgradeType.Adrenal_Glands),
-            upgrade(UpgradeType.Zerg_Carapace)
+            mainMutasZergUltra()
     )
 
     fun overpoolVsZerg(): Node = mparallel(Int.MAX_VALUE,
@@ -100,23 +90,37 @@ object ZvP {
             buildGas(),
             trainWorker(),
             trainWorker(),
-            considerBaseDefense(),
             Repeat(child = fallback(Condition("Enough zerglings?") { UnitQuery.myUnits.count { it is Zergling || it is Egg && it.buildType == UnitType.Zerg_Zergling } >= 6 }, train(UnitType.Zerg_Zergling))),
+            considerBaseDefense(),
+            mainMutasZergUltra()
+    )
+
+    fun mainMutasZergUltra(): Node = mparallel(Int.MAX_VALUE,
             considerWorkers(),
-            build(UnitType.Zerg_Spire),
-            build(UnitType.Zerg_Creep_Colony),
             Macro.preventSupplyBlock(),
+            train(UnitType.Zerg_Mutalisk),
+            train(UnitType.Zerg_Mutalisk),
+            train(UnitType.Zerg_Mutalisk),
+            train(UnitType.Zerg_Mutalisk),
+            train(UnitType.Zerg_Mutalisk),
             Repeat(child = train(UnitType.Zerg_Mutalisk)),
+            Repeat(30, child = Delegate { train(UnitType.Zerg_Zergling) }),
+            Repeat(child = train(UnitType.Zerg_Ultralisk)),
             Repeat(child = train(UnitType.Zerg_Zergling)),
-            build(UnitType.Zerg_Hatchery),
-            Repeat(child = fallback(sequence(
-                    Condition("Enemy has air?") { EnemyInfo.seenUnits.any { it.isFlying } },
-                    train(UnitType.Zerg_Scourge)), Sleep)),
-            considerExpansion(),
             considerMoreTrainers(),
-            Repeat(UpgradeType.Zerg_Flyer_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Attacks) }),
+            considerScourge(),
+            considerExpansion(),
+            Macro.considerGas(),
+            upgrade(UpgradeType.Zerg_Flyer_Attacks),
             upgrade(UpgradeType.Metabolic_Boost),
-            upgrade(UpgradeType.Adrenal_Glands)
+            Repeat(UpgradeType.Zerg_Flyer_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Attacks) }),
+            Repeat(UpgradeType.Zerg_Melee_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Melee_Attacks) }),
+            Repeat(UpgradeType.Zerg_Flyer_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Carapace) }),
+            upgrade(UpgradeType.Adrenal_Glands),
+            Repeat(UpgradeType.Zerg_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Carapace) }),
+            Repeat(UpgradeType.Zerg_Flyer_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Carapace) }),
+            upgrade(UpgradeType.Anabolic_Synthesis),
+            upgrade(UpgradeType.Chitinous_Plating)
     )
 
     fun raceChoice(): Node = fallback(
@@ -129,11 +133,11 @@ object ZvP {
                     overpoolVsZerg()
             ),
             Delegate {
-                if (MathUtils.randomBoolean()) {
                     _2HatchMuta()
-                } else {
-                    overpoolVsProtoss()
-                }
+//                if (MathUtils.randomBoolean()) {
+//                } else {
+//                    overpoolVsProtoss()
+//                }
             }
     )
 
@@ -152,6 +156,7 @@ object ZvP {
                     train(UnitType.Zerg_Zergling),
                     train(UnitType.Zerg_Zergling),
                     considerWorkers(),
+                    considerBaseDefense(),
                     buildGas(),
                     build(UnitType.Zerg_Lair),
                     upgrade(UpgradeType.Metabolic_Boost),
@@ -168,6 +173,7 @@ object ZvP {
                     train(UnitType.Zerg_Lurker),
                     Macro.preventSupplyBlock(),
                     considerExpansion(),
+                    Macro.considerGas(),
                     upgrade(UpgradeType.Zerg_Carapace),
                     Repeat(child = train(UnitType.Zerg_Lurker)),
                     considerMoreTrainers(),
@@ -187,12 +193,12 @@ object ZvP {
                             _12HatchB()
                         }
                     },
-                    considerBaseDefense(),
                     buildGas(),
                     train(UnitType.Zerg_Zergling),
                     train(UnitType.Zerg_Zergling),
                     train(UnitType.Zerg_Zergling),
                     train(UnitType.Zerg_Zergling),
+                    considerBaseDefense(),
                     trainWorker(),
                     trainWorker(),
                     Strategies.considerWorkers(),
@@ -200,27 +206,7 @@ object ZvP {
                     produce(UnitType.Zerg_Spire),
                     Macro.buildExpansion(),
                     fallback(buildGas(), Success),
-                    considerScourge(),
-                    train(UnitType.Zerg_Mutalisk),
-                    train(UnitType.Zerg_Mutalisk),
-                    train(UnitType.Zerg_Mutalisk),
-                    train(UnitType.Zerg_Mutalisk),
-                    train(UnitType.Zerg_Mutalisk),
-                    train(UnitType.Zerg_Mutalisk),
-                    Macro.preventSupplyBlock(),
-                    considerExpansion(),
-                    considerMoreTrainers(),
-                    Repeat(child = train(UnitType.Zerg_Mutalisk)),
-                    Repeat(50, child = Delegate { train(UnitType.Zerg_Zergling) }),
-                    Repeat(child = train(UnitType.Zerg_Ultralisk)),
-                    Repeat(child = train(UnitType.Zerg_Zergling)),
-                    upgrade(UpgradeType.Zerg_Flyer_Attacks),
-                    upgrade(UpgradeType.Metabolic_Boost),
-                    upgrade(UpgradeType.Adrenal_Glands),
-                    Repeat(UpgradeType.Zerg_Melee_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Melee_Attacks) }),
-                    Repeat(UpgradeType.Zerg_Flyer_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Attacks) }),
-                    Repeat(UpgradeType.Zerg_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Carapace) }),
-                    Repeat(UpgradeType.Zerg_Flyer_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Carapace) })
+                    mainMutasZergUltra()
             )
 
     private fun considerScourge(): Node {

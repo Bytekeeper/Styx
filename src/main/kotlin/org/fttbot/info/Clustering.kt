@@ -27,8 +27,8 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableList<
         fun step() {
             updateClusters(mobileCombatUnits, UnitQuery.myUnits.filterIsInstance(MobileUnit::class.java)
                     .filter { it.isCompleted && it !is Worker && it is Attacker })
-            updateClusters(myClusters, UnitQuery.myUnits)
-            updateClusters(enemyClusters, UnitQuery.enemyUnits + EnemyInfo.seenUnits)
+            updateClusters(myClusters, UnitQuery.myUnits.filter { it !is Larva })
+            updateClusters(enemyClusters, (UnitQuery.enemyUnits + EnemyInfo.seenUnits).filter { it !is Larva })
         }
 
         private fun <U : Unit> updateClusters(clusters: MutableList<Cluster<U>>, relevantUnits: List<U>): List<Cluster<U>> {

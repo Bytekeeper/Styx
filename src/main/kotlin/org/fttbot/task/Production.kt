@@ -122,16 +122,12 @@ object Production {
         var builder: PlayerUnit? = null
         return Retry(15, msequence("build $type",
                 sequence(
-                        Inline("Reset") {
-
-                            NodeStatus.SUCCEEDED
-                        },
                         Inline("Mark $type as pending") {
                             Board.pendingUnits.add(type)
                             NodeStatus.SUCCEEDED
                         },
                         parallel(2,
-                                ensureDependencies(type),
+                                ensureDependencies(type, at),
                                 fallback(ReserveResources(type.mineralPrice(), type.gasPrice()), Sleep)
                         ),
                         Await("canMake $type") { FTTBot.self.canMake(type) },
@@ -167,7 +163,6 @@ object Production {
                         Delegate
                         {
                             if (builder is Worker)
-//                        buildWithWorker(builder as Worker, targetPosition!!, type)
                                 buildWithWorker(builder as Worker, targetPosition!!, type, safety)
                             else
                                 morph(builder as Morphable, type)
@@ -236,7 +231,7 @@ object Production {
         )
     }
 
-    fun ensureUnitDependencies(dependencies: List<UnitType>): Node {
+    fun ensureUnitDependencies(dependencies: List<UnitType>, at: () -> TilePosition? = { null }): Node {
         return DispatchParallel("ensureDependencies", {
             val missing = PlayerUnit.getMissingUnits(UnitQuery.myUnits, dependencies).toMutableList()
             if (dependencies.any { it != UnitType.Zerg_Larva && it.gasPrice() > 0 && it.gasPrice() > Board.resources.gas })
@@ -248,7 +243,7 @@ object Production {
             missing
 
         })
-        { produce(it) }
+        { produce(it, at) }
     }
 
     fun ensureResearchDependencies(tech: TechType): Node {
@@ -259,10 +254,10 @@ object Production {
         )
     }
 
-    fun ensureDependencies(unit: UnitType): Node {
+    fun ensureDependencies(unit: UnitType, at: () -> TilePosition? = { null }): Node {
         if (unit == UnitType.None) return Success
         return parallel(2,
-                Delegate { ensureUnitDependencies(unit.requiredUnits()) },
+                Delegate { ensureUnitDependencies(unit.requiredUnits(), at) },
                 Delegate { ensureResearchDependencies(unit.requiredTech()) }
         )
     }

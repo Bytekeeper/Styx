@@ -107,7 +107,6 @@ object FTTBot : BWEventListener {
         bot = fallback(
                 parallel(100,
                         buildQueue,
-                        NoFail(considerGas()),
                         NoFail(scout()),
                         NoFail(defending()),
                         NoFail(attacking()),
@@ -177,6 +176,11 @@ object FTTBot : BWEventListener {
                 if (it is MobileUnit && it.targetPosition != null) {
                     game.mapDrawer.drawLineMap(it.position, predictedPos, Color.WHITE)
                 }
+            }
+
+            EnemyInfo.seenUnits.forEach {
+                game.mapDrawer.drawCircleMap(it.position, 16, Color.RED)
+                game.mapDrawer.drawTextMap(it.position, "${it.initialType}")
             }
 
 //        UnitQuery.myWorkers.filter { it.lastCommand == UnitCommandType.Morph && !it.isMoving}

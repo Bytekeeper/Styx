@@ -35,21 +35,11 @@ class Resources {
         return this
     }
 
-    fun isAvailable(mineralPrice: Int, gasPrice: Int, supply: Int = 0): Boolean =
-            (mineralPrice == 0 || mineralPrice <= minerals) &&
-                    (gasPrice == 0 || gasPrice <= gas) &&
-                    (supply == 0 || supply <= this.supply)
-
     fun reserve(minerals: Int = 0, gas: Int = 0, supply: Int = 0): Resources {
         this.minerals -= minerals
         this.gas -= gas
         this.supply -= supply
         return this
-    }
-
-    fun release(unit: PlayerUnit) {
-        require(!_units.contains(unit))
-        _units.add(unit)
     }
 
     fun release(minerals: Int, gas: Int, supply: Int) {
@@ -71,6 +61,5 @@ class Resources {
         this._units.clear()
         this._units.addAll(units)
     }
-    fun enough(): Boolean = minerals >= 0 && gas >= 0 && supply >= 0
 }
 

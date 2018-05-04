@@ -1,7 +1,6 @@
 package org.fttbot.estimation
 
 import org.assertj.core.api.Assertions.assertThat
-import org.fttbot.task.Combat
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.openbw.bwapi4j.test.BWDataProvider
@@ -107,8 +106,7 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isGreaterThan(0.2)
-        assertThat(probabilityToWin).isLessThan(0.4)
+        assertThat(probabilityToWin).isLessThan(0.3)
     }
 
     @Test
@@ -430,7 +428,7 @@ class CombatEvalTest {
 
         assertThat(probabilityToWin).isLessThan(0.3)
         assertThat(bestProbabilityToWin.second).isGreaterThan(0.75)
-        assertThat(bestProbabilityToWin.first).allMatch{ it.type == UnitType.Zerg_Mutalisk}
+        assertThat(bestProbabilityToWin.first).allMatch { it.type == UnitType.Zerg_Mutalisk }
     }
 
     @Test
@@ -496,6 +494,49 @@ class CombatEvalTest {
         val probabilityToWin = CombatEval.probabilityToWin(a, b, 192.0)
 
         assertThat(probabilityToWin).isGreaterThan(0.6)
+    }
+
+    @Test
+    fun `Should need 3 Sunkens vs 7 Zealots`() {
+        val b = listOf(
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot)
+        )
+
+        val minSunkens = CombatEval.minAmountOfAdditionalsForProbability(emptyList(), SimUnit.of(UnitType.Zerg_Sunken_Colony), b)
+
+        assertThat(minSunkens).isGreaterThan(1)
+    }
+
+
+    @Test
+    fun `Should need -1 Spores vs 7 Zealots`() {
+        val b = listOf(
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot),
+                SimUnit.of(UnitType.Protoss_Zealot)
+        )
+
+        val minSunkens = CombatEval.minAmountOfAdditionalsForProbability(emptyList(), SimUnit.of(UnitType.Zerg_Spore_Colony), b)
+
+        assertThat(minSunkens).isEqualTo(-1)
+    }
+    @Test
+    fun `Should need -1 Spores vs nothing`() {
+        val b = listOf<SimUnit>()
+
+        val minSunkens = CombatEval.minAmountOfAdditionalsForProbability(emptyList(), SimUnit.of(UnitType.Zerg_Spore_Colony), b)
+
+        assertThat(minSunkens).isEqualTo(-1)
     }
 
 

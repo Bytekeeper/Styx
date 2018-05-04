@@ -15,7 +15,7 @@ object EnemyInfo {
     var hasSeenBase = false
     var hasInvisibleUnits = false
     val occupiedAreas by LazyOnFrame<Map<Area, List<PlayerUnit>>> {
-        (UnitQuery.enemyUnits + seenUnits).filter { it is Attacker }
+        (UnitQuery.enemyUnits + seenUnits).filter { it is Attacker && it !is Worker}
                 .groupBy { FTTBot.bwem.getArea(it.tilePosition) }
     }
     var lastFrame: Int = 0

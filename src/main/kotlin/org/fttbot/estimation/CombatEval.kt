@@ -15,12 +15,30 @@ import kotlin.math.min
 const val MAX_FRAMES_TO_ATTACK = 3
 
 object CombatEval {
+    fun minAmountOfAdditionalsForProbability(myUnits: List<SimUnit>, additionalUnits: SimUnit, enemies: List<SimUnit>, minProbability: Double = 0.6) : Int {
+        if (enemies.isEmpty()) return -1
+        var b = 50
+        var a = 0
+        while (b > a) {
+           val mid = (a + b) / 2
+            val unitsA = (1..mid).map { additionalUnits }
+            val result = probabilityToWin(myUnits + unitsA, enemies)
+            if (result < minProbability) {
+                a = mid + 1
+            } else if (result > minProbability) {
+                b = mid - 1
+            } else
+                return mid
+        }
+        return if (b < 50) b + 1 else -1
+    }
+
     fun bestProbilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>): Pair<List<SimUnit>, Double> {
         var best = unitsOfPlayerA
         var bestEval = probabilityToWin(best, unitsOfPlayerB)
         val typesRemaining = best.map { it.type }.toMutableSet()
         while (!typesRemaining.isEmpty()) {
-            val bestType = typesRemaining.map { toTest -> toTest to probabilityToWin(best.filter { it.type != toTest }, unitsOfPlayerB, 192.0) }
+            val bestType = typesRemaining.map { toTest -> toTest to probabilityToWin(best.filter { it.type != toTest }, unitsOfPlayerB) }
                     .maxBy { it.second }!!
             if (bestType.second < bestEval)
                 break
@@ -31,7 +49,7 @@ object CombatEval {
         return best to bestEval
     }
 
-    fun probabilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, fallbackDistance: Double = 192.0): Double {
+    fun probabilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, fallbackDistance: Double = 128.0): Double {
         val amountOfUnits = max(1, unitsOfPlayerA.size + unitsOfPlayerB.size)
         val center = (unitsOfPlayerA + unitsOfPlayerB)
                 .map { it.position }.fold(Position(0, 0)) { s, t -> if (t != null) s.add(t) else s }
@@ -53,7 +71,7 @@ object CombatEval {
             unitsOfPlayerA.map {
                 val gunRange = max(it.airRange, it.groundRange) + 0.1
                 val distance = it.position?.getDistance(center)?.toDouble() ?: fallbackDistance
-                val combatRangeFactor = 0.01 + min(0.99, (gunRange + it.topSpeed * 12) / distance)
+                val combatRangeFactor = 0.01 + min(0.99, (gunRange + it.topSpeed * 5) / distance)
                 val hiddenFactor = if (it.hiddenAttack) 1.3 else 1.0
                 val splashFactor = if (it.groundWeapon.type().explosionType() == ExplosionType.Enemy_Splash ||
                         it.groundWeapon.type().explosionType() == ExplosionType.Radial_Splash ||
@@ -79,7 +97,7 @@ object CombatEval {
                         } else
                             dmg
                     } else 0.0
-                }.average().or(2.0)
+                }.average().or(3.0)
 }
 
 class SimUnit(val id: Int? = 0,
@@ -109,14 +127,43 @@ class SimUnit(val id: Int? = 0,
               val airRange: Int,
               val suicideUnit: Boolean,
               val isOrganic: Boolean,
-              val isHidden: Boolean) {
+              var isCloaked: Boolean,
+              var isBurrowed: Boolean) {
     val isAttacker = groundWeapon.type() != WeaponType.None || airWeapon.type() != WeaponType.None
+    val left get() = (position?.x ?: 0) - this.type.dimensionLeft()
+    val top get() = (position?.y ?: 0) - this.type.dimensionUp()
+    val right get() = (position?.x ?: 0) + this.type.dimensionRight()
+    val bottom get() = (position?.y ?: 0) + this.type.dimensionDown()
+
 
     fun canAttack(other: SimUnit, safety: Int = 0): Boolean {
-        val distance = position?.getDistance(other.position!!) ?: 0
+        val distance = getDistance(other)
         return other.detected &&
                 ((other.isAir && airWeapon != WeaponType.None && airRange + safety >= distance && distance >= airWeapon.type().minRange()) ||
                         (!other.isAir && groundWeapon != WeaponType.None && groundRange + safety >= distance && distance >= groundWeapon.type().minRange()))
+    }
+
+    fun getDistance(target: SimUnit): Int {
+        if (this === target) {
+            return 0
+        }
+
+        var xDist = left - (target.right + 1)
+        if (xDist < 0) {
+            xDist = target.left - (right + 1)
+            if (xDist < 0) {
+                xDist = 0
+            }
+        }
+        var yDist = top - (target.bottom + 1)
+        if (yDist < 0) {
+            yDist = target.top - (bottom + 1)
+            if (yDist < 0) {
+                yDist = 0
+            }
+        }
+
+        return Position(0, 0).getDistance(Position(xDist, yDist))
     }
 
     companion object {
@@ -147,7 +194,9 @@ class SimUnit(val id: Int? = 0,
                 airRange = ((unit as? AirAttacker)?.airWeaponMaxRange ?: 0) + if (unit is Bunker) 64 else 0,
                 suicideUnit = unit.isSuicideUnit,
                 isOrganic = unit.initialType.isOrganic,
-                isHidden = unit is Lurker && (unit.isBurrowed || unit.order == Order.Burrowing || unit.order == Order.Cloak) || unit is Cloakable && unit.isCloaked)
+                isCloaked = unit is Cloakable && (unit.isCloaked || unit.order == Order.Cloak),
+                isBurrowed= unit is Burrowable && (unit.isBurrowed || unit.order == Order.Burrowing)
+                )
 
         fun of(type: UnitType): SimUnit = SimUnit(
                 name = type.name,
@@ -169,7 +218,8 @@ class SimUnit(val id: Int? = 0,
                 suicideUnit = when (type) { UnitType.Zerg_Scourge, UnitType.Terran_Vulture_Spider_Mine, UnitType.Protoss_Scarab -> true; else -> false
                 },
                 isOrganic = type.isOrganic,
-                isHidden = false
+                isBurrowed = false,
+                isCloaked = false
         )
     }
 

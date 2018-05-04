@@ -20,10 +20,10 @@ import org.openbw.bwapi4j.unit.*
 import kotlin.math.max
 import kotlin.math.min
 
-data class AttackersBoard(var attackers: List<PlayerUnit> = emptyList(),
-                          var reluctant: List<PlayerUnit> = emptyList(),
-                          var enemies: List<PlayerUnit> = emptyList(),
-                          var eval: Double = 0.5)
+data class CombatBoard(var myUnits: List<PlayerUnit> = emptyList(),
+                       var reluctant: List<PlayerUnit> = emptyList(),
+                       var enemies: List<PlayerUnit> = emptyList(),
+                       var eval: Double = 0.5)
 
 data class AttackBoard(val unit: MobileUnit, var target: PlayerUnit? = null, var betterPosition: Position? = null)
 data class CombatInfo(val myUnits: List<PlayerUnit>, val enemy: Cluster<PlayerUnit>, val eval: Double)
@@ -31,67 +31,78 @@ data class CombatInfo(val myUnits: List<PlayerUnit>, val enemy: Cluster<PlayerUn
 object Combat {
     private val tv = Vector2()
     private val rnd = RandomXS128()
-    fun attack(board: AttackersBoard): Node {
+    fun attack(board: CombatBoard): Node {
         var avgHealth = 0.0
         return sequence(
                 Inline("Average health?") {
-                    avgHealth = board.attackers.map { (it.hitPoints + it.shields) / (it.maxHitPoints() + it.maxShields()).toDouble() }.average()
+                    avgHealth = board.myUnits.map { (it.hitPoints + it.shields) / (it.maxHitPoints() + it.maxShields()).toDouble() }.average()
                     NodeStatus.SUCCEEDED
                 },
-                DispatchParallel("Attack", { board.attackers.filterIsInstance(MobileUnit::class.java) }) { unit ->
-                    val childBoard = AttackBoard(unit)
-                    var lastPositionCheck = 0
-                    fallback(
-                            sequence(
-                                    Inline("Determine best target") {
-                                        childBoard.target = findBestTarget(board.enemies, unit)
-                                        if (childBoard.target !is Dragoon && childBoard.target !is Probe && unit is Mutalisk && UnitQuery.enemyUnits.inRadius(unit, 100).any { it is Dragoon }) {
-//                                            println("Should attack me!!!")
-                                        }
-                                        if (childBoard.target == null)
-                                            NodeStatus.FAILED
-                                        else
-                                            NodeStatus.SUCCEEDED
-                                    },
-                                    Inline("Determine potentially better position") {
-                                        if (!unit.isFlying || FTTBot.frameCount - lastPositionCheck < 24 || !unit.canAttack(childBoard.target!!))
-                                            return@Inline NodeStatus.SUCCEEDED
-                                        lastPositionCheck = FTTBot.frameCount
-                                        val weaponRange = (unit as Attacker).getWeaponAgainst(childBoard.target!!).maxRange()
-                                        val threats = board.enemies.filter { it.canAttack(unit, 64) } - childBoard.target!!
-                                        var bestThreats = if (childBoard.betterPosition == null) threats.size else
-                                            threats.count { it.getDistance(childBoard.betterPosition) - 64 <= (it as Attacker).getWeaponAgainst(unit).maxRange() }
-                                        if (bestThreats == 0)
-                                            return@Inline NodeStatus.SUCCEEDED
-                                        var result: Position? = childBoard.betterPosition
-                                        for (i in 1..20) {
-                                            val pos = tv.setToRandomDirection().scl(rnd.nextFloat() * weaponRange).add(childBoard.target!!.position.toVector()).toPosition()
-                                            if (FTTBot.game.bwMap.isValidPosition(pos) && unit.getDistance(pos) < 192) {
-                                                val remainingThreats = threats.count { it.getDistance(pos) - 64 <= (it as Attacker).getWeaponAgainst(unit).maxRange() }
-                                                if (remainingThreats < bestThreats || result != null && remainingThreats == bestThreats && unit.getDistance(pos) < unit.getDistance(result)) {
-                                                    result = pos
-                                                    bestThreats = remainingThreats
-                                                }
-                                            }
-                                        }
-                                        childBoard.betterPosition = result
-                                        NodeStatus.SUCCEEDED
-                                    },
+                parallel(2,
+                        DispatchParallel("Attack", { board.myUnits.filterIsInstance(MobileUnit::class.java) }) { unit ->
+                            val childBoard = AttackBoard(unit)
+                            var lastPositionCheck = 0
+                            fallback(
                                     sequence(
-                                            avoidDamageBelowHealth(unit, avgHealth),
-                                            fallback(
-                                                    Condition("Good position?") {
-                                                        childBoard.betterPosition == null || unit.getDistance(childBoard.betterPosition!!) < 16
-                                                    },
-                                                    Delegate({ childBoard.betterPosition!!.getDistance(unit.targetPosition) > 8 }) { reach(unit, childBoard.betterPosition!!, 8) }
-                                            ),
-                                            attack(unit, childBoard)
-                                    )
-                            ),
-                            flee(unit),
-                            Sleep
-                    )
-                }, Sleep)
+                                            Inline("Determine best target") {
+                                                childBoard.target = findBestTarget(board.enemies, unit)
+                                                if (unit is Mutalisk && childBoard.target is Zealot && UnitQuery.enemyUnits.any { it is Dragoon && unit.canAttack(it, 128)}) {
+//                                                    println("!!")
+                                                }
+                                                if (childBoard.target == null)
+                                                    NodeStatus.FAILED
+                                                else
+                                                    NodeStatus.SUCCEEDED
+                                            },
+                                            Inline("Determine potentially better position") {
+                                                if (!unit.isFlying || FTTBot.frameCount - lastPositionCheck < 24 || !unit.canAttack(childBoard.target!!))
+                                                    return@Inline NodeStatus.SUCCEEDED
+                                                lastPositionCheck = FTTBot.frameCount
+                                                val simTarget = SimUnit.of(childBoard.target!!)
+                                                val weaponRange = (unit as Attacker).maxRangeVs(childBoard.target!!)
+                                                val relevantEnemies = (UnitQuery.enemyUnits.filter { it.canAttack(unit, 150) } - childBoard.target!!)
+                                                        .map { SimUnit.of(it) }
+                                                val simUnit = SimUnit.of(unit)
+                                                simUnit.position = childBoard.betterPosition
+                                                var bestThreats = if (childBoard.betterPosition == null) relevantEnemies.size else
+                                                    relevantEnemies.count { it.canAttack(simUnit, 32) }
+                                                if (bestThreats == 0)
+                                                    return@Inline NodeStatus.SUCCEEDED
+                                                var result: Position? = childBoard.betterPosition
+                                                for (i in 1..15) {
+                                                    val pos = tv.setToRandomDirection().scl(rnd.nextFloat() * (weaponRange + 32)).add(childBoard.target!!.position.toVector()).toPosition()
+                                                    if (FTTBot.game.bwMap.isValidPosition(pos) && unit.getDistance(pos) < 128) {
+                                                        simUnit.position = pos
+                                                        if (simUnit.canAttack(simTarget)) {
+                                                            val remainingThreats = relevantEnemies.count { it.canAttack(simUnit, 32) }
+                                                            if (remainingThreats < bestThreats || result != null && remainingThreats == bestThreats && unit.getDistance(pos) < unit.getDistance(result)) {
+                                                                result = pos
+                                                                bestThreats = remainingThreats
+                                                            }
+                                                        }
+                                                    }
+                                                }
+                                                childBoard.betterPosition = result
+                                                NodeStatus.SUCCEEDED
+                                            },
+                                            sequence(
+                                                    avoidDamageBelowHealth(unit, avgHealth),
+                                                    fallback(
+                                                            Condition("Good position?") {
+                                                                childBoard.betterPosition == null || unit.getDistance(childBoard.betterPosition!!) < 8
+                                                            },
+                                                            Delegate({ childBoard.betterPosition!!.getDistance(unit.targetPosition) > 8 }) { reach(unit, childBoard.betterPosition!!, 8) }
+                                                    ),
+                                                    attack(unit, childBoard)
+                                            )
+                                    ),
+                                    flee(unit),
+                                    Sleep
+                            )
+                        },
+                        DispatchParallel("Let reluctants fall back", { board.reluctant.filterIsInstance(MobileUnit::class.java) }) {
+                            fallback(sequence(flee(it), ReserveUnit(it)), Sleep)
+                        }))
     }
 
     private fun avoidDamageBelowHealth(unit: MobileUnit, hpPercent: Double): Node {
@@ -131,7 +142,7 @@ object Combat {
                 (if (enemySim.detected) 0 else 500) +
                 (if (enemySim.type.isAddon) 8000 else 0) +
                 (if (attackerSim.canAttack(enemySim)) {
-                    if (enemySim.type == UnitType.Zerg_Lurker && enemySim.isHidden)
+                    if (enemySim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed)
                         -2000
                     else
                         -300
@@ -218,7 +229,7 @@ object Combat {
 
     fun defending(): Node = fallback(
             DispatchParallel("Defending", { MyInfo.myBases }) { base ->
-                val defendersBoard = AttackersBoard()
+                val board = CombatBoard()
                 base as PlayerUnit
                 parallel(1000,
                         workerDefense(base),
@@ -227,21 +238,25 @@ object Combat {
                                         Condition("Attackers close to base?") {
                                             val enemyCluster = Cluster.enemyClusters.minBy { base.getDistance(it.position) }
                                                     ?: return@Condition false
-                                            defendersBoard.enemies = enemyCluster.units.filter { enemy ->
+                                            board.enemies = enemyCluster.units.filter { enemy ->
                                                 UnitQuery.myBuildings.any { it.getDistance(base) < 300 && enemy.canAttack(it, 32) }
                                             }
-                                            !defendersBoard.enemies.isEmpty()
+                                            !board.enemies.isEmpty()
                                         },
                                         sequence(
                                                 Inline("Who should attack?") {
                                                     val myUnits = Cluster.mobileCombatUnits.minBy { base.getDistance(it.position) }
                                                             ?: return@Inline NodeStatus.FAILED
                                                     val unitsAvailable = myUnits.units.filter { Board.resources.units.contains(it) }
-                                                    defendersBoard.attackers = unitsAvailable
+                                                    val relevantEnemies = board.enemies.filter { it is Attacker && it.isCompleted }
+//                                                    val eval = CombatEval.bestProbilityToWin(board.myUnits.map { SimUnit.of(it) }, relevantEnemies.map { SimUnit.of(it) })
+//                                                    val defenders = unitsAvailable.filter { u -> eval.first.any { it.id == u.id } }
+//                                                    board.reluctant = unitsAvailable - defenders
+                                                    board.myUnits = myUnits.units
                                                     Board.resources.reserveUnits(unitsAvailable)
                                                     NodeStatus.SUCCEEDED
                                                 },
-                                                attack(defendersBoard)
+                                                attack(board)
                                         )
                                 ),
                                 Sleep
@@ -252,7 +267,7 @@ object Combat {
 
     private fun workerDefense(base: PlayerUnit): Sequence {
         val workerDefenseBoard = WorkerDefenseBoard()
-        val workerAttackersBoard = AttackersBoard()
+        val workerAttackersBoard = CombatBoard()
         return sequence(
                 fallback(
                         WorkerDefense(base.position, workerDefenseBoard),
@@ -262,7 +277,7 @@ object Combat {
                 ),
                 parallel(1,
                         Inline("Assign workers to defend") {
-                            workerAttackersBoard.attackers = workerDefenseBoard.defendingWorkers
+                            workerAttackersBoard.myUnits = workerDefenseBoard.defendingWorkers
                             workerAttackersBoard.enemies = workerDefenseBoard.enemies
                             NodeStatus.SUCCEEDED
                         },
@@ -275,83 +290,79 @@ object Combat {
 
     fun attacking(): Node = fallback(
             DispatchParallel("Attacking", { Cluster.mobileCombatUnits }) { myCluster ->
-                val board = AttackersBoard()
+                val board = CombatBoard()
                 fallback(
                         sequence(
                                 Inline("Who is ready to attack?") {
                                     val units = myCluster.units.toMutableList()
                                     units.retainAll(Board.resources.units)
-                                    board.attackers = units
+                                    board.myUnits = units
                                     NodeStatus.SUCCEEDED
                                 },
                                 Inline("Find me some enemies") {
                                     val combatInfos = Cluster.enemyClusters.map {
                                         val relevantEnemies = it.units.filter { it is Attacker && it.isCompleted }
-                                        val eval = CombatEval.bestProbilityToWin(board.attackers.map { SimUnit.of(it) }, relevantEnemies.map { SimUnit.of(it) })
-                                        CombatInfo(board.attackers.filter { eval.first.map { it.id }.contains(it.id) }, it, eval.second)
+                                        val eval = CombatEval.bestProbilityToWin(board.myUnits.map { SimUnit.of(it) }, relevantEnemies.map { SimUnit.of(it) })
+                                        CombatInfo(board.myUnits.filter { eval.first.map { it.id }.contains(it.id) }, it, eval.second)
                                     }
                                     val bestCombat = combatInfos.minBy {
                                         val enemyPosition = it.enemy.position
                                         val distanceToBase = MyInfo.myBases.map { base -> base as PlayerUnit; base.getDistance(enemyPosition) }.min()
                                                 ?: Double.MAX_VALUE
-                                        val distanceToAttackers = if (board.attackers.any { !it.isFlying }) {
-                                            val enemyDistance = MutableInt()
-                                            FTTBot.bwem.getPath(myCluster.position, enemyPosition, enemyDistance)
-                                            enemyDistance.toInteger()
+                                        val distanceToAttackers = if (board.myUnits.any { !it.isFlying }) {
+                                            try {
+                                                val enemyDistance = MutableInt()
+                                                FTTBot.bwem.getPath(myCluster.position, enemyPosition, enemyDistance)
+                                                enemyDistance.toInteger()
+                                            } catch (e : IllegalStateException) {
+                                                Int.MAX_VALUE
+                                            }
                                         } else
                                             enemyPosition.getDistance(myCluster.position)
-                                        distanceToAttackers - 250 * it.eval + min(distanceToBase / 5.0, 400.0)
+                                        distanceToAttackers - 300 * it.eval + min(distanceToBase / 5.0, 400.0)
                                     }
                                     board.enemies = bestCombat?.enemy?.units
                                             ?: return@Inline NodeStatus.RUNNING
-                                    board.reluctant = board.attackers - bestCombat.myUnits
-                                    board.attackers = bestCombat.myUnits
+                                    board.reluctant = board.myUnits - bestCombat.myUnits
+                                    board.myUnits = bestCombat.myUnits
                                     board.eval = bestCombat.eval
                                     NodeStatus.SUCCEEDED
                                 },
                                 Condition("Good combat eval?") {
-                                    board.eval > 0.6 ||
-                                            board.eval > 0.40 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me) } }
+                                    board.eval > 0.60 ||
+                                            board.eval > 0.4 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me) } }
                                 },
                                 Inline("Who should attack?") {
-                                    Board.resources.reserveUnits(board.attackers)
+                                    Board.resources.reserveUnits(board.myUnits)
                                     NodeStatus.SUCCEEDED
                                 },
-                                parallel(2,
-                                        attack(board),
-                                        fallback(
-                                                DispatchParallel("Let reluctants fall back", { board.reluctant.filterIsInstance(MobileUnit::class.java) }) {
-                                                    sequence(flee(it), ReserveUnit(it))
-                                                },
-                                                Sleep
-                                        )
-                                )
+                                attack(board)
                         ),
-                        DispatchParallel("Flee", { (board.attackers + board.reluctant).filterIsInstance(MobileUnit::class.java) }) {
-                            sequence(flee(it), ReserveUnit(it))
+                        DispatchParallel("Flee", { (board.myUnits + board.reluctant).filterIsInstance(MobileUnit::class.java) }) {
+                            fallback(sequence(flee(it), ReserveUnit(it)), joinUp(myCluster, it))
                         },
-                        joinUp(myCluster),
                         Sleep)
             },
             Sleep
     )
 
-    private fun joinUp(myCluster: Cluster<MobileUnit>): Sequence {
+    private fun joinUp(myCluster: Cluster<MobileUnit>, unit: MobileUnit): Sequence {
         val reachBoard = ReachBoard(tolerance = 64)
         return sequence(
                 Inline("Find me some allies") {
                     reachBoard.position = Cluster.mobileCombatUnits.filter {
                         it != myCluster &&
                                 FTTBot.bwem.data.getMiniTile(it.position.toWalkPosition()).isWalkable
-                    }.minBy { it.position.getDistance(myCluster.position) }?.position
+                    }.minBy {
+                        it.position.getDistance(myCluster.position)
+                    }?.position
                             ?: if (!MyInfo.myBases.isEmpty()) (MyInfo.myBases[0] as PlayerUnit).position else return@Inline NodeStatus.RUNNING
                     NodeStatus.SUCCEEDED
                 },
-                Delegate {
-                    val available = myCluster.units.filter { Board.resources.units.contains(it) }
-                    Board.resources.reserveUnits(available)
-                    reach(available, reachBoard)
-                }
+                sequence(
+                        ReserveUnit(unit),
+                        reach(unit, reachBoard)
+                )
         )
     }
 
@@ -365,8 +376,8 @@ object Combat {
             myCluster = Cluster.myClusters.minBy { it.position.getDistance(at) } ?: return@Condition false
             val combatEval = CombatEval.probabilityToWin(myCluster!!.units.filter { it is Attacker && it !is Worker }.map { SimUnit.of(it) },
                     enemyCluster!!.units.filter { it is Attacker && it is MobileUnit && it.isCompleted }.map { SimUnit.of(it) })
-            val distanceFactor = myCluster!!.position.getDistance(enemyCluster!!.position) * 0.002
-            combatEval < 0.65 - distanceFactor
+            val distanceFactor = myCluster!!.position.getDistance(enemyCluster!!.position) * 0.0003
+            combatEval < 0.55 - distanceFactor
         }
     }
 }
