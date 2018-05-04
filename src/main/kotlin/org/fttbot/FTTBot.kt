@@ -260,6 +260,7 @@ object FTTBot : BWEventListener {
     }
 
     override fun onEnd(isWinner: Boolean) {
+        game.interactionHandler.sendText("gg")
         if (isWinner) LOG.info("Hurray, I won!")
         else LOG.info("Sad, I lost!")
 //        ProcessHelper.killStarcraftProcess()

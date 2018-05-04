@@ -142,8 +142,8 @@ object Combat {
                 (if (enemySim.detected) 0 else 500) +
                 (if (enemySim.type.isAddon) 8000 else 0) +
                 (if (attackerSim.canAttack(enemySim)) {
-                    if (enemySim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed)
-                        -2000
+                    if (attackerSim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed)
+                        -700
                     else
                         -300
                 } else 0) +
@@ -377,7 +377,7 @@ object Combat {
             val combatEval = CombatEval.probabilityToWin(myCluster!!.units.filter { it is Attacker && it !is Worker }.map { SimUnit.of(it) },
                     enemyCluster!!.units.filter { it is Attacker && it is MobileUnit && it.isCompleted }.map { SimUnit.of(it) })
             val distanceFactor = myCluster!!.position.getDistance(enemyCluster!!.position) * 0.0003
-            combatEval < 0.55 - distanceFactor
+            combatEval < 0.58 - distanceFactor
         }
     }
 }
