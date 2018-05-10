@@ -68,7 +68,8 @@ object EnemyInfo {
         }
         seenUnits.removeIf {
             it is MobileUnit && (it !is SiegeTank || !it.isSieged) &&
-                    (FTTBot.frameCount - it.lastSpotted > DISCARD_HIDDEN_UNITS_AFTER) || FTTBot.game.bwMap.isVisible(it.tilePosition)
+                    (FTTBot.frameCount - it.lastSpotted > DISCARD_HIDDEN_UNITS_AFTER) ||
+                    ((it !is Burrowable || !it.isBurrowed) && FTTBot.game.bwMap.isVisible(it.tilePosition))
         }
         lastFramePosition = currentFramePosition
         lastFrame = nextFrame

@@ -262,8 +262,8 @@ class Repeat(val times: Int = -1, child: Node, val name: String= "") : Decorator
                 remaining--
             }
         }
-        if (maxLoops == 0) {
-            LOG.error("Possible infinity loop: $this")
+        if (maxLoops <= 0) {
+            LOG.error("Possible infinity loop: ${getTreeTrace()}")
         }
         return NodeStatus.SUCCEEDED
     }

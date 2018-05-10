@@ -1,8 +1,7 @@
 package org.fttbot
 
 
-import bwapi4j.org.apache.commons.lang3.Validate
-
+import org.openbw.bwapi4j.org.apache.commons.lang3.Validate
 import java.util.*
 import javax.naming.OperationNotSupportedException
 

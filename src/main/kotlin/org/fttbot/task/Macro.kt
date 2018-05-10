@@ -1,6 +1,5 @@
 package org.fttbot.task
 
-import bwapi4j.org.apache.commons.lang3.mutable.MutableInt
 import org.fttbot.*
 import org.fttbot.Fallback.Companion.fallback
 import org.fttbot.Sequence.Companion.sequence
@@ -11,6 +10,7 @@ import org.fttbot.task.Production.build
 import org.fttbot.task.Production.buildGas
 import org.fttbot.task.Production.produceSupply
 import org.openbw.bwapi4j.TilePosition
+import org.openbw.bwapi4j.org.apache.commons.lang3.mutable.MutableInt
 import org.openbw.bwapi4j.unit.PlayerUnit
 import java.util.*
 import kotlin.math.max
@@ -73,8 +73,7 @@ object Macro {
             Repeat(child = fallback(
                     sequence(
                             Condition("Not enough gas mines?") {
-                                (Board.pendingUnits.sumBy { it.gasPrice() } > 0 ||
-                                        Board.resources.gas < 0) && (FTTBot.self.minerals() / 3 > FTTBot.self.gas())
+                                (FTTBot.self.minerals() / 3 > FTTBot.self.gas())
                                         && MyInfo.myBases.any { base -> base as PlayerUnit; UnitQuery.geysers.any { it.getDistance(base) < 300 } }
                             },
                             buildGas()

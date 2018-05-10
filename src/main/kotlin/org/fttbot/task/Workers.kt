@@ -20,13 +20,16 @@ object Workers {
                     sequence(
                             Inline("Home Vector") {
                                 val force = Vector2()
-                                Potential.addWallRepulsion(force, it, 2.3f)
-                                Potential.addSafeAreaAttraction(force, it, 0.7f)
+                                Potential.addWallRepulsion(force, it, 0.5f)
+                                Potential.addSafeAreaAttraction(force, it, 1.0f)
                                 force.nor()
                                 reachBoard.position = it.position + force.scl(64f).toPosition()
                                 NodeStatus.SUCCEEDED
                             },
-                            Delegate { Actions.reach(it, reachBoard) }
+                            Inline("Move it") {
+                                it.move(reachBoard.position!!)
+                                NodeStatus.SUCCEEDED
+                            }
                     )
                 },
                 Sleep

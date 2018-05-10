@@ -29,6 +29,8 @@ dependencies {
     compile 'com.github.ptnplanet:Java-Naive-Bayes-Classifier:1.0.7'
 
     testCompile 'org.junit.jupiter:junit-jupiter-api:5.0.2'
+    testCompile 'org.junit.platform:junit-platform-launcher:1.2.0'
+    testCompile 'org.junit.platform:junit-platform-engine:1.2.0'
     testCompile 'org.assertj:assertj-core:3.9.0'
 }
 

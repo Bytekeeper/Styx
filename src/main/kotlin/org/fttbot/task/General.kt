@@ -44,7 +44,7 @@ object Actions {
                 fallback(
                         Condition("Reached ${board.position} with $unit") { hasReached(unit, board.position!!, board.tolerance) },
                         Repeat(child = msequence("Move $unit to ${board.position}",
-                                makeMobile(unit),
+                                ensureCanMove(unit),
                                 Inline("Next waypoint") {
                                     if (unit.position.getDistance(board.position) < 200 || unit.isFlying) {
                                         nextWaypoint = board.position
@@ -91,7 +91,7 @@ object Actions {
         }
     }
 
-    private fun makeMobile(unit: MobileUnit): Fallback {
+    private fun ensureCanMove(unit: MobileUnit): Fallback {
         return fallback(
                 Condition("$unit not burrowed") { unit !is Burrowable || !unit.isBurrowed },
                 fallback(

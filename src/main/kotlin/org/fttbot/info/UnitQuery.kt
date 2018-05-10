@@ -2,20 +2,18 @@ package org.fttbot.info
 
 import org.fttbot.Board
 import org.fttbot.FTTBot
-import org.fttbot.LazyOnFrame
 import org.fttbot.estimation.MAX_FRAMES_TO_ATTACK
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
-import sun.management.snmp.jvminstr.JvmThreadInstanceEntryImpl.ThreadStateMap.Byte1.other
 
 const val MAX_MELEE_RANGE = 64
 
 val Weapon.onCooldown get () = cooldown() >= FTTBot.latency_frames
 val PlayerUnit.isMyUnit get() = player == FTTBot.self
-val PlayerUnit.isEnemyUnit get() = player == FTTBot.enemy
+val PlayerUnit.isEnemyUnit get() = player in FTTBot.enemies
 fun Attacker.getWeaponAgainst(target: Unit) = if (target.isFlying && this is AirAttacker) airWeapon else
     if (!target.isFlying && this is GroundAttacker) groundWeapon else Weapon(WeaponType.None, -1)
 fun Attacker.maxRangeVs(target: Unit) = (this as PlayerUnit).player.unitStatCalculator.weaponMaxRange(getWeaponAgainst(target).type())
@@ -143,7 +141,7 @@ object UnitQuery {
         minerals = allUnits.filterIsInstance(MineralPatch::class.java)
         ownedUnits = this.allUnits.filterIsInstance(PlayerUnit::class.java)
         myUnits = ownedUnits.filter { it.player == FTTBot.self && it.exists()}
-        enemyUnits = ownedUnits.filter { it.player == FTTBot.enemy }
+        enemyUnits = ownedUnits.filter { it.player in FTTBot.enemies }
         myWorkers = myUnits.filterIsInstance(Worker::class.java).filter { it.isCompleted }
         myBuildings = myUnits.filterIsInstance(Building::class.java).filter { it.isCompleted }
     }

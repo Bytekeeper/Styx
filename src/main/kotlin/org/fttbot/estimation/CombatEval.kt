@@ -15,22 +15,18 @@ import kotlin.math.min
 const val MAX_FRAMES_TO_ATTACK = 3
 
 object CombatEval {
-    fun minAmountOfAdditionalsForProbability(myUnits: List<SimUnit>, additionalUnits: SimUnit, enemies: List<SimUnit>, minProbability: Double = 0.6) : Int {
+    var strengthPower = 0.7
+    var amountPower = 1.1
+    var evalScale = 0.08
+
+    fun minAmountOfAdditionalsForProbability(myUnits: List<SimUnit>, additionalUnits: SimUnit, enemies: List<SimUnit>, minProbability: Double = 0.6): Int {
         if (enemies.isEmpty()) return -1
-        var b = 50
-        var a = 0
-        while (b > a) {
-           val mid = (a + b) / 2
-            val unitsA = (1..mid).map { additionalUnits }
+        for (amount in 0..10) {
+            val unitsA = (1..amount).map { additionalUnits }
             val result = probabilityToWin(myUnits + unitsA, enemies)
-            if (result < minProbability) {
-                a = mid + 1
-            } else if (result > minProbability) {
-                b = mid - 1
-            } else
-                return mid
+            if (result >= minProbability) return amount
         }
-        return if (b < 50) b + 1 else -1
+        return -1
     }
 
     fun bestProbilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>): Pair<List<SimUnit>, Double> {
@@ -55,16 +51,21 @@ object CombatEval {
                 .map { it.position }.fold(Position(0, 0)) { s, t -> if (t != null) s.add(t) else s }
                 .divide(Position(amountOfUnits, amountOfUnits))
 
-        val medicFactorA = fastsig(unitsOfPlayerA.count { it.canHeal }.toDouble() * 2) * 1.2 + 1.0
-        val medicFactorB = fastsig(unitsOfPlayerB.count { it.canHeal }.toDouble() * 2) * 1.2 + 1.0
+        val medicFactorA = fastsig(unitsOfPlayerA.count { it.canHeal }.toDouble() * 2) * 1.4 + 1.0
+        val medicFactorB = fastsig(unitsOfPlayerB.count { it.canHeal }.toDouble() * 2) * 1.4 + 1.0
 
         val alpha = strength(unitsOfPlayerA, unitsOfPlayerB, center, medicFactorA, fallbackDistance)
         val beta = strength(unitsOfPlayerB, unitsOfPlayerA, center, medicFactorB, fallbackDistance)
 
         // Lanchester's Law
-        val agg = (alpha.average().or(0.0) * pow(unitsOfPlayerA.size.toDouble(), 1.56) -
-                beta.average().or(0.0) * pow(unitsOfPlayerB.size.toDouble(), 1.56)) * 0.02
-        return 1.0 / (exp(-agg) + 1)
+        val eA = alpha.map { pow(it, strengthPower) }.average().or(0.0)
+        val eB = beta.map { pow(it, strengthPower) }.average().or(0.0)
+        val agg = (eA * pow(unitsOfPlayerA.size.toDouble(), amountPower) -
+                eB * pow(unitsOfPlayerB.size.toDouble(), amountPower)) * evalScale
+        val result = 1.0 / (exp(-agg) + 1)
+        if (result.isNaN())
+            throw IllegalStateException()
+        return result
     }
 
     private fun strength(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, center: Position, medicFactor: Double, fallbackDistance: Double) =
@@ -75,13 +76,14 @@ object CombatEval {
                 val hiddenFactor = if (it.hiddenAttack) 1.3 else 1.0
                 val splashFactor = if (it.groundWeapon.type().explosionType() == ExplosionType.Enemy_Splash ||
                         it.groundWeapon.type().explosionType() == ExplosionType.Radial_Splash ||
-                        it.airWeapon.type().explosionType() == DamageType.Explosive)
-                    (fastsig(unitsOfPlayerB.count { e -> it.determineWeaponAgainst(e).type() != WeaponType.None }.toDouble() * 3.0) * 1.4 + 1.0) else 1.0
+                        it.airWeapon.type().explosionType() == DamageType.Explosive ||
+                        it.groundWeapon.type() == WeaponType.Glave_Wurm)
+                    (fastsig(unitsOfPlayerB.count { e -> it.determineWeaponAgainst(e).type() != WeaponType.None }.toDouble()) * 0.65 + 1.0) else 1.0
                 averageDamageOf(it, unitsOfPlayerB) * splashFactor *
                         (if (it.isOrganic) it.hitPoints * medicFactor else it.hitPoints.toDouble() + it.shield) *
                         combatRangeFactor * hiddenFactor *
                         when (it.type) {
-                            UnitType.Zerg_Lurker -> 0.68 // Has to walk and burrow before attacking
+                            UnitType.Zerg_Lurker -> 0.46 // Has to walk and burrow before attacking
                             else -> 1.0
                         }
 
@@ -97,7 +99,7 @@ object CombatEval {
                         } else
                             dmg
                     } else 0.0
-                }.average().or(3.0)
+                }.average().or(5.0)
 }
 
 class SimUnit(val id: Int? = 0,
@@ -123,8 +125,8 @@ class SimUnit(val id: Int? = 0,
               val type: UnitType,
               val airHits: Int,
               val groundHits: Int,
-              val groundRange: Int,
-              val airRange: Int,
+              var groundRange: Int,
+              var airRange: Int,
               val suicideUnit: Boolean,
               val isOrganic: Boolean,
               var isCloaked: Boolean,
@@ -195,8 +197,8 @@ class SimUnit(val id: Int? = 0,
                 suicideUnit = unit.isSuicideUnit,
                 isOrganic = unit.initialType.isOrganic,
                 isCloaked = unit is Cloakable && (unit.isCloaked || unit.order == Order.Cloak),
-                isBurrowed= unit is Burrowable && (unit.isBurrowed || unit.order == Order.Burrowing)
-                )
+                isBurrowed = unit is Burrowable && (unit.isBurrowed || unit.order == Order.Burrowing)
+        )
 
         fun of(type: UnitType): SimUnit = SimUnit(
                 name = type.name,

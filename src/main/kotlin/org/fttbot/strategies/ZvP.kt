@@ -9,7 +9,7 @@ import org.fttbot.info.EnemyInfo
 import org.fttbot.info.UnitQuery
 import org.fttbot.strategies.Strategies.considerBaseDefense
 import org.fttbot.strategies.Strategies.considerMoreTrainers
-import org.fttbot.strategies.Strategies.considerWorkers
+import org.fttbot.strategies.Strategies.considerBuildingWorkers
 import org.fttbot.strategies.Strategies.gasTrick
 import org.fttbot.task.Macro
 import org.fttbot.task.Macro.buildExpansion
@@ -28,6 +28,7 @@ import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.UpgradeType
 import org.openbw.bwapi4j.unit.Egg
+import org.openbw.bwapi4j.unit.Overlord
 import org.openbw.bwapi4j.unit.Scourge
 import org.openbw.bwapi4j.unit.Zergling
 
@@ -91,26 +92,27 @@ object ZvP {
             trainWorker(),
             trainWorker(),
             Repeat(child = fallback(Condition("Enough zerglings?") { UnitQuery.myUnits.count { it is Zergling || it is Egg && it.buildType == UnitType.Zerg_Zergling } >= 6 }, train(UnitType.Zerg_Zergling))),
+            build(UnitType.Zerg_Creep_Colony),
             considerBaseDefense(),
             mainMutasZergUltra()
     )
 
     fun mainMutasZergUltra(): Node = mparallel(Int.MAX_VALUE,
-            considerWorkers(),
+            considerBuildingWorkers(),
             Macro.preventSupplyBlock(),
             train(UnitType.Zerg_Mutalisk),
             train(UnitType.Zerg_Mutalisk),
+            considerScourge(),
             train(UnitType.Zerg_Mutalisk),
             train(UnitType.Zerg_Mutalisk),
             train(UnitType.Zerg_Mutalisk),
+            considerExpansion(),
+            Macro.considerGas(),
             Repeat(child = train(UnitType.Zerg_Mutalisk)),
             Repeat(30, child = Delegate { train(UnitType.Zerg_Zergling) }),
             Repeat(child = train(UnitType.Zerg_Ultralisk)),
             Repeat(child = train(UnitType.Zerg_Zergling)),
             considerMoreTrainers(),
-            considerScourge(),
-            considerExpansion(),
-            Macro.considerGas(),
             upgrade(UpgradeType.Zerg_Flyer_Attacks),
             upgrade(UpgradeType.Metabolic_Boost),
             Repeat(UpgradeType.Zerg_Flyer_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Attacks) }),
@@ -125,19 +127,19 @@ object ZvP {
 
     fun raceChoice(): Node = fallback(
             sequence(
-                    Condition("Terran?") { FTTBot.enemy.race == Race.Terran },
+                    Condition("Terran?") { FTTBot.enemies[0].race == Race.Terran },
                     _3HatchLurker()
             ),
             sequence(
-                    Condition("Zerg?") { FTTBot.enemy.race == Race.Zerg },
+                    Condition("Zerg?") { FTTBot.enemies[0].race == Race.Zerg },
                     overpoolVsZerg()
             ),
             Delegate {
+                if (MathUtils.randomBoolean()) {
                     _2HatchMuta()
-//                if (MathUtils.randomBoolean()) {
-//                } else {
-//                    overpoolVsProtoss()
-//                }
+                } else {
+                    overpoolVsProtoss()
+                }
             }
     )
 
@@ -155,7 +157,7 @@ object ZvP {
                     train(UnitType.Zerg_Zergling),
                     train(UnitType.Zerg_Zergling),
                     train(UnitType.Zerg_Zergling),
-                    considerWorkers(),
+                    considerBuildingWorkers(),
                     considerBaseDefense(),
                     buildGas(),
                     build(UnitType.Zerg_Lair),
@@ -201,7 +203,7 @@ object ZvP {
                     considerBaseDefense(),
                     trainWorker(),
                     trainWorker(),
-                    Strategies.considerWorkers(),
+                    Strategies.considerBuildingWorkers(),
                     build(UnitType.Zerg_Lair),
                     produce(UnitType.Zerg_Spire),
                     Macro.buildExpansion(),
@@ -211,7 +213,10 @@ object ZvP {
 
     private fun considerScourge(): Node {
         return Repeat(child = fallback(sequence(
-                Condition("Enemy has air?") { UnitQuery.myUnits.count { it is Scourge } < EnemyInfo.seenUnits.count { it.isFlying } },
+                Condition("Enemy has air?") { UnitQuery.myUnits.count { it is Scourge } < EnemyInfo.seenUnits.count { it.isFlying && it !is Overlord } },
+                Inline("Blub") {
+                    NodeStatus.SUCCEEDED
+                },
                 train(UnitType.Zerg_Scourge)
         ), Sleep))
     }

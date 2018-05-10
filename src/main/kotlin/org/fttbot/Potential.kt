@@ -2,18 +2,15 @@ package org.fttbot
 
 import bwem.CheckMode
 import com.badlogic.gdx.math.Vector2
-import org.fttbot.info.Cluster
 import org.fttbot.info.EnemyInfo
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.canAttack
-import org.openbw.bwapi4j.BW
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.WalkPosition
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.Unit
 import org.openbw.bwapi4j.unit.Worker
-import kotlin.math.max
 import kotlin.math.min
 
 object Potential {
@@ -36,7 +33,7 @@ object Potential {
         val relevantUnits = UnitQuery.allUnits
                 .filter { it != unit && !it.isFlying && it.getDistance(unit) < 32 }
         val force = unit.position.toVector().scl(relevantUnits.size.toFloat())
-        relevantUnits.forEach { force.sub(it.position.toVector() ) }
+        relevantUnits.forEach { force.sub(it.position.toVector()) }
         target.add(force.setLength(scale))
     }
 
@@ -91,9 +88,12 @@ object Potential {
     fun addSafeAreaAttraction(target: Vector2, unit: MobileUnit, scale: Float = 1f) {
         val homePath = FTTBot.bwem.getPath(unit.position,
                 reallySafePlace() ?: return)
-        val targetChoke = homePath.firstOrNull { it.center.toPosition().getDistance(unit.position) >= 4 * TilePosition.SIZE_IN_PIXELS }
-                ?: return
-        target.add((targetChoke.center.toPosition() - unit.position).toVector().setLength(scale))
+        val waypoint =
+                homePath.firstOrNull { it.center.toPosition().getDistance(unit.position) >= 4 * TilePosition.SIZE_IN_PIXELS }?.center?.toPosition()
+                        ?: reallySafePlace()
+                        ?: return
+
+        target.add((waypoint - unit.position).toVector().setLength(scale))
     }
 
     private fun reallySafePlace(): Position? {

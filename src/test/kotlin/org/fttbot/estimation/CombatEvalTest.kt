@@ -2,7 +2,14 @@ package org.fttbot.estimation
 
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.RepeatedTest
 import org.junit.jupiter.api.Test
+import org.junit.platform.engine.discovery.DiscoverySelectors
+import org.junit.platform.engine.discovery.DiscoverySelectors.selectClass
+import org.junit.platform.launcher.LauncherDiscoveryRequest
+import org.junit.platform.launcher.core.LauncherDiscoveryRequestBuilder
+import org.junit.platform.launcher.core.LauncherFactory
+import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.test.BWDataProvider
 import org.openbw.bwapi4j.type.UnitType
 
@@ -28,8 +35,8 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isLessThan(0.9)
-        assertThat(probabilityToWin).isGreaterThan(0.6)
+        assertThat(probabilityToWin).isLessThan(0.5)
+        assertThat(probabilityToWin).isGreaterThan(0.4)
     }
 
     @Test
@@ -48,7 +55,7 @@ class CombatEvalTest {
     }
 
     @Test
-    fun `2 Marines vs 1 Mutalisk should win slightly`() {
+    fun `2 Marines vs 1 Mutalisk should lose slightly`() {
         val a = listOf(
                 SimUnit.of(UnitType.Terran_Marine),
                 SimUnit.of(UnitType.Terran_Marine)
@@ -57,8 +64,8 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isGreaterThan(0.5)
-        assertThat(probabilityToWin).isLessThan(0.6)
+        assertThat(probabilityToWin).isGreaterThan(0.4)
+        assertThat(probabilityToWin).isLessThan(0.5)
     }
 
     @Test
@@ -106,7 +113,7 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isLessThan(0.3)
+        assertThat(probabilityToWin).isLessThan(0.33)
     }
 
     @Test
@@ -322,7 +329,7 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isLessThan(0.4)
+        assertThat(probabilityToWin).isLessThan(0.45)
     }
 
     @Test
@@ -347,7 +354,7 @@ class CombatEvalTest {
     }
 
     @Test
-    fun `8 Zerglings 1 Muta are evenly matched with 7 Marines`() {
+    fun `8 Zerglings 1 Muta win slightly vs 7 Marines`() {
         val a = listOf(
                 SimUnit.of(UnitType.Zerg_Zergling),
                 SimUnit.of(UnitType.Zerg_Zergling),
@@ -371,11 +378,12 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isLessThan(0.5)
+        assertThat(probabilityToWin).isLessThan(0.6)
+        assertThat(probabilityToWin).isGreaterThan(0.5)
     }
 
     @Test
-    fun `6 Lurkers are loosin vs 6 Marines, 2 Medics and 2 Tanks`() {
+    fun `6 Lurkers are losing vs 6 Marines, 2 Medics and 2 Tanks`() {
         val a = listOf(
                 SimUnit.of(UnitType.Zerg_Lurker),
                 SimUnit.of(UnitType.Zerg_Lurker),
@@ -426,7 +434,7 @@ class CombatEvalTest {
         val bestProbabilityToWin = CombatEval.bestProbilityToWin(a, b)
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isLessThan(0.3)
+        assertThat(probabilityToWin).isLessThan(0.5)
         assertThat(bestProbabilityToWin.second).isGreaterThan(0.75)
         assertThat(bestProbabilityToWin.first).allMatch { it.type == UnitType.Zerg_Mutalisk }
     }
@@ -485,6 +493,31 @@ class CombatEvalTest {
     }
 
     @Test
+    fun `8 Mutas win vs 5 Goons`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Protoss_Dragoon),
+                SimUnit.of(UnitType.Protoss_Dragoon),
+                SimUnit.of(UnitType.Protoss_Dragoon),
+                SimUnit.of(UnitType.Protoss_Dragoon),
+                SimUnit.of(UnitType.Protoss_Dragoon)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b, 192.0)
+
+        assertThat(probabilityToWin).isGreaterThan(0.6)
+    }
+
+    @Test
     fun `1 Zergling vs nothing should win`() {
         val a = listOf(
                 SimUnit.of(UnitType.Zerg_Zergling)
@@ -530,6 +563,7 @@ class CombatEvalTest {
 
         assertThat(minSunkens).isEqualTo(-1)
     }
+
     @Test
     fun `Should need -1 Spores vs nothing`() {
         val b = listOf<SimUnit>()
@@ -539,5 +573,102 @@ class CombatEvalTest {
         assertThat(minSunkens).isEqualTo(-1)
     }
 
+    @Test
+    fun `No need for more sunkens with big sunken cluster`() {
+        val minSunkens = CombatEval.minAmountOfAdditionalsForProbability(
+                listOf(
+                        SimUnit.of(UnitType.Zerg_Sunken_Colony),
+                        SimUnit.of(UnitType.Zerg_Sunken_Colony),
+                        SimUnit.of(UnitType.Zerg_Sunken_Colony),
+                        SimUnit.of(UnitType.Zerg_Sunken_Colony),
+                        SimUnit.of(UnitType.Zerg_Sunken_Colony),
+                        SimUnit.of(UnitType.Zerg_Sunken_Colony),
+                        SimUnit.of(UnitType.Zerg_Zergling),
+                        SimUnit.of(UnitType.Zerg_Zergling)
+                ),
+                 SimUnit.of(UnitType.Zerg_Spore_Colony),
+                listOf(
+                        SimUnit.of(UnitType.Zerg_Zergling),
+                        SimUnit.of(UnitType.Zerg_Zergling),
+                        SimUnit.of(UnitType.Zerg_Zergling),
+                        SimUnit.of(UnitType.Zerg_Zergling),
+                        SimUnit.of(UnitType.Zerg_Zergling),
+                        SimUnit.of(UnitType.Zerg_Zergling),
+                        SimUnit.of(UnitType.Zerg_Zergling),
+                        SimUnit.of(UnitType.Zerg_Mutalisk),
+                        SimUnit.of(UnitType.Zerg_Scourge)
+                ))
 
+        assertThat(minSunkens).isEqualTo(0)
+    }
+
+    @Test
+    fun `No spores vs zealots`() {
+        val minSunkens = CombatEval.minAmountOfAdditionalsForProbability(
+                listOf(
+                        SimUnit.of(UnitType.Zerg_Sunken_Colony)
+                ),
+                 SimUnit.of(UnitType.Zerg_Spore_Colony),
+                listOf(
+                        SimUnit.of(UnitType.Protoss_Zealot),
+                        SimUnit.of(UnitType.Protoss_Zealot),
+                        SimUnit.of(UnitType.Protoss_Zealot),
+                        SimUnit.of(UnitType.Protoss_Zealot),
+                        SimUnit.of(UnitType.Protoss_Zealot),
+                        SimUnit.of(UnitType.Protoss_Zealot)
+                ))
+
+        assertThat(minSunkens).isLessThanOrEqualTo(0)
+    }
+
+    @Test
+    fun `don't build spores vs ground`() {
+        val minSunkens = CombatEval.minAmountOfAdditionalsForProbability(
+                listOf(
+                        SimUnit.of(UnitType.Zerg_Zergling),
+                        SimUnit.of(UnitType.Zerg_Zergling)
+                ),
+                 SimUnit.of(UnitType.Zerg_Spore_Colony),
+                listOf(
+                        SimUnit.of(UnitType.Protoss_Zealot)
+                ))
+
+        assertThat(minSunkens).isEqualTo(-1)
+    }
+
+    @Test
+    fun `don't build spores vs ground, no really don't`() {
+        val minSunkens = CombatEval.minAmountOfAdditionalsForProbability(
+                listOf(
+                        SimUnit.of(UnitType.Zerg_Mutalisk)
+                ),
+                 SimUnit.of(UnitType.Zerg_Spore_Colony),
+                listOf(
+                        SimUnit.of(UnitType.Protoss_Zealot)
+                ))
+
+        assertThat(minSunkens).isEqualTo(0)
+    }
+
+
+    @Test
+    fun `Goon can hit muta with range upgrade`() {
+        val goon = SimUnit.of(UnitType.Protoss_Dragoon)
+        goon.airRange += 2 * 32
+        goon.position = Position(0, 0)
+        val muta = SimUnit.of(UnitType.Zerg_Mutalisk)
+        muta.position = Position(128 + 2 * 32 + UnitType.Zerg_Mutalisk.dimensionLeft() + UnitType.Protoss_Dragoon.dimensionRight(), 0)
+
+        assertThat(goon).matches { it.canAttack(muta) }
+    }
+
+    @Test
+    fun `Goon can not hit muta without range upgrade`() {
+        val goon = SimUnit.of(UnitType.Protoss_Dragoon)
+        goon.position = Position(0, 0)
+        val muta = SimUnit.of(UnitType.Zerg_Mutalisk)
+        muta.position = Position(2 + 128 + UnitType.Zerg_Mutalisk.dimensionLeft() + UnitType.Protoss_Dragoon.dimensionRight(), 0)
+
+        assertThat(goon).matches { !it.canAttack(muta) }
+    }
 }

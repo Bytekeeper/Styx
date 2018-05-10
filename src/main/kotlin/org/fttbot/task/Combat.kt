@@ -1,6 +1,5 @@
 package org.fttbot.task
 
-import bwapi4j.org.apache.commons.lang3.mutable.MutableInt
 import com.badlogic.gdx.math.RandomXS128
 import com.badlogic.gdx.math.Vector2
 import org.fttbot.*
@@ -13,6 +12,7 @@ import org.fttbot.info.*
 import org.fttbot.task.Actions.flee
 import org.fttbot.task.Actions.reach
 import org.openbw.bwapi4j.Position
+import org.openbw.bwapi4j.org.apache.commons.lang3.mutable.MutableInt
 import org.openbw.bwapi4j.type.Order
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.WeaponType
@@ -46,7 +46,7 @@ object Combat {
                                     sequence(
                                             Inline("Determine best target") {
                                                 childBoard.target = findBestTarget(board.enemies, unit)
-                                                if (unit is Mutalisk && childBoard.target is Zealot && UnitQuery.enemyUnits.any { it is Dragoon && unit.canAttack(it, 128)}) {
+                                                if (unit is Mutalisk && childBoard.target is Zealot && UnitQuery.enemyUnits.any { it is Dragoon && unit.canAttack(it, 128) }) {
 //                                                    println("!!")
                                                 }
                                                 if (childBoard.target == null)
@@ -162,7 +162,7 @@ object Combat {
                         fallback(
                                 Condition("Can I see you?") { board.target!!.isVisible },
                                 sequence(
-                                        Inline("Find enemy") {
+                                        Inline("Find enemies") {
                                             reachEnemyBoard.position = board.target!!.lastKnownPosition
                                             NodeStatus.SUCCEEDED
                                         },
@@ -219,7 +219,7 @@ object Combat {
         return sequence(
                 Condition("Avoid storm?") { unit.isUnderStorm },
                 Condition("Air unit?") { unit.isFlying },
-                Delegate {
+                Delegate({ true }) {
                     val storm = FTTBot.game.bullets.minBy { unit.getDistance(it.position) } ?: return@Delegate Fail
                     val targetPosition = unit.position.minus(storm.position).toVector().setLength(92f).add(unit.position.toVector()).toPosition()
                     MoveCommand(unit, targetPosition)
@@ -275,14 +275,13 @@ object Combat {
                             flee(it)
                         }
                 ),
-                parallel(1,
+                sequence(
                         Inline("Assign workers to defend") {
                             workerAttackersBoard.myUnits = workerDefenseBoard.defendingWorkers
                             workerAttackersBoard.enemies = workerDefenseBoard.enemies
                             NodeStatus.SUCCEEDED
                         },
-                        attack(workerAttackersBoard),
-                        Sleep(12)),
+                        attack(workerAttackersBoard)),
                 Sleep
         )
     }
@@ -314,12 +313,12 @@ object Combat {
                                                 val enemyDistance = MutableInt()
                                                 FTTBot.bwem.getPath(myCluster.position, enemyPosition, enemyDistance)
                                                 enemyDistance.toInteger()
-                                            } catch (e : IllegalStateException) {
+                                            } catch (e: IllegalStateException) {
                                                 Int.MAX_VALUE
                                             }
                                         } else
                                             enemyPosition.getDistance(myCluster.position)
-                                        distanceToAttackers - 300 * it.eval + min(distanceToBase / 5.0, 400.0)
+                                        distanceToAttackers - 250 * it.eval + min(distanceToBase / 5.0, 400.0)
                                     }
                                     board.enemies = bestCombat?.enemy?.units
                                             ?: return@Inline NodeStatus.RUNNING
@@ -329,8 +328,9 @@ object Combat {
                                     NodeStatus.SUCCEEDED
                                 },
                                 Condition("Good combat eval?") {
-                                    board.eval > 0.60 ||
-                                            board.eval > 0.4 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me) } }
+                                    board.eval > 0.6 ||
+                                            board.eval > 0.4 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me) } } ||
+                                            UnitQuery.myBases.any { b -> board.enemies.any { b.getDistance(it) < 400 } }
                                 },
                                 Inline("Who should attack?") {
                                     Board.resources.reserveUnits(board.myUnits)
@@ -364,20 +364,5 @@ object Combat {
                         reach(unit, reachBoard)
                 )
         )
-    }
-
-    fun shouldIncreaseDefense(at: Position): Node {
-        var enemyCluster: Cluster<PlayerUnit>?
-        var myCluster: Cluster<PlayerUnit>?
-        return Condition("Should $at be defended?") {
-            enemyCluster = Cluster.enemyClusters.filter {
-                it.units.any { it is MobileUnit && it is Attacker }
-            }.minBy { it.position.getDistance(at) } ?: return@Condition false
-            myCluster = Cluster.myClusters.minBy { it.position.getDistance(at) } ?: return@Condition false
-            val combatEval = CombatEval.probabilityToWin(myCluster!!.units.filter { it is Attacker && it !is Worker }.map { SimUnit.of(it) },
-                    enemyCluster!!.units.filter { it is Attacker && it is MobileUnit && it.isCompleted }.map { SimUnit.of(it) })
-            val distanceFactor = myCluster!!.position.getDistance(enemyCluster!!.position) * 0.0003
-            combatEval < 0.58 - distanceFactor
-        }
     }
 }

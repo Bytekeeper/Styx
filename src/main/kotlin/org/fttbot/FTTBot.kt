@@ -15,9 +15,7 @@ import org.fttbot.task.BoSearch
 import org.fttbot.task.Combat.attacking
 import org.fttbot.task.Combat.defending
 import org.fttbot.task.GatherResources
-import org.fttbot.task.Macro.considerGas
 import org.fttbot.task.Macro.moveSurplusWorkers
-import org.fttbot.task.Macro.preventSupplyBlock
 import org.fttbot.task.Scouting.scout
 import org.fttbot.task.Workers
 import org.openbw.bwapi4j.*
@@ -37,7 +35,7 @@ object FTTBot : BWEventListener {
     private lateinit var bwemInitializer: Future<BWEM>
     val game = BW(this)
     lateinit var self: Player
-    lateinit var enemy: Player
+    lateinit var enemies: List<Player>
 
     val bwem: Map get() = bwemInitializer.get().map
     lateinit var render: MapDrawer
@@ -66,7 +64,7 @@ object FTTBot : BWEventListener {
             bwem
         }
         self = game.interactionHandler.self()
-        enemy = game.interactionHandler.enemy()
+        enemies = listOf(game.interactionHandler.enemy())
         render = game.mapDrawer
 
         Thread.sleep(100)

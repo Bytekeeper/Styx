@@ -31,5 +31,5 @@ object MyInfo {
             .sumBy {
                 ((it as? SupplyProvider)?.supplyProvided() ?: 0) +
                         ((it as? Egg)?.buildType?.supplyProvided() ?: 0)
-            } + Board.resources.supply
+            } + Board.pendingUnits.sumBy { it.supplyProvided() } + Board.resources.supply
 }
