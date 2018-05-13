@@ -10,7 +10,7 @@ import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.estimation.BOPrediction
 import org.fttbot.info.*
 import org.fttbot.strategies.Strategies
-import org.fttbot.strategies.ZvP
+import org.fttbot.strategies.BuildPlans
 import org.fttbot.task.BoSearch
 import org.fttbot.task.Combat.attacking
 import org.fttbot.task.Combat.defending
@@ -85,11 +85,11 @@ object FTTBot : BWEventListener {
 
         buildQueue = fallback(
                 msequence("buildQueue",
-//                ZvP._massZergling()
-//                        ZvP._2HatchMuta(),
-                        ZvP.raceChoice(),
-//                        ZvP.overpool(),
-//                        ZvP._9Pool(),
+//                BuildPlans._massZergling()
+//                        BuildPlans._2HatchMuta(),
+                        BuildPlans.raceChoice(),
+//                        BuildPlans.overpool(),
+//                        BuildPlans._9Pool(),
                         Inline("Crap Check") {
                             LOG.error("The buildqueue SUCCEEDED, so we're more or less dead: ${buildQueue.tree}")
                             NodeStatus.SUCCEEDED

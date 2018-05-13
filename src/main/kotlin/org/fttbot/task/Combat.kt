@@ -300,7 +300,11 @@ object Combat {
                                 },
                                 Inline("Find me some enemies") {
                                     val combatInfos = Cluster.enemyClusters.map {
-                                        val relevantEnemies = it.units.filter { it is Attacker && it.isCompleted }
+                                        val relevantEnemies = it.units.filter {
+                                            it is Attacker && it.isCompleted
+                                                    && (it !is Cloakable || it.isDetected)
+                                                    && (it !is Burrowable || it.isDetected)
+                                        }
                                         val eval = CombatEval.bestProbilityToWin(board.myUnits.map { SimUnit.of(it) }, relevantEnemies.map { SimUnit.of(it) })
                                         CombatInfo(board.myUnits.filter { eval.first.map { it.id }.contains(it.id) }, it, eval.second)
                                     }
@@ -318,7 +322,7 @@ object Combat {
                                             }
                                         } else
                                             enemyPosition.getDistance(myCluster.position)
-                                        distanceToAttackers - 250 * it.eval + min(distanceToBase / 5.0, 400.0)
+                                        distanceToAttackers - 350 * it.eval + min(distanceToBase / 5.0, 400.0)
                                     }
                                     board.enemies = bestCombat?.enemy?.units
                                             ?: return@Inline NodeStatus.RUNNING
@@ -328,8 +332,8 @@ object Combat {
                                     NodeStatus.SUCCEEDED
                                 },
                                 Condition("Good combat eval?") {
-                                    board.eval > 0.6 ||
-                                            board.eval > 0.4 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me) } } ||
+                                    board.eval > 0.65 ||
+                                            board.eval > 0.45 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me) } } ||
                                             UnitQuery.myBases.any { b -> board.enemies.any { b.getDistance(it) < 400 } }
                                 },
                                 Inline("Who should attack?") {

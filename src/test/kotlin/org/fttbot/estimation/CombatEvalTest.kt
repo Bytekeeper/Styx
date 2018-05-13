@@ -671,4 +671,39 @@ class CombatEvalTest {
 
         assertThat(goon).matches { !it.canAttack(muta) }
     }
+
+    @Test
+    fun `7 Mutas vs 16 Marines should lose`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine),
+                SimUnit.of(UnitType.Terran_Marine)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        assertThat(probabilityToWin).isLessThan(0.5)
+    }
 }

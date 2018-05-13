@@ -123,15 +123,15 @@ object Actions {
                     if (force.isZero)
                         return@Inline NodeStatus.FAILED
                     if (!unit.isFlying) {
-                        Potential.addWallRepulsion(force, unit, 2.8f)
-                        Potential.addSafeAreaAttraction(force, unit, 0.7f)
+                        Potential.addWallRepulsion(force, unit, 1.5f)
+                        Potential.addSafeAreaAttraction(force, unit, 1.0f)
                         Potential.addCollisionRepulsion(force, unit, 1f)
                     } else {
-                        Potential.addWallAttraction(force, unit, 0.7f)
+                        Potential.addWallAttraction(force, unit, 0.5f)
                         Potential.addSafeAreaAttractionDirect(force, unit, 1.3f)
                     }
                     force.nor()
-                    reachBoard.position = unit.position + force.scl(92f).toPosition()
+                    reachBoard.position = unit.position + force.scl(unit.topSpeed.toFloat() * 20).toPosition()
                     NodeStatus.SUCCEEDED
                 },
                 Inline("Move move move") {

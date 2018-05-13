@@ -28,11 +28,11 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableList<
             updateClusters(mobileCombatUnits, UnitQuery.myUnits.filterIsInstance(MobileUnit::class.java)
                     .filter { it.isCompleted && it !is Worker && it is Attacker })
             updateClusters(myClusters, UnitQuery.myUnits.filter { it !is Larva })
-            updateClusters(enemyClusters, (UnitQuery.enemyUnits + EnemyInfo.seenUnits).filter { it !is Larva })
+            updateClusters(enemyClusters, (UnitQuery.enemyUnits + EnemyInfo.seenUnits).filter { it !is Larva && it !is Spell })
         }
 
         private fun <U : Unit> updateClusters(clusters: MutableList<Cluster<U>>, relevantUnits: List<U>): List<Cluster<U>> {
-            clusters.forEach { it.units.removeIf { !it.exists() }}
+            clusters.forEach { it.units.removeIf { !it.exists() } }
             val newUnits = relevantUnits - clusters.flatMap { it.units }
             val clusterForNewUnits = Cluster<U>(Position(0, 0), ArrayList())
             clusters.add(clusterForNewUnits)
