@@ -13,7 +13,7 @@ object Tuning {
             CombatEval.amountPower = a * 0.1
             for (sp in 3..20) {
                 CombatEval.strengthPower = sp * 0.1
-                for (es in 1..100) {
+                for (es in 1..30) {
                     CombatEval.evalScale = es * 0.01
                     val hits = CombatEvalTest::class.java.methods
                             .filter { it.returnType == Void.TYPE && it.parameterCount == 0 && !Modifier.isStatic(it.modifiers) }
@@ -24,7 +24,7 @@ object Tuning {
                                     false
                                 }
                             }
-                    if (hits > bestHits) {
+                    if (hits >= bestHits) {
                         bestHits = hits
                         println("hits: $bestHits, a: $a, sp: $sp, es: $es")
                     }

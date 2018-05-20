@@ -16,8 +16,6 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableList<
         val myClusters = ArrayList<Cluster<PlayerUnit>>()
         val enemyClusters = ArrayList<Cluster<PlayerUnit>>()
 
-        fun getClusterOf(unit: PlayerUnit) = mobileCombatUnits.firstOrNull { it.units.contains(unit) }
-
         fun reset() {
             mobileCombatUnits.clear()
             myClusters.clear()
@@ -48,7 +46,13 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableList<
                 }
                 val changes = clusterUnits.count { cu ->
                     val unit = cu.unit
-                    val cluster = clusters.filter { it.position.getDistance(unit.position) < 300 }.reversed().maxBy { it.lastUnitCount }
+                    val cluster = clusters.filter {
+                        it.position.getDistance(unit.position) -
+                                (if (it is GroundAttacker) it.groundWeaponMaxRange
+                                else if (it is AirAttacker) it.airWeaponMaxRange else
+                                    0) -
+                                (if (it is MobileUnit) (it.topSpeed * 20).toInt() else 0)< 300
+                    }.reversed().maxBy { it.lastUnitCount }
                     if (cluster != null) {
                         cluster.aggPosition = cluster.aggPosition.add(unit.position)
                         cluster.units += unit

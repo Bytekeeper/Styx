@@ -58,6 +58,8 @@ object FTTBot : BWEventListener {
     }
 
     override fun onStart() {
+        val start = System.currentTimeMillis()
+        println("${System.currentTimeMillis() - start}");
         bwemInitializer = CompletableFuture.supplyAsync {
             val bwem = BWEM(game)
             bwem.initialize()
@@ -74,6 +76,7 @@ object FTTBot : BWEventListener {
 //        game.interactionHandler.sendText("power overwhelming")
 
         Logger.getLogger("").level = Level.INFO
+        LOG.info("Version 21/05/18")
 
         val racePlayed = self.race
         when (racePlayed) {
@@ -85,11 +88,7 @@ object FTTBot : BWEventListener {
 
         buildQueue = fallback(
                 msequence("buildQueue",
-//                BuildPlans._massZergling()
-//                        BuildPlans._2HatchMuta(),
                         BuildPlans.raceChoice(),
-//                        BuildPlans.overpool(),
-//                        BuildPlans._9Pool(),
                         Inline("Crap Check") {
                             LOG.error("The buildqueue SUCCEEDED, so we're more or less dead: ${buildQueue.tree}")
                             NodeStatus.SUCCEEDED
@@ -167,15 +166,6 @@ object FTTBot : BWEventListener {
 //            a, b -> game.mapDrawer.drawLineMap(a.toPosition(), b.toPosition(), Color.GREEN)
 //        }
 
-            UnitQuery.enemyUnits.forEach {
-//                game.mapDrawer.drawCircleMap(it.position, 16, Color.RED)
-//                game.mapDrawer.drawTextMap(it.position, "${it.initialType}")
-                val predictedPos = EnemyInfo.predictedPositionOf(it, 24)
-                if (it is MobileUnit && it.targetPosition != null) {
-                    game.mapDrawer.drawLineMap(it.position, predictedPos, Color.WHITE)
-                }
-            }
-
             EnemyInfo.seenUnits.forEach {
                 game.mapDrawer.drawCircleMap(it.position, 16, Color.RED)
                 game.mapDrawer.drawTextMap(it.position, "${it.initialType}")
@@ -186,10 +176,14 @@ object FTTBot : BWEventListener {
 //                    LOG.error("OHOH")
 //                }
             Cluster.myClusters.forEach {
-                game.mapDrawer.drawCircleMap(it.position, 300, Color.WHITE)
+                it.units.forEach { e ->
+                    game.mapDrawer.drawLineMap(e.position, it.position, Color.WHITE)
+                }
             }
             Cluster.enemyClusters.forEach {
-                game.mapDrawer.drawCircleMap(it.position, 300, Color.RED)
+                it.units.forEach { e ->
+                    game.mapDrawer.drawLineMap(e.position, it.position, Color.YELLOW)
+                }
             }
         }
     }

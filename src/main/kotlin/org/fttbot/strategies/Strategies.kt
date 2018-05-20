@@ -41,7 +41,7 @@ object Strategies {
                                 MyInfo.myBases.sumBy {
                                     it as PlayerUnit
                                     if (it.isReadyForResources)
-                                        workerMineralDelta(it) / 5
+                                        workerMineralDelta(it) / 7
                                     else
                                         0
                                 } - FTTBot.self.minerals() / 3000 - FTTBot.self.gas() / 1500
@@ -64,7 +64,7 @@ object Strategies {
     fun considerMoreTrainers(): Repeat {
         return Repeat(child = fallback(
                 sequence(
-                        Condition("Too much money?") { Board.resources.minerals > MyInfo.myBases.size * 200 },
+                        Condition("Too much money?") { Board.resources.minerals > MyInfo.myBases.size * 100 },
                         Production.build(UnitType.Zerg_Hatchery)
                 ),
                 Sleep
@@ -79,9 +79,9 @@ object Strategies {
                     var air = 0
                     Repeat(child = sequence(
                             Inline("Determine type of defense") {
-                                val relevantUnits = UnitQuery.ownedUnits.filter {
+                                val relevantUnits = (EnemyInfo.seenUnits + UnitQuery.ownedUnits).filter {
                                     it is Attacker &&
-                                            (it is MobileUnit && it.getDistance(base) < 1800 || it.getDistance(base) < 300)
+                                            (it is MobileUnit && it.getDistance(base) < 1500 || it.getDistance(base) < 300)
                                 }
                                 val enemies = relevantUnits.filter { it.isEnemyUnit }
                                         .map { val res = SimUnit.of(it); res.position = null; res }

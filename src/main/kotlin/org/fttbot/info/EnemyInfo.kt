@@ -1,8 +1,11 @@
 package org.fttbot.info
 
 import bwem.area.Area
+import com.badlogic.gdx.math.Vector2
 import org.fttbot.FTTBot
 import org.fttbot.LazyOnFrame
+import org.fttbot.toPosition
+import org.fttbot.toVector
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.unit.*
 import kotlin.math.max
@@ -18,16 +21,11 @@ object EnemyInfo {
         (UnitQuery.enemyUnits + seenUnits).filter { it is Attacker && it !is Worker}
                 .groupBy { FTTBot.bwem.getArea(it.tilePosition) }
     }
-    var lastFrame: Int = 0
     var nextFrame : Int = 0
-    var lastFramePosition: Map<MobileUnit, Position> = emptyMap()
     var currentFramePosition: Map<MobileUnit, Position> = emptyMap()
 
     fun predictedPositionOf(unit: PlayerUnit, deltaFrames: Int): Position {
-        val lastEnemyPos = EnemyInfo.lastFramePosition[unit] ?: return unit.position
-        val df = deltaFrames / max(1, (FTTBot.frameCount - lastFrame))
-        return unit.position.subtract(lastEnemyPos).multiply(Position(df, df))
-                .add(unit.position)
+        return unit.position.toVector().mulAdd(Vector2(unit.velocityX.toFloat(), unit.velocityY.toFloat()), deltaFrames.toFloat()).toPosition()
     }
 
     fun onUnitShow(unit: PlayerUnit) {
@@ -71,8 +69,6 @@ object EnemyInfo {
                     (FTTBot.frameCount - it.lastSpotted > DISCARD_HIDDEN_UNITS_AFTER) ||
                     ((it !is Burrowable || !it.isBurrowed) && FTTBot.game.bwMap.isVisible(it.tilePosition))
         }
-        lastFramePosition = currentFramePosition
-        lastFrame = nextFrame
         nextFrame = FTTBot.frameCount
         currentFramePosition = UnitQuery.enemyUnits.filterIsInstance(MobileUnit::class.java).map { it to it.position }.toMap()
     }

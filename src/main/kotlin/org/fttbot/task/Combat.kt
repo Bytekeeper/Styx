@@ -130,20 +130,22 @@ object Combat {
     }
 
     fun attackScore(attackerSim: SimUnit, enemySim: SimUnit): Double {
-        return (enemySim.hitPoints + enemySim.shield) / max(attackerSim.damagePerFrameTo(enemySim), 0.01) +
-                (if (enemySim.type == UnitType.Zerg_Larva || enemySim.type == UnitType.Zerg_Egg) 8000 else 0) +
+        val futurePosition = enemySim.position?.add(enemySim.velocity.scl(48f).toPosition())
+        return (enemySim.hitPoints + enemySim.shield) / max(attackerSim.damagePerFrameTo(enemySim), 0.001) +
+                (if (enemySim.type == UnitType.Zerg_Larva || enemySim.type == UnitType.Zerg_Egg || enemySim.type == UnitType.Protoss_Interceptor) 20000 else 0) +
                 (if (enemySim.type.isWorker) -300 else 0) +
-                3 * (enemySim.position?.getDistance(attackerSim.position) ?: 0) +
+                3 * (futurePosition?.getDistance(attackerSim.position) ?: 0) +
                 (if (enemySim.canAttack(attackerSim, 64))
                     -enemySim.damagePerFrameTo(attackerSim)
                 else
-                    0.0) * 1000 +
+                    0.0) * 3000 +
+                (if (enemySim.type == UnitType.Protoss_Carrier) -300 else 0) +
                 (if (enemySim.groundWeapon.type() != WeaponType.None || enemySim.airWeapon.type() != WeaponType.None || enemySim.type == UnitType.Terran_Bunker) -200.0 else 0.0) +
                 (if (enemySim.detected) 0 else 500) +
                 (if (enemySim.type.isAddon) 8000 else 0) +
                 (if (attackerSim.canAttack(enemySim)) {
                     if (attackerSim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed)
-                        -700
+                        -900
                     else
                         -300
                 } else 0) +
@@ -197,8 +199,13 @@ object Combat {
         val reachBoard = ReachBoard(tolerance = 8)
         return fallback(
                 Condition("Close enough?") {
-                    val range = (unit as Attacker).maxRangeVs(board.target!!).toDouble() * (if (unit is Lurker && !unit.isBurrowed) 0.7 else 1.0)
-                    range >= unit.getDistance(board.target)
+                    val range = (unit as Attacker).maxRangeVs(board.target!!).toDouble() * (if (unit is Lurker && !unit.isBurrowed) 0.8 else 1.0)
+                    val distance = unit.getDistance(board.target)
+                    if (unit is Lurker) {
+                        unit.isBurrowed && range * 1.4 >= distance || !unit.isBurrowed && range >= distance
+                    } else {
+                        range >= distance
+                    }
                 },
                 sequence(
                         Inline("Update reach position to ${board.target?.position}") {
@@ -248,10 +255,6 @@ object Combat {
                                                     val myUnits = Cluster.mobileCombatUnits.minBy { base.getDistance(it.position) }
                                                             ?: return@Inline NodeStatus.FAILED
                                                     val unitsAvailable = myUnits.units.filter { Board.resources.units.contains(it) }
-                                                    val relevantEnemies = board.enemies.filter { it is Attacker && it.isCompleted }
-//                                                    val eval = CombatEval.bestProbilityToWin(board.myUnits.map { SimUnit.of(it) }, relevantEnemies.map { SimUnit.of(it) })
-//                                                    val defenders = unitsAvailable.filter { u -> eval.first.any { it.id == u.id } }
-//                                                    board.reluctant = unitsAvailable - defenders
                                                     board.myUnits = myUnits.units
                                                     Board.resources.reserveUnits(unitsAvailable)
                                                     NodeStatus.SUCCEEDED
@@ -271,8 +274,8 @@ object Combat {
         return sequence(
                 fallback(
                         WorkerDefense(base.position, workerDefenseBoard),
-                        DispatchParallel("Flee you worker fools", { workerDefenseBoard.defendingWorkers }) {
-                            flee(it)
+                        DispatchParallel("Flee you worker fools", { UnitQuery.myWorkers.inRadius(base.position, 300).filter { Board.resources.units.contains(it) } }) {
+                            fallback(sequence(flee(it), Sleep), Sleep)
                         }
                 ),
                 sequence(
@@ -307,7 +310,7 @@ object Combat {
                                         }
                                         val eval = CombatEval.bestProbilityToWin(board.myUnits.map { SimUnit.of(it) }, relevantEnemies.map { SimUnit.of(it) })
                                         CombatInfo(board.myUnits.filter { eval.first.map { it.id }.contains(it.id) }, it, eval.second)
-                                    }
+                                    }.filter { ci -> ci.myUnits.any { mine -> ci.enemy.units.any { mine is Attacker && mine.getWeaponAgainst(it).type() != WeaponType.None } } }
                                     val bestCombat = combatInfos.minBy {
                                         val enemyPosition = it.enemy.position
                                         val distanceToBase = MyInfo.myBases.map { base -> base as PlayerUnit; base.getDistance(enemyPosition) }.min()
@@ -322,7 +325,7 @@ object Combat {
                                             }
                                         } else
                                             enemyPosition.getDistance(myCluster.position)
-                                        distanceToAttackers - 350 * it.eval + min(distanceToBase / 5.0, 400.0)
+                                        distanceToAttackers - 200 * it.eval + min(distanceToBase / 5.0, 400.0)
                                     }
                                     board.enemies = bestCombat?.enemy?.units
                                             ?: return@Inline NodeStatus.RUNNING

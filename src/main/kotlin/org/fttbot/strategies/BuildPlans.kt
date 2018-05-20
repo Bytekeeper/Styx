@@ -7,10 +7,12 @@ import org.fttbot.MParallel.Companion.mparallel
 import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.info.EnemyInfo
 import org.fttbot.info.UnitQuery
+import org.fttbot.strategies.BuildPlans._12HatchA
+import org.fttbot.strategies.BuildPlans._12HatchB
+import org.fttbot.strategies.BuildPlans.mainMutasZergUltra
 import org.fttbot.strategies.Strategies.considerBaseDefense
 import org.fttbot.strategies.Strategies.considerBuildingWorkers
 import org.fttbot.strategies.Strategies.considerMoreTrainers
-import org.fttbot.strategies.Strategies.gasTrick
 import org.fttbot.task.Macro
 import org.fttbot.task.Macro.buildExpansion
 import org.fttbot.task.Macro.considerExpansion
@@ -60,25 +62,44 @@ object BuildPlans {
                     build(UnitType.Zerg_Spawning_Pool)
             )
 
-    fun T9Pool(): Node =
-            mparallel(Int.MAX_VALUE,
-                    Repeat(5, trainWorker()),
-                    build(UnitType.Zerg_Spawning_Pool),
-                    trainWorker(),
-                    gasTrick(),
-                    produceSupply(),
-                    Repeat(3, train(UnitType.Zerg_Zergling))
-            )
-
-    fun _1HatchLurker(): Node = mparallel(Int.MAX_VALUE,
-            Repeat(5, trainWorker()),
+    fun _12poolMuta(): Node = mparallel(Int.MAX_VALUE,
+            Repeat(7, trainWorker()),
             build(UnitType.Zerg_Spawning_Pool),
-            trainWorker(),
             buildGas(),
+            trainWorker(),
+            trainWorker(),
+            buildExpansion(),
+            build(UnitType.Zerg_Lair),
+            Repeat(2, train(UnitType.Zerg_Zergling)),
+            trainWorker(),
+            trainWorker(),
+            build(UnitType.Zerg_Spire),
+            trainWorker(),
             produceSupply(),
             trainWorker(),
-            Repeat(3, train(UnitType.Zerg_Zergling)),
+            trainWorker(),
+            produceSupply(),
+            produceSupply(),
+            train(UnitType.Zerg_Mutalisk),
+            train(UnitType.Zerg_Mutalisk),
+            train(UnitType.Zerg_Mutalisk),
+            train(UnitType.Zerg_Mutalisk),
+            trainWorker(),
+            considerBaseDefense(),
+            mainMutasZergUltra()
+    )
+
+
+    fun _12poolLurker(): Node = mparallel(Int.MAX_VALUE,
+            Repeat(7, trainWorker()),
+            build(UnitType.Zerg_Spawning_Pool),
+            trainWorker(),
+            trainWorker(),
+            buildGas(),
+            buildExpansion(),
             build(UnitType.Zerg_Lair),
+            Repeat(2, train(UnitType.Zerg_Zergling)),
+            build(UnitType.Zerg_Hydralisk_Den),
             trainWorker(),
             trainWorker(),
             research(TechType.Lurker_Aspect),
@@ -90,20 +111,6 @@ object BuildPlans {
             considerBuildingWorkers(),
             considerBaseDefense(),
             mainLurker()
-    )
-
-    fun overpoolVsProtoss(): Node = mparallel(Int.MAX_VALUE,
-            Repeat(5, trainWorker()),
-            produceSupply(),
-            build(UnitType.Zerg_Spawning_Pool),
-            trainWorker(),
-            trainWorker(),
-            trainWorker(),
-            Repeat(3, train(UnitType.Zerg_Zergling)),
-            buildExpansion(),
-            buildExpansion(),
-            considerBaseDefense(),
-            mainMutasZergUltra()
     )
 
     fun overpoolVsZerg(): Node = mparallel(Int.MAX_VALUE,
@@ -123,9 +130,9 @@ object BuildPlans {
     fun mainMutasZergUltra(): Node = mparallel(Int.MAX_VALUE,
             considerBuildingWorkers(),
             Macro.preventSupplyBlock(),
-            train(UnitType.Zerg_Mutalisk),
-            train(UnitType.Zerg_Mutalisk),
             considerScourge(),
+            train(UnitType.Zerg_Mutalisk),
+            train(UnitType.Zerg_Mutalisk),
             train(UnitType.Zerg_Mutalisk),
             train(UnitType.Zerg_Mutalisk),
             train(UnitType.Zerg_Mutalisk),
@@ -160,7 +167,7 @@ object BuildPlans {
                             if (MathUtils.random() > 0.7f)
                                 _3HatchLurker()
                             else
-                                _1HatchLurker()
+                                _12poolLurker()
                         } else
                             _2HatchMuta()
                     }
@@ -170,16 +177,13 @@ object BuildPlans {
                     overpoolVsZerg()
             ),
             Delegate {
-                if (MathUtils.random() > 0.8f) {
+                if (MathUtils.random() > 0.9f) {
                     if (MathUtils.random() > 0.7f)
                         _3HatchLurker()
                     else
-                        _1HatchLurker()
-                } else if (MathUtils.randomBoolean()) {
-                    _2HatchMuta()
-                } else {
-                    overpoolVsProtoss()
-                }
+                        _12poolLurker()
+                } else
+                    _12poolMuta()
             }
     )
 
@@ -256,7 +260,7 @@ object BuildPlans {
 
     private fun considerScourge(): Node {
         return Repeat(child = fallback(sequence(
-                Condition("Enemy has air?") { UnitQuery.myUnits.count { it is Scourge } < EnemyInfo.seenUnits.count { it.isFlying && it !is Overlord } },
+                Condition("Enemy has air?") { UnitQuery.myUnits.count { it is Scourge } < (UnitQuery.enemyUnits + EnemyInfo.seenUnits).count { it.isFlying && it !is Overlord } },
                 Inline("Blub") {
                     NodeStatus.SUCCEEDED
                 },

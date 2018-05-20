@@ -45,4 +45,31 @@ internal class CombatTest {
         val scoreZealot = Combat.attackScore(muta, zealot)
         assertThat(scoreGoon).isLessThan(scoreZealot)
     }
+
+    @Test
+    fun `Attack Carrier and not Interceptor`() {
+        val muta = SimUnit.of(UnitType.Zerg_Mutalisk)
+        val enemies = arrayOf(SimUnit.of(UnitType.Protoss_Carrier), SimUnit.of(UnitType.Protoss_Interceptor))
+
+        val target = enemies.map { it to Combat.attackScore(muta, it) }.minBy { it.second }
+        assertThat(target).hasFieldOrPropertyWithValue("first.type", UnitType.Protoss_Carrier)
+    }
+
+    @Test
+    fun `Attack Hydra and not Den`() {
+        val muta = SimUnit.of(UnitType.Zerg_Mutalisk)
+        val enemies = arrayOf(SimUnit.of(UnitType.Zerg_Hydralisk_Den), SimUnit.of(UnitType.Zerg_Hydralisk))
+
+        val target = enemies.map { it to Combat.attackScore(muta, it) }.minBy { it.second }
+        assertThat(target).hasFieldOrPropertyWithValue("first.type", UnitType.Zerg_Hydralisk)
+    }
+
+    @Test
+    fun `Attack Firebat and not Depot`() {
+        val lurker = SimUnit.of(UnitType.Zerg_Lurker)
+        val enemies = arrayOf(SimUnit.of(UnitType.Terran_Firebat), SimUnit.of(UnitType.Terran_Supply_Depot))
+
+        val target = enemies.map { it to Combat.attackScore(lurker, it) }.minBy { it.second }
+        assertThat(target).hasFieldOrPropertyWithValue("first.type", UnitType.Terran_Firebat)
+    }
 }

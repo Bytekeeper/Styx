@@ -55,7 +55,7 @@ class CombatEvalTest {
     }
 
     @Test
-    fun `2 Marines vs 1 Mutalisk should lose slightly`() {
+    fun `2 Marines vs 1 Mutalisk should be evenly matched`() {
         val a = listOf(
                 SimUnit.of(UnitType.Terran_Marine),
                 SimUnit.of(UnitType.Terran_Marine)
@@ -65,7 +65,7 @@ class CombatEvalTest {
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
         assertThat(probabilityToWin).isGreaterThan(0.4)
-        assertThat(probabilityToWin).isLessThan(0.5)
+        assertThat(probabilityToWin).isLessThan(0.6)
     }
 
     @Test
@@ -79,7 +79,7 @@ class CombatEvalTest {
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
         assertThat(probabilityToWin).isGreaterThan(0.45)
-        assertThat(probabilityToWin).isLessThan(0.65)
+        assertThat(probabilityToWin).isLessThan(0.7)
     }
 
     @Test
@@ -113,7 +113,7 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isLessThan(0.33)
+        assertThat(probabilityToWin).isLessThan(0.4)
     }
 
     @Test
@@ -329,7 +329,8 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isLessThan(0.45)
+        assertThat(probabilityToWin).isLessThan(0.5)
+        assertThat(probabilityToWin).isGreaterThan(0.2)
     }
 
     @Test
@@ -378,8 +379,8 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isLessThan(0.6)
-        assertThat(probabilityToWin).isGreaterThan(0.5)
+        assertThat(probabilityToWin).isLessThan(0.4)
+        assertThat(probabilityToWin).isGreaterThan(0.2)
     }
 
     @Test
@@ -408,6 +409,7 @@ class CombatEvalTest {
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
         assertThat(probabilityToWin).isLessThan(0.4)
+        assertThat(probabilityToWin).isGreaterThan(0.1)
     }
 
     @Test
@@ -673,7 +675,7 @@ class CombatEvalTest {
     }
 
     @Test
-    fun `7 Mutas vs 16 Marines should lose`() {
+    fun `7 Mutas vs 14 Marines should lose`() {
         val a = listOf(
                 SimUnit.of(UnitType.Zerg_Mutalisk),
                 SimUnit.of(UnitType.Zerg_Mutalisk),
@@ -697,13 +699,60 @@ class CombatEvalTest {
                 SimUnit.of(UnitType.Terran_Marine),
                 SimUnit.of(UnitType.Terran_Marine),
                 SimUnit.of(UnitType.Terran_Marine),
-                SimUnit.of(UnitType.Terran_Marine),
-                SimUnit.of(UnitType.Terran_Marine),
                 SimUnit.of(UnitType.Terran_Marine)
         )
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
         assertThat(probabilityToWin).isLessThan(0.5)
+    }
+
+    @Test
+    fun `7 Mutas vs 10 Hydras should lose`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Zerg_Hydralisk),
+                SimUnit.of(UnitType.Zerg_Hydralisk),
+                SimUnit.of(UnitType.Zerg_Hydralisk),
+                SimUnit.of(UnitType.Zerg_Hydralisk),
+                SimUnit.of(UnitType.Zerg_Hydralisk),
+                SimUnit.of(UnitType.Zerg_Hydralisk),
+                SimUnit.of(UnitType.Zerg_Hydralisk),
+                SimUnit.of(UnitType.Zerg_Hydralisk),
+                SimUnit.of(UnitType.Zerg_Hydralisk),
+                SimUnit.of(UnitType.Zerg_Hydralisk)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        assertThat(probabilityToWin).isLessThan(0.5)
+    }
+
+    @Test
+    fun `6 Lurkers lose vs 1 cloaked DT`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Lurker),
+                SimUnit.of(UnitType.Zerg_Lurker),
+                SimUnit.of(UnitType.Zerg_Lurker),
+                SimUnit.of(UnitType.Zerg_Lurker),
+                SimUnit.of(UnitType.Zerg_Lurker),
+                SimUnit.of(UnitType.Zerg_Lurker)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Protoss_Dark_Templar)
+        )
+        b.forEach { it.detected = false }
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        assertThat(probabilityToWin).isLessThan(0.3)
     }
 }

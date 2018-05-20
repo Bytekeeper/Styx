@@ -31,7 +31,7 @@ object Potential {
 
     fun addCollisionRepulsion(target: Vector2, unit: MobileUnit, scale: Float = 1f) {
         val relevantUnits = UnitQuery.allUnits
-                .filter { it != unit && !it.isFlying && it.getDistance(unit) < 32 }
+                .filter { it != unit && !it.isFlying && it.getDistance(unit) < 48 }
         val force = unit.position.toVector().scl(relevantUnits.size.toFloat())
         relevantUnits.forEach { force.sub(it.position.toVector()) }
         target.add(force.setLength(scale))

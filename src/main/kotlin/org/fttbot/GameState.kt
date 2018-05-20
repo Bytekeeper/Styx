@@ -142,7 +142,7 @@ data class GameState(var frame: Int,
         var missingMinerals = max(mineralPrice - minerals, 0)
         var missingGas = max(gasPrice - gas, 0)
 
-        if ((missingGas > 0 || missingGas > 0) && workers.isEmpty() || missingGas > 0 && !hasRefinery) {
+        if ((missingGas > 0 || missingMinerals > 0) && workers.isEmpty() || missingGas > 0 && !hasRefinery) {
             throw IllegalStateException()
         }
 

@@ -61,7 +61,11 @@ class MCTS(val units: Map<UnitType, Int>, val tech: Set<TechType>, val upgrades:
             val result = if (notDone(cpy)) {
                 expand(cpy, node)
                 if (node.children?.isEmpty() == false) {
-                    simulate(cpy, node.select(prng, node.maxFrames)!!)
+                    try {
+                        simulate(cpy, node.select(prng, node.maxFrames)!!)
+                    } catch (e: IllegalStateException) {
+                        Int.MAX_VALUE
+                    }
                 } else 0
             } else {
                 val finishedAt = cpy.finishedAt
