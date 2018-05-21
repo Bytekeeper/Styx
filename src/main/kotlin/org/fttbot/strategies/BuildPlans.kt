@@ -71,6 +71,7 @@ object BuildPlans {
             buildExpansion(),
             build(UnitType.Zerg_Lair),
             Repeat(2, train(UnitType.Zerg_Zergling)),
+            considerBaseDefense(),
             trainWorker(),
             trainWorker(),
             build(UnitType.Zerg_Spire),
@@ -85,7 +86,6 @@ object BuildPlans {
             train(UnitType.Zerg_Mutalisk),
             train(UnitType.Zerg_Mutalisk),
             trainWorker(),
-            considerBaseDefense(),
             mainMutasZergUltra()
     )
 
