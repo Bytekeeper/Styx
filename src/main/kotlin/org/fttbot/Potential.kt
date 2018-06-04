@@ -20,8 +20,8 @@ object Potential {
         return center.minus(unit.position).toVector().nor()
     }
 
-    fun addThreatRepulsion(target: Vector2, unit: MobileUnit, scale: Float = 1f) {
-        val threats = (UnitQuery.enemyUnits + EnemyInfo.seenUnits).filter { it.canAttack(unit, 32 * 3) }
+    fun addThreatRepulsion(target: Vector2, unit: MobileUnit, avoidRange : Int? = null, scale: Float = 1f) {
+        val threats = (UnitQuery.enemyUnits + EnemyInfo.seenUnits).filter { it.canAttack(unit, avoidRange ?: 32 * 3) }
         target.add(
                 threats.fold(Vector2()) { acc, playerUnit -> acc.sub(playerUnit.position.toVector()) }
                         .mulAdd(unit.position.toVector(), threats.size.toFloat())

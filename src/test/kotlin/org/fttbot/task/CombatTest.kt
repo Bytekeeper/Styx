@@ -33,6 +33,15 @@ internal class CombatTest {
     }
 
     @Test
+    fun `Muta should attack corsair and not probe`() {
+        val muta = SimUnit.of(UnitType.Zerg_Mutalisk)
+        val enemies = arrayOf(SimUnit.of(UnitType.Protoss_Corsair), SimUnit.of(UnitType.Protoss_Probe))
+
+        val target = enemies.map { it to Combat.attackScore(muta, it) }.minBy { it.second }
+        assertThat(target).hasFieldOrPropertyWithValue("first.type", UnitType.Protoss_Corsair)
+    }
+
+    @Test
     fun `Muta should attack corsair and not Zealot`() {
         val muta = SimUnit.of(UnitType.Zerg_Mutalisk)
         muta.position = Position(0,0)

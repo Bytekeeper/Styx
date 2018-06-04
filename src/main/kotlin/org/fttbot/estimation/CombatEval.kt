@@ -9,7 +9,6 @@ import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.*
 import org.openbw.bwapi4j.unit.*
 import java.lang.Math.pow
-import java.util.*
 import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
@@ -21,7 +20,7 @@ object CombatEval {
     var amountPower = 1.0
     var evalScale = 0.09
 
-    fun minAmountOfAdditionalsForProbability(myUnits: List<SimUnit>, additionalUnits: SimUnit, enemies: List<SimUnit>, minProbability: Double = 0.6): Int {
+    fun minAmountOfAdditionalsForProbability(myUnits: List<SimUnit>, additionalUnits: SimUnit, enemies: List<SimUnit>, minProbability: Double = 0.7): Int {
         if (enemies.isEmpty()) return -1
         for (amount in 0..10) {
             val unitsA = (1..amount).map { additionalUnits }
@@ -31,11 +30,11 @@ object CombatEval {
         return -1
     }
 
-    fun bestProbilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>): Pair<List<SimUnit>, Double> {
+    fun bestProbilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, minProbabilityToAchieve: Double = 0.8): Pair<List<SimUnit>, Double> {
         var best = unitsOfPlayerA
         var bestEval = probabilityToWin(best, unitsOfPlayerB)
         val typesRemaining = best.map { it.type }.toMutableSet()
-        while (!typesRemaining.isEmpty()) {
+        while (!typesRemaining.isEmpty() && bestEval < minProbabilityToAchieve) {
             val bestType = typesRemaining.map { toTest -> toTest to probabilityToWin(best.filter { it.type != toTest }, unitsOfPlayerB) }
                     .maxBy { it.second }!!
             if (bestType.second < bestEval)
@@ -75,16 +74,13 @@ object CombatEval {
                 val gunRange = max(it.airRange, it.groundRange) + 0.1
                 val distance = it.position?.getDistance(center)?.toDouble() ?: fallbackDistance
                 val combatRangeFactor = 0.01 + min(0.99, (gunRange + it.topSpeed * 5) / distance)
-                val splashFactor = if (it.groundWeapon.type().explosionType() == ExplosionType.Enemy_Splash ||
-                        it.groundWeapon.type().explosionType() == ExplosionType.Radial_Splash ||
-                        it.airWeapon.type().explosionType() == DamageType.Explosive ||
-                        it.groundWeapon.type() == WeaponType.Glave_Wurm)
+                val splashFactor = if (it.hasSplashWeapon)
                     (max(0.0, fastsig(unitsOfPlayerB.count { e -> it.determineWeaponAgainst(e).type() != WeaponType.None }.toDouble() - 1) - 0.5) *
                             when (it.type) {
                                 UnitType.Zerg_Mutalisk -> 0.35
                                 else -> 3.0
                             } + 1.0)
-                            else 1.0
+                else 1.0
                 averageDamageOf(it, unitsOfPlayerB) * splashFactor *
                         (if (it.isOrganic) it.hitPoints * medicFactor else it.hitPoints.toDouble() + it.shield) *
                         combatRangeFactor *
@@ -97,16 +93,14 @@ object CombatEval {
             }
 
     private fun averageDamageOf(a: SimUnit, unitsB: List<SimUnit>) =
-            if (!a.isPowered) 0.0 else
-                unitsB.map { b ->
-                    if (b.detected) {
-                        val dmg = a.damagePerFrameTo(b)
-                        if (a.suicideUnit) {
-                            dmg / unitsB.size / 30
-                        } else
-                            dmg
-                    } else 0.0
-                }.average().or(5.0)
+            if (!a.isPowered) 0.0
+            else if (unitsB.isEmpty()) 5.0
+            else {
+                val damages = unitsB.map { b -> if (b.detected) a.damagePerFrameTo(b) else 0.0 }.filter { it > 0.0 }
+                if (damages.isEmpty()) 0.0
+                else if (a.suicideUnit) damages.average() / damages.size / 2
+                else damages.average()
+            }
 }
 
 class SimUnit(val id: Int? = 0,
@@ -119,7 +113,7 @@ class SimUnit(val id: Int? = 0,
               var hitPoints: Int = 0,
               var shield: Int = 0,
               var position: Position? = null,
-              var velocity : Vector2 = Vector2(),
+              var velocity: Vector2 = Vector2(),
               val canHeal: Boolean = false,
               var airWeapon: Weapon = Weapon(WeaponType.None, 0),
               var groundWeapon: Weapon = Weapon(WeaponType.None, 0),
@@ -143,6 +137,11 @@ class SimUnit(val id: Int? = 0,
     val top get() = (position?.y ?: 0) - this.type.dimensionUp()
     val right get() = (position?.x ?: 0) + this.type.dimensionRight()
     val bottom get() = (position?.y ?: 0) + this.type.dimensionDown()
+    val hasSplashWeapon = groundWeapon.type().explosionType() == ExplosionType.Enemy_Splash ||
+            groundWeapon.type().explosionType() == ExplosionType.Radial_Splash ||
+            airWeapon.type().explosionType() == DamageType.Explosive ||
+            airWeapon.type().explosionType() == ExplosionType.Air_Splash ||
+            groundWeapon.type() == WeaponType.Glave_Wurm
 
 
     fun canAttack(other: SimUnit, safety: Int = 0): Boolean {

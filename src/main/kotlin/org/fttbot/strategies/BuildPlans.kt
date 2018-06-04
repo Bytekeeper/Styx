@@ -29,10 +29,7 @@ import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.UpgradeType
-import org.openbw.bwapi4j.unit.Egg
-import org.openbw.bwapi4j.unit.Overlord
-import org.openbw.bwapi4j.unit.Scourge
-import org.openbw.bwapi4j.unit.Zergling
+import org.openbw.bwapi4j.unit.*
 
 object BuildPlans {
     fun _12HatchA(): Node =
@@ -137,17 +134,17 @@ object BuildPlans {
             train(UnitType.Zerg_Mutalisk),
             train(UnitType.Zerg_Mutalisk),
             considerExpansion(),
+            considerMoreTrainers(),
             Macro.considerGas(),
             train(UnitType.Zerg_Mutalisk),
             train(UnitType.Zerg_Mutalisk),
             train(UnitType.Zerg_Mutalisk),
             Repeat(child = train(UnitType.Zerg_Mutalisk)),
-            Repeat(10, child = Delegate { train(UnitType.Zerg_Zergling) }),
-            considerMoreTrainers(),
-            Repeat(child = train(UnitType.Zerg_Ultralisk)),
-            Repeat(child = train(UnitType.Zerg_Zergling)),
+            Repeat(10, child = train(UnitType.Zerg_Zergling)),
             upgrade(UpgradeType.Zerg_Flyer_Attacks),
             upgrade(UpgradeType.Metabolic_Boost),
+            Repeat(child = train(UnitType.Zerg_Ultralisk)),
+            Repeat(child = train(UnitType.Zerg_Zergling)),
             Repeat(UpgradeType.Zerg_Flyer_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Attacks) }),
             Repeat(UpgradeType.Zerg_Melee_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Melee_Attacks) }),
             Repeat(UpgradeType.Zerg_Flyer_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Carapace) }),
@@ -224,11 +221,19 @@ object BuildPlans {
             considerExpansion(),
             Macro.considerGas(),
             upgrade(UpgradeType.Zerg_Carapace),
-            Repeat(child = train(UnitType.Zerg_Lurker)),
-            considerMoreTrainers(),
-            Repeat(child = train(UnitType.Zerg_Zergling)),
             upgrade(UpgradeType.Muscular_Augments),
             upgrade(UpgradeType.Grooved_Spines),
+            Repeat(child = fallback(
+                    sequence(
+                            Condition("Not enough Hydras?") {
+                                UnitQuery.myUnits.count { it is Hydralisk } / (1.0 + UnitQuery.myUnits.count { it is Lurker }) < 0.4
+                            },
+                            train(UnitType.Zerg_Hydralisk)
+                    ),
+                    train(UnitType.Zerg_Lurker))
+            ),
+            considerMoreTrainers(),
+            Repeat(child = train(UnitType.Zerg_Zergling)),
             Repeat(UpgradeType.Zerg_Missile_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Missile_Attacks) }),
             Repeat(UpgradeType.Zerg_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Carapace) })
     )
@@ -260,7 +265,7 @@ object BuildPlans {
 
     private fun considerScourge(): Node {
         return Repeat(child = fallback(sequence(
-                Condition("Enemy has air?") { UnitQuery.myUnits.count { it is Scourge } < (UnitQuery.enemyUnits + EnemyInfo.seenUnits).count { it.isFlying && it !is Overlord } },
+                Condition("Enemy has air?") { UnitQuery.myUnits.count { it is Scourge || it is Egg && it.buildType == UnitType.Zerg_Scourge } < (UnitQuery.enemyUnits + EnemyInfo.seenUnits).count { it.isFlying && it !is Overlord } },
                 Inline("Blub") {
                     NodeStatus.SUCCEEDED
                 },

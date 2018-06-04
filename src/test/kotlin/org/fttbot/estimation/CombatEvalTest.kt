@@ -55,6 +55,19 @@ class CombatEvalTest {
     }
 
     @Test
+    fun `2 Scourge should easily beat 1 Corsair`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Scourge),
+                SimUnit.of(UnitType.Zerg_Scourge)
+        )
+        val b = listOf(SimUnit.of(UnitType.Protoss_Corsair))
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        assertThat(probabilityToWin).isGreaterThan(0.6)
+    }
+
+    @Test
     fun `2 Marines vs 1 Mutalisk should be evenly matched`() {
         val a = listOf(
                 SimUnit.of(UnitType.Terran_Marine),
@@ -754,5 +767,30 @@ class CombatEvalTest {
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
         assertThat(probabilityToWin).isLessThan(0.3)
+    }
+
+    @Test
+    fun `Attack with Scourge vs Goon and Corsair`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Mutalisk),
+                SimUnit.of(UnitType.Zerg_Scourge)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Protoss_Dragoon),
+                SimUnit.of(UnitType.Protoss_Dragoon),
+                SimUnit.of(UnitType.Protoss_Dragoon),
+                SimUnit.of(UnitType.Protoss_Corsair)
+        )
+
+        val bestProbabilityToWin = CombatEval.bestProbilityToWin(a, b)
+
+        assertThat(bestProbabilityToWin.second).isGreaterThan(0.75)
+        assertThat(bestProbabilityToWin.first).anyMatch { it.type == UnitType.Zerg_Scourge }
     }
 }

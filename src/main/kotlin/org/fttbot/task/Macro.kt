@@ -92,11 +92,15 @@ object Macro {
                 UnitQuery.myWorkers.count { it.getDistance(targetBase) < 300 } - UnitQuery.minerals.count { it.getDistance(targetBase) < 300 } * 2
             } ?: return@DispatchParallel Sleep
             Delegate {
-                DispatchParallel("Transfer workers", { relevantWorkers.filter { Board.resources.units.contains(it) }.take(workerDelta) }) {
+                DispatchParallel("Transfer workers", {
+                    relevantWorkers.filter {
+                        it.getDistance(targetBase as PlayerUnit) > 150 && Board.resources.units.contains(it)
+                    }.take(workerDelta)
+                }) {
                     fallback(sequence(
                             ReserveUnit(it),
                             fallback(
-                                    reachSafely(it, (targetBase as PlayerUnit).position, 100),
+                                    reachSafely(it, (targetBase as PlayerUnit).position, 150),
                                     flee(it)
                             )
                     ), Success)
@@ -119,7 +123,7 @@ object Macro {
 
     fun considerExpansion() = Repeat(child = fallback(
             Delegate { Macro.buildExpansion() } onlyIf Condition("should build exe") {
-                UnitQuery.myWorkers.size >= MyInfo.myBases.sumBy { it as PlayerUnit; UnitQuery.minerals.inRadius(it, 300).count() + 2 }
+                UnitQuery.myWorkers.size >= MyInfo.myBases.sumBy { it as PlayerUnit; UnitQuery.minerals.inRadius(it, 300).count() + 3 }
             },
             Sleep)
     )

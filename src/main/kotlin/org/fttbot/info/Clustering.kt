@@ -47,11 +47,7 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableList<
                 val changes = clusterUnits.count { cu ->
                     val unit = cu.unit
                     val cluster = clusters.filter {
-                        it.position.getDistance(unit.position) -
-                                (if (it is GroundAttacker) it.groundWeaponMaxRange
-                                else if (it is AirAttacker) it.airWeaponMaxRange else
-                                    0) -
-                                (if (it is MobileUnit) (it.topSpeed * 20).toInt() else 0)< 300
+                        it.position.getDistance(unit.position) < 400
                     }.reversed().maxBy { it.lastUnitCount }
                     if (cluster != null) {
                         cluster.aggPosition = cluster.aggPosition.add(unit.position)
@@ -70,7 +66,7 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableList<
                 clusters.removeIf { it.units.isEmpty() }
                 clusters.forEach {
                     val size = it.units.size
-                    it.lastUnitCount = size
+                    it.lastUnitCount = it.units.count { it is MobileUnit || it is Attacker }
                     it.position = it.aggPosition.div(size)
                 }
             } while (changes > 0 && maxTries-- > 0)

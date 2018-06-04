@@ -46,16 +46,16 @@ object Combat {
                                     sequence(
                                             Inline("Determine best target") {
                                                 childBoard.target = findBestTarget(board.enemies, unit)
-                                                if (unit is Mutalisk && childBoard.target is Zealot && UnitQuery.enemyUnits.any { it is Dragoon && unit.canAttack(it, 128) }) {
-//                                                    println("!!")
-                                                }
                                                 if (childBoard.target == null)
                                                     NodeStatus.FAILED
                                                 else
                                                     NodeStatus.SUCCEEDED
                                             },
                                             Inline("Determine potentially better position") {
-                                                if (!unit.isFlying || FTTBot.frameCount - lastPositionCheck < 24 || !unit.canAttack(childBoard.target!!))
+                                                if (!unit.isFlying || FTTBot.frameCount - lastPositionCheck < 48 ||
+                                                        (unit is Attacker && !unit.canMoveWithoutBreakingAttack) ||
+                                                        !unit.canAttack(childBoard.target!!) ||
+                                                        unit.isSuicideUnit)
                                                     return@Inline NodeStatus.SUCCEEDED
                                                 lastPositionCheck = FTTBot.frameCount
                                                 val simTarget = SimUnit.of(childBoard.target!!)
@@ -101,7 +101,7 @@ object Combat {
                             )
                         },
                         DispatchParallel("Let reluctants fall back", { board.reluctant.filterIsInstance(MobileUnit::class.java) }) {
-                            fallback(sequence(flee(it), ReserveUnit(it)), Sleep)
+                            fallback(sequence(flee(it, 300), ReserveUnit(it)), Sleep)
                         }))
     }
 
@@ -111,7 +111,8 @@ object Combat {
                     val myHealth = (unit.hitPoints + unit.shields) / (unit.maxHitPoints() + unit.maxShields()).toDouble()
                     !unit.isUnderAttack || myHealth >= hpPercent / 3 ||
                             (unit is SiegeTank && unit.isSieged) ||
-                            (unit is Lurker && unit.isBurrowed)
+                            (unit is Lurker && unit.isBurrowed) ||
+                            (unit.isSuicideUnit)
                 },
                 flee(unit)
         )
@@ -130,19 +131,19 @@ object Combat {
     }
 
     fun attackScore(attackerSim: SimUnit, enemySim: SimUnit): Double {
-        val futurePosition = enemySim.position?.add(enemySim.velocity.scl(48f).toPosition())
+        val futurePosition = enemySim.position?.add(enemySim.velocity.scl(24f * 3).toPosition())
         return (enemySim.hitPoints + enemySim.shield) / max(attackerSim.damagePerFrameTo(enemySim), 0.001) +
-                (if (enemySim.type == UnitType.Zerg_Larva || enemySim.type == UnitType.Zerg_Egg || enemySim.type == UnitType.Protoss_Interceptor) 20000 else 0) +
+                (if (enemySim.type == UnitType.Zerg_Larva || enemySim.type == UnitType.Zerg_Egg || enemySim.type == UnitType.Protoss_Interceptor || enemySim.type.isAddon) 25000 else 0) +
                 (if (enemySim.type.isWorker) -300 else 0) +
-                3 * (futurePosition?.getDistance(attackerSim.position) ?: 0) +
+                1.5 * (futurePosition?.getDistance(attackerSim.position) ?: 0) +
+                1.5 * (enemySim.position?.getDistance(attackerSim.position) ?: 0) +
                 (if (enemySim.canAttack(attackerSim, 64))
                     -enemySim.damagePerFrameTo(attackerSim)
                 else
-                    0.0) * 3000 +
+                    0.0) * (if (enemySim.hasSplashWeapon) 5000 else 3500) +
                 (if (enemySim.type == UnitType.Protoss_Carrier) -300 else 0) +
                 (if (enemySim.groundWeapon.type() != WeaponType.None || enemySim.airWeapon.type() != WeaponType.None || enemySim.type == UnitType.Terran_Bunker) -200.0 else 0.0) +
                 (if (enemySim.detected) 0 else 500) +
-                (if (enemySim.type.isAddon) 8000 else 0) +
                 (if (attackerSim.canAttack(enemySim)) {
                     if (attackerSim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed)
                         -900
@@ -161,6 +162,7 @@ object Combat {
                 },
                 fleeFromStorm(unit),
                 sequence(
+                        fallback(Condition("Can I move safely?") { unit is Attacker && unit.canMoveWithoutBreakingAttack }, Sleep),
                         fallback(
                                 Condition("Can I see you?") { board.target!!.isVisible },
                                 sequence(
@@ -211,7 +213,7 @@ object Combat {
                         Inline("Update reach position to ${board.target?.position}") {
                             val target = board.target!!
                             val dst = min(128.0, target.getDistance(unit) / unit.topSpeed).toInt()
-                            reachBoard.position = EnemyInfo.predictedPositionOf(target, dst)
+                            reachBoard.position = EnemyInfo.predictedPositionOf(target, max(24, dst))
                             if (!FTTBot.game.bwMap.isValidPosition(reachBoard.position)) {
                                 reachBoard.position = target.position
                             }
@@ -238,7 +240,7 @@ object Combat {
             DispatchParallel("Defending", { MyInfo.myBases }) { base ->
                 val board = CombatBoard()
                 base as PlayerUnit
-                parallel(1000,
+                parallel(Int.MAX_VALUE,
                         workerDefense(base),
                         fallback(
                                 sequence(
@@ -246,7 +248,7 @@ object Combat {
                                             val enemyCluster = Cluster.enemyClusters.minBy { base.getDistance(it.position) }
                                                     ?: return@Condition false
                                             board.enemies = enemyCluster.units.filter { enemy ->
-                                                UnitQuery.myBuildings.any { it.getDistance(base) < 300 && enemy.canAttack(it, 32) }
+                                                UnitQuery.myBuildings.any { it.getDistance(base) < 300 && enemy.canAttack(it, 16) }
                                             }
                                             !board.enemies.isEmpty()
                                         },
@@ -255,7 +257,7 @@ object Combat {
                                                     val myUnits = Cluster.mobileCombatUnits.minBy { base.getDistance(it.position) }
                                                             ?: return@Inline NodeStatus.FAILED
                                                     val unitsAvailable = myUnits.units.filter { Board.resources.units.contains(it) }
-                                                    board.myUnits = myUnits.units
+                                                    board.myUnits = unitsAvailable
                                                     Board.resources.reserveUnits(unitsAvailable)
                                                     NodeStatus.SUCCEEDED
                                                 },
@@ -332,10 +334,13 @@ object Combat {
                                     board.reluctant = board.myUnits - bestCombat.myUnits
                                     board.myUnits = bestCombat.myUnits
                                     board.eval = bestCombat.eval
+                                    if ( board.reluctant.all { it is Scourge } && board.reluctant.size > 2 && !board.reluctant.isEmpty()) {
+                                        println("DOH!")
+                                    }
                                     NodeStatus.SUCCEEDED
                                 },
                                 Condition("Good combat eval?") {
-                                    board.eval > 0.65 ||
+                                    board.eval > 0.68 ||
                                             board.eval > 0.45 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me) } } ||
                                             UnitQuery.myBases.any { b -> board.enemies.any { b.getDistance(it) < 400 } }
                                 },
@@ -346,23 +351,23 @@ object Combat {
                                 attack(board)
                         ),
                         DispatchParallel("Flee", { (board.myUnits + board.reluctant).filterIsInstance(MobileUnit::class.java) }) {
-                            fallback(sequence(flee(it), ReserveUnit(it)), joinUp(myCluster, it))
+                            fallback(sequence(flee(it), ReserveUnit(it)), findBetterCluster(myCluster, it))
                         },
                         Sleep)
             },
             Sleep
     )
 
-    private fun joinUp(myCluster: Cluster<MobileUnit>, unit: MobileUnit): Sequence {
+    private fun findBetterCluster(myCluster: Cluster<MobileUnit>, unit: MobileUnit): Sequence {
         val reachBoard = ReachBoard(tolerance = 64)
         return sequence(
                 Inline("Find me some allies") {
-                    reachBoard.position = Cluster.mobileCombatUnits.filter {
-                        it != myCluster &&
-                                FTTBot.bwem.data.getMiniTile(it.position.toWalkPosition()).isWalkable
-                    }.minBy {
-                        it.position.getDistance(myCluster.position)
-                    }?.position
+                    reachBoard.position = Cluster.mobileCombatUnits
+                            .filter { myCluster != it && (unit.isFlying || FTTBot.bwem.data.getMiniTile(it.position.toWalkPosition()).isWalkable) }
+                            .minBy {
+                                it.position.getDistance(unit.position) -
+                                        it.units.count { it.initialType == unit.initialType } * 200
+                            }?.position
                             ?: if (!MyInfo.myBases.isEmpty()) (MyInfo.myBases[0] as PlayerUnit).position else return@Inline NodeStatus.RUNNING
                     NodeStatus.SUCCEEDED
                 },

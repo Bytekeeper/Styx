@@ -51,7 +51,7 @@ object Strategies {
     )
 
     private fun workerMineralDelta(base: PlayerUnit) =
-            2 * UnitQuery.minerals.count { m -> m.getDistance(base.position) < 300 } -
+            2 * UnitQuery.minerals.count { m -> m.getDistance(base.position) < 300 } + 3 * UnitQuery.geysers.count { m -> m.getDistance(base.position) < 300 } -
                     UnitQuery.myWorkers.count { w -> w.getDistance(base.position) < 300 }
 
     fun gasTrick() = msequence("gasTrick",
@@ -64,7 +64,7 @@ object Strategies {
     fun considerMoreTrainers(): Repeat {
         return Repeat(child = fallback(
                 sequence(
-                        Condition("Too much money?") { Board.resources.minerals > MyInfo.myBases.size * 100 },
+                        Condition("Too much money?") { Board.resources.minerals > UnitQuery.myBases.size * 250 },
                         Production.build(UnitType.Zerg_Hatchery)
                 ),
                 Sleep
@@ -81,11 +81,11 @@ object Strategies {
                             Inline("Determine type of defense") {
                                 val relevantUnits = (EnemyInfo.seenUnits + UnitQuery.ownedUnits).filter {
                                     it is Attacker &&
-                                            (it is MobileUnit && it.getDistance(base) < 1500 || it.getDistance(base) < 300)
+                                            (it is MobileUnit && it.getDistance(base) < 2000 || it.getDistance(base) < 300)
                                 }
                                 val enemies = relevantUnits.filter { it.isEnemyUnit }
                                         .map { val res = SimUnit.of(it); res.position = null; res }
-                                val myUnits = relevantUnits.filter { it.isMyUnit && it !is Worker && it.getDistance(base) < 1200 }
+                                val myUnits = relevantUnits.filter { it.isMyUnit && it !is Worker && it.getDistance(base) < 600 }
                                 air = CombatEval.minAmountOfAdditionalsForProbability(
                                         myUnits.map { val u = SimUnit.of(it); u.position = null; u  },
                                         SimUnit.of(UnitType.Zerg_Spore_Colony),

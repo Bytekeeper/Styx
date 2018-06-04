@@ -1,5 +1,6 @@
 package org.fttbot.task
 
+import com.badlogic.gdx.math.MathUtils
 import com.badlogic.gdx.math.Vector2
 import org.fttbot.*
 import org.fttbot.Fallback.Companion.fallback
@@ -43,6 +44,13 @@ object Actions {
         return MaxTries("$unit -> ${board.position}", 12 * 60,
                 fallback(
                         Condition("Reached ${board.position} with $unit") { hasReached(unit, board.position!!, board.tolerance) },
+                        Inline("Make valid") {
+                            if (!FTTBot.game.bwMap.isValidPosition(board.position)) {
+                                board.position = Position(MathUtils.clamp(board.position!!.x, 0, FTTBot.game.bwMap.mapWidth() * 32),
+                                        MathUtils.clamp(board.position!!.y, 0, FTTBot.game.bwMap.mapHeight() * 32))
+                            }
+                            NodeStatus.FAILED
+                        },
                         Repeat(child = msequence("Move $unit to ${board.position}",
                                 ensureCanMove(unit),
                                 Inline("Next waypoint") {
@@ -101,7 +109,7 @@ object Actions {
         )
     }
 
-    fun flee(unit: MobileUnit): Sequence {
+    fun flee(unit: MobileUnit, avoidRange: Int? = null): Sequence {
         val reachBoard = ReachBoard(tolerance = 4)
         val fleeBoard = FleeBoard()
         return sequence(
@@ -119,7 +127,7 @@ object Actions {
                 },
                 Inline("Threat Vector") {
                     val force = Vector2()
-                    Potential.addThreatRepulsion(force, unit)
+                    Potential.addThreatRepulsion(force, unit, avoidRange)
                     if (force.isZero)
                         return@Inline NodeStatus.FAILED
                     if (!unit.isFlying) {
