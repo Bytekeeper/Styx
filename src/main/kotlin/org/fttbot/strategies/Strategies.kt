@@ -81,13 +81,13 @@ object Strategies {
                             Inline("Determine type of defense") {
                                 val relevantUnits = (EnemyInfo.seenUnits + UnitQuery.ownedUnits).filter {
                                     it is Attacker &&
-                                            (it is MobileUnit && it.getDistance(base) < 2000 || it.getDistance(base) < 300)
+                                            (it is MobileUnit && it.getDistance(base) < 1200 || it.getDistance(base) < 300)
                                 }
                                 val enemies = relevantUnits.filter { it.isEnemyUnit }
                                         .map { val res = SimUnit.of(it); res.position = null; res }
                                 val myUnits = relevantUnits.filter { it.isMyUnit && it !is Worker && it.getDistance(base) < 600 }
                                 air = CombatEval.minAmountOfAdditionalsForProbability(
-                                        myUnits.map { val u = SimUnit.of(it); u.position = null; u  },
+                                        myUnits.map { val u = SimUnit.of(it); u.position = null; u },
                                         SimUnit.of(UnitType.Zerg_Spore_Colony),
                                         enemies
                                 )
@@ -101,23 +101,21 @@ object Strategies {
                                 else
                                     NodeStatus.SUCCEEDED
                             },
-                            parallel(2,
-                                    fallback(
-                                            Condition("Air defense not needed?") { air <= 0 },
-                                            DispatchParallel("Build spores", { (1..air).toList() }) {
-                                                Production.build(UnitType.Zerg_Spore_Colony, false, { base.tilePosition })
-                                            }
-                                    ),
-                                    fallback(
-                                            Condition("Ground defense not needed?") { ground <= 0 },
-                                            parallel(2,
+                            fallback(
+                                    parallel(2,
+                                            fallback(
+                                                    Condition("Air defense not needed?") { air <= 0 },
+                                                    DispatchParallel("Build spores", { (1..air).toList() }) {
+                                                        Production.build(UnitType.Zerg_Spore_Colony, false, { base.tilePosition })
+                                                    }
+                                            ),
+                                            fallback(
+                                                    Condition("Ground defense not needed?") { ground <= 0 },
                                                     DispatchParallel("Build sunkens", { (1..ground).toList() }) {
                                                         Production.build(UnitType.Zerg_Sunken_Colony, false, { base.tilePosition })
-                                                    },
-                                                    Production.train(UnitType.Zerg_Zergling, { base.tilePosition })
+                                                    }
                                             )
-                                    )
-                            )
+                                    ), Sleep)
                     ))
                 },
                 Sleep

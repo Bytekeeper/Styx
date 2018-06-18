@@ -7,15 +7,11 @@ import org.fttbot.MParallel.Companion.mparallel
 import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.info.EnemyInfo
 import org.fttbot.info.UnitQuery
-import org.fttbot.strategies.BuildPlans._12HatchA
-import org.fttbot.strategies.BuildPlans._12HatchB
-import org.fttbot.strategies.BuildPlans.mainMutasZergUltra
 import org.fttbot.strategies.Strategies.considerBaseDefense
 import org.fttbot.strategies.Strategies.considerBuildingWorkers
-import org.fttbot.strategies.Strategies.considerMoreTrainers
+import org.fttbot.strategies.Strategies.gasTrick
 import org.fttbot.task.Macro
 import org.fttbot.task.Macro.buildExpansion
-import org.fttbot.task.Macro.considerExpansion
 import org.fttbot.task.Production
 import org.fttbot.task.Production.build
 import org.fttbot.task.Production.buildGas
@@ -30,6 +26,7 @@ import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.UpgradeType
 import org.openbw.bwapi4j.unit.*
+import kotlin.math.min
 
 object BuildPlans {
     fun _12HatchA(): Node =
@@ -57,6 +54,38 @@ object BuildPlans {
                     trainWorker(),
                     trainWorker(),
                     build(UnitType.Zerg_Spawning_Pool)
+            )
+
+    fun _3HatchZerg(): Node =
+            mparallel(Int.MAX_VALUE,
+                    Repeat(5, trainWorker()),
+                    build(UnitType.Zerg_Spawning_Pool),
+                    trainWorker(),
+                    gasTrick(),
+                    produceSupply(),
+                    train(UnitType.Zerg_Zergling),
+                    train(UnitType.Zerg_Zergling),
+                    train(UnitType.Zerg_Zergling),
+                    Macro.buildExpansion(),
+                    trainWorker(),
+                    Macro.buildExpansion(),
+                    trainWorker(),
+                    train(UnitType.Zerg_Zergling),
+                    produceSupply(),
+                    train(UnitType.Zerg_Zergling),
+                    trainWorker(),
+                    considerBaseDefense(),
+                    USequence(
+                            Utility({ min(Utilities.expansionUtility * 1.8, 1.0) }, Macro.buildExpansion()),
+                            Utility({ Utilities.moreTrainersUtility }, Delegate { Production.build(UnitType.Zerg_Hatchery) }),
+                            Utility({ Utilities.moreGasUtility * 0.8 }, Production.buildGas()),
+                            Utility({ Utilities.moreSupplyUtility }, produceSupply()),
+                            Utility({ Utilities.moreWorkersUtility }, trainWorker()),
+                            Utility({ min(1.0, UnitQuery.myUnits.count { it is Worker } / (12.0 + UnitQuery.myUnits.count { it is Zergling })) }, train(UnitType.Zerg_Zergling))
+                    ),
+                    upgrade(UpgradeType.Metabolic_Boost),
+                    upgrade(UpgradeType.Zerg_Carapace),
+                    upgrade(UpgradeType.Zerg_Melee_Attacks)
             )
 
     fun _12poolMuta(): Node = mparallel(Int.MAX_VALUE,
@@ -105,7 +134,6 @@ object BuildPlans {
             train(UnitType.Zerg_Lurker),
             train(UnitType.Zerg_Lurker),
             train(UnitType.Zerg_Lurker),
-            considerBuildingWorkers(),
             considerBaseDefense(),
             mainLurker()
     )
@@ -125,35 +153,31 @@ object BuildPlans {
     )
 
     fun mainMutasZergUltra(): Node = mparallel(Int.MAX_VALUE,
-            considerBuildingWorkers(),
-            Macro.preventSupplyBlock(),
-            considerScourge(),
-            train(UnitType.Zerg_Mutalisk),
-            train(UnitType.Zerg_Mutalisk),
-            train(UnitType.Zerg_Mutalisk),
-            train(UnitType.Zerg_Mutalisk),
-            train(UnitType.Zerg_Mutalisk),
-            considerExpansion(),
-            considerMoreTrainers(),
-            Macro.considerGas(),
-            train(UnitType.Zerg_Mutalisk),
-            train(UnitType.Zerg_Mutalisk),
-            train(UnitType.Zerg_Mutalisk),
-            Repeat(child = train(UnitType.Zerg_Mutalisk)),
-            Repeat(10, child = train(UnitType.Zerg_Zergling)),
-            upgrade(UpgradeType.Zerg_Flyer_Attacks),
             upgrade(UpgradeType.Metabolic_Boost),
-            Repeat(child = train(UnitType.Zerg_Ultralisk)),
-            Repeat(child = train(UnitType.Zerg_Zergling)),
-            Repeat(UpgradeType.Zerg_Flyer_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Attacks) }),
-            Repeat(UpgradeType.Zerg_Melee_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Melee_Attacks) }),
-            Repeat(UpgradeType.Zerg_Flyer_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Carapace) }),
-            upgrade(UpgradeType.Adrenal_Glands),
-            Repeat(UpgradeType.Zerg_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Carapace) }),
-            Repeat(UpgradeType.Zerg_Flyer_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Carapace) }),
-            upgrade(UpgradeType.Anabolic_Synthesis),
-            upgrade(UpgradeType.Chitinous_Plating),
-            Repeat(UpgradeType.Zerg_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Carapace) })
+            USequence(
+                    Utility({ Utilities.expansionUtility }, fallback(Macro.buildExpansion(), Sleep)),
+                    Utility({ Utilities.moreTrainersUtility }, fallback(Production.build(UnitType.Zerg_Hatchery), Sleep)),
+                    Utility({ Utilities.moreGasUtility }, fallback(Production.buildGas(), Sleep)),
+                    Utility({ Utilities.moreSupplyUtility }, produceSupply()),
+                    Utility({ Utilities.moreWorkersUtility }, trainWorker()),
+                    Utility({ min(1.0, UnitQuery.myWorkers.size / (UnitQuery.myUnits.count { it is Mutalisk } * 1.5 + 15.0)) }, train(UnitType.Zerg_Mutalisk)),
+                    Utility({ min(1.0, UnitQuery.myUnits.count { it is Mutalisk } / (UnitQuery.myUnits.count { it is Ultralisk } * 3.0 + 25.0)) }, train(UnitType.Zerg_Ultralisk)),
+                    Utility({ min(1.0, 5 / (0.1 + UnitQuery.myUnits.count { it is Zergling })) }, train(UnitType.Zerg_Zergling)),
+                    Utility({
+                        (UnitQuery.enemyUnits + EnemyInfo.seenUnits).count { it.isFlying && it !is Overlord } /
+                                (UnitQuery.myUnits.count { it is Scourge || it is Egg && it.buildType == UnitType.Zerg_Scourge } + 2.1)
+                    }, train(UnitType.Zerg_Scourge))
+            ),
+            upgrade(UpgradeType.Zerg_Flyer_Attacks)
+//            Repeat(UpgradeType.Zerg_Flyer_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Attacks) }),
+//            Repeat(UpgradeType.Zerg_Melee_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Melee_Attacks) }),
+//            Repeat(UpgradeType.Zerg_Flyer_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Carapace) }),
+//            upgrade(UpgradeType.Adrenal_Glands),
+//            Repeat(UpgradeType.Zerg_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Carapace) }),
+//            Repeat(UpgradeType.Zerg_Flyer_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Carapace) }),
+//            upgrade(UpgradeType.Anabolic_Synthesis),
+//            upgrade(UpgradeType.Chitinous_Plating),
+//            Repeat(UpgradeType.Zerg_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Carapace) })
     )
 
     fun raceChoice(): Node = fallback(
@@ -262,15 +286,4 @@ object BuildPlans {
                     fallback(buildGas(), Success),
                     mainMutasZergUltra()
             )
-
-    private fun considerScourge(): Node {
-        return Repeat(child = fallback(sequence(
-                Condition("Enemy has air?") { UnitQuery.myUnits.count { it is Scourge || it is Egg && it.buildType == UnitType.Zerg_Scourge } < (UnitQuery.enemyUnits + EnemyInfo.seenUnits).count { it.isFlying && it !is Overlord } },
-                Inline("Blub") {
-                    NodeStatus.SUCCEEDED
-                },
-                train(UnitType.Zerg_Scourge)
-        ), Sleep))
-    }
-
 }

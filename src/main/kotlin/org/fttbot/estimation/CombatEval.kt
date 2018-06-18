@@ -20,7 +20,7 @@ object CombatEval {
     var amountPower = 1.0
     var evalScale = 0.09
 
-    fun minAmountOfAdditionalsForProbability(myUnits: List<SimUnit>, additionalUnits: SimUnit, enemies: List<SimUnit>, minProbability: Double = 0.7): Int {
+    fun minAmountOfAdditionalsForProbability(myUnits: List<SimUnit>, additionalUnits: SimUnit, enemies: List<SimUnit>, minProbability: Double = 0.6): Int {
         if (enemies.isEmpty()) return -1
         for (amount in 0..10) {
             val unitsA = (1..amount).map { additionalUnits }
@@ -98,7 +98,7 @@ object CombatEval {
             else {
                 val damages = unitsB.map { b -> if (b.detected) a.damagePerFrameTo(b) else 0.0 }.filter { it > 0.0 }
                 if (damages.isEmpty()) 0.0
-                else if (a.suicideUnit) damages.average() / damages.size / 2
+                else if (a.suicideUnit) damages.average() / damages.size
                 else damages.average()
             }
 }

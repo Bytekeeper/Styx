@@ -81,4 +81,14 @@ internal class CombatTest {
         val target = enemies.map { it to Combat.attackScore(lurker, it) }.minBy { it.second }
         assertThat(target).hasFieldOrPropertyWithValue("first.type", UnitType.Terran_Firebat)
     }
+
+    @Test
+    fun `Attack Siege Tank and not Worker`() {
+        val lurker = SimUnit.of(UnitType.Zerg_Lurker)
+        lurker.isBurrowed = true
+        val enemies = arrayOf(SimUnit.of(UnitType.Terran_SCV), SimUnit.of(UnitType.Terran_Siege_Tank_Siege_Mode))
+
+        val target = enemies.map { it to Combat.attackScore(lurker, it) }.minBy { it.second }
+        assertThat(target).hasFieldOrPropertyWithValue("first.type", UnitType.Terran_Siege_Tank_Siege_Mode)
+    }
 }

@@ -135,8 +135,8 @@ object Combat {
         return (enemySim.hitPoints + enemySim.shield) / max(attackerSim.damagePerFrameTo(enemySim), 0.001) +
                 (if (enemySim.type == UnitType.Zerg_Larva || enemySim.type == UnitType.Zerg_Egg || enemySim.type == UnitType.Protoss_Interceptor || enemySim.type.isAddon) 25000 else 0) +
                 (if (enemySim.type.isWorker) -300 else 0) +
-                1.5 * (futurePosition?.getDistance(attackerSim.position) ?: 0) +
-                1.5 * (enemySim.position?.getDistance(attackerSim.position) ?: 0) +
+                1.0 * (futurePosition?.getDistance(attackerSim.position) ?: 0) +
+                2.0 * (enemySim.position?.getDistance(attackerSim.position) ?: 0) +
                 (if (enemySim.canAttack(attackerSim, 64))
                     -enemySim.damagePerFrameTo(attackerSim)
                 else
@@ -248,7 +248,7 @@ object Combat {
                                             val enemyCluster = Cluster.enemyClusters.minBy { base.getDistance(it.position) }
                                                     ?: return@Condition false
                                             board.enemies = enemyCluster.units.filter { enemy ->
-                                                UnitQuery.myBuildings.any { it.getDistance(base) < 300 && enemy.canAttack(it, 16) }
+                                                UnitQuery.myBuildings.any { it.getDistance(base) < 300 && enemy.canAttack(it, 32) }
                                             }
                                             !board.enemies.isEmpty()
                                         },
@@ -327,7 +327,7 @@ object Combat {
                                             }
                                         } else
                                             enemyPosition.getDistance(myCluster.position)
-                                        distanceToAttackers - 200 * it.eval + min(distanceToBase / 5.0, 400.0)
+                                        distanceToAttackers - 100 * it.eval + min(distanceToBase / 5.0, 400.0)
                                     }
                                     board.enemies = bestCombat?.enemy?.units
                                             ?: return@Inline NodeStatus.RUNNING
@@ -340,9 +340,8 @@ object Combat {
                                     NodeStatus.SUCCEEDED
                                 },
                                 Condition("Good combat eval?") {
-                                    board.eval > 0.68 ||
-                                            board.eval > 0.45 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me) } } ||
-                                            UnitQuery.myBases.any { b -> board.enemies.any { b.getDistance(it) < 400 } }
+                                    board.eval > 0.65 ||
+                                            board.eval > 0.45 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me, 32) } }
                                 },
                                 Inline("Who should attack?") {
                                     Board.resources.reserveUnits(board.myUnits)

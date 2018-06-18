@@ -5,9 +5,11 @@ import com.badlogic.gdx.math.Vector2
 import org.fttbot.info.EnemyInfo
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.canAttack
+import org.fttbot.info.inRadius
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.WalkPosition
+import org.openbw.bwapi4j.unit.Attacker
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.Unit
 import org.openbw.bwapi4j.unit.Worker
@@ -20,8 +22,8 @@ object Potential {
         return center.minus(unit.position).toVector().nor()
     }
 
-    fun addThreatRepulsion(target: Vector2, unit: MobileUnit, avoidRange : Int? = null, scale: Float = 1f) {
-        val threats = (UnitQuery.enemyUnits + EnemyInfo.seenUnits).filter { it.canAttack(unit, avoidRange ?: 32 * 3) }
+    fun addThreatRepulsion(target: Vector2, unit: MobileUnit, avoidRange: Int? = null, scale: Float = 1f) {
+        val threats = (UnitQuery.enemyUnits + EnemyInfo.seenUnits).filter { it.canAttack(unit, avoidRange ?: 48) }
         target.add(
                 threats.fold(Vector2()) { acc, playerUnit -> acc.sub(playerUnit.position.toVector()) }
                         .mulAdd(unit.position.toVector(), threats.size.toFloat())
@@ -97,9 +99,11 @@ object Potential {
     }
 
     private fun reallySafePlace(): Position? {
-        return UnitQuery.myBases.maxBy {
-            UnitQuery.inRadius(it.position, 300).count { it is Worker }
-        }?.position
+        return UnitQuery.myBases
+                .filter { UnitQuery.enemyUnits.inRadius(it.position, 300).count { it is Attacker && it !is Worker } < 3 }
+                .maxBy {
+                    UnitQuery.inRadius(it.position, 300).count { it is Worker }
+                }?.position
     }
 
     fun addSafeAreaAttractionDirect(target: Vector2, unit: MobileUnit, scale: Float = 1f) {

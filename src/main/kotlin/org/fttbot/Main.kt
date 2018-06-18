@@ -10,7 +10,7 @@ fun main(args: Array<String>) {
     // Autostart Chaoslauncher
     // Combined with Chaoslauncher -> Settings -> Run Starcraft on Startup
     // SC will be autostarted at this moment
-    ProcessHelper.startChaosLauncherProcess()
+//    ProcessHelper.startChaosLauncherProcess()
 
     FTTBot.start(args.contains("debug"))
 }
