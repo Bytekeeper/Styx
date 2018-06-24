@@ -52,11 +52,13 @@ object CombatEval {
                 .map { it.position }.fold(Position(0, 0)) { s, t -> if (t != null) s.add(t) else s }
                 .divide(Position(amountOfUnits, amountOfUnits))
 
-        val medicFactorA = fastsig(unitsOfPlayerA.count { it.canHeal }.toDouble() * 2) * 1.4 + 1.0
-        val medicFactorB = fastsig(unitsOfPlayerB.count { it.canHeal }.toDouble() * 2) * 1.4 + 1.0
+        val medicFactorA = fastsig(unitsOfPlayerA.count { it.canHeal }.toDouble() * 2) * 1.5 + 1.0
+        val medicFactorB = fastsig(unitsOfPlayerB.count { it.canHeal }.toDouble() * 2) * 1.5 + 1.0
+        val repairFactorA = fastsig(unitsOfPlayerA.count { it.canRepair }.toDouble() * 0.3) * 2.8 + 1.0
+        val repairFactorB = fastsig(unitsOfPlayerB.count { it.canRepair }.toDouble() * 0.3) * 2.8 + 1.0
 
-        val alpha = strength(unitsOfPlayerA, unitsOfPlayerB, center, medicFactorA, fallbackDistance)
-        val beta = strength(unitsOfPlayerB, unitsOfPlayerA, center, medicFactorB, fallbackDistance)
+        val alpha = strength(unitsOfPlayerA, unitsOfPlayerB, center, medicFactorA, repairFactorA, fallbackDistance)
+        val beta = strength(unitsOfPlayerB, unitsOfPlayerA, center, medicFactorB, repairFactorB, fallbackDistance)
 
         // Lanchester's Law
         val eA = alpha.map { pow(it, strengthPower) }.average().or(0.0)
@@ -69,7 +71,7 @@ object CombatEval {
         return result
     }
 
-    private fun strength(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, center: Position, medicFactor: Double, fallbackDistance: Double) =
+    private fun strength(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, center: Position, medicFactor: Double, repairFactor: Double, fallbackDistance: Double) =
             unitsOfPlayerA.map {
                 val gunRange = max(it.airRange, it.groundRange) + 0.1
                 val distance = it.position?.getDistance(center)?.toDouble() ?: fallbackDistance
@@ -82,7 +84,9 @@ object CombatEval {
                             } + 1.0)
                 else 1.0
                 averageDamageOf(it, unitsOfPlayerB) * splashFactor *
-                        (if (it.isOrganic) it.hitPoints * medicFactor else it.hitPoints.toDouble() + it.shield) *
+                        (if (it.isOrganic) (it.hitPoints + it.shield) * medicFactor
+                        else if (it.isRepairable) (it.hitPoints.toDouble() + it.shield) * repairFactor
+                        else it.hitPoints.toDouble() + it.shield) *
                         combatRangeFactor *
                         when (it.type) {
                             UnitType.Zerg_Lurker -> if (it.isBurrowed) 0.9 else 0.7 // Has to walk and burrow before attacking
@@ -98,7 +102,7 @@ object CombatEval {
             else {
                 val damages = unitsB.map { b -> if (b.detected) a.damagePerFrameTo(b) else 0.0 }.filter { it > 0.0 }
                 if (damages.isEmpty()) 0.0
-                else if (a.suicideUnit) damages.average() / damages.size
+                else if (a.suicideUnit) damages.average() / damages.size / 2.0
                 else damages.average()
             }
 }
@@ -115,6 +119,7 @@ class SimUnit(val id: Int? = 0,
               var position: Position? = null,
               var velocity: Vector2 = Vector2(),
               val canHeal: Boolean = false,
+              val canRepair: Boolean = false,
               var airWeapon: Weapon = Weapon(WeaponType.None, 0),
               var groundWeapon: Weapon = Weapon(WeaponType.None, 0),
               val isAir: Boolean = false,
@@ -130,6 +135,7 @@ class SimUnit(val id: Int? = 0,
               var airRange: Int,
               val suicideUnit: Boolean,
               val isOrganic: Boolean,
+              val isRepairable: Boolean,
               var isCloaked: Boolean,
               var isBurrowed: Boolean) {
     val isAttacker = groundWeapon.type() != WeaponType.None || airWeapon.type() != WeaponType.None
@@ -184,7 +190,8 @@ class SimUnit(val id: Int? = 0,
                 shield = unit.shields,
                 position = unit.position,
                 velocity = Vector2(unit.velocityX.toFloat(), unit.velocityY.toFloat()),
-                canHeal = unit.initialType == UnitType.Terran_Medic,
+                canHeal = unit is Medic,
+                canRepair = unit is SCV,
                 airWeapon = (unit as? AirAttacker)?.airWeapon
                         ?: if (unit is Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(WeaponType.None, 0),
                 groundWeapon = (unit as? GroundAttacker)?.groundWeapon
@@ -202,6 +209,7 @@ class SimUnit(val id: Int? = 0,
                 airRange = ((unit as? AirAttacker)?.airWeaponMaxRange ?: 0) + if (unit is Bunker) 64 else 0,
                 suicideUnit = unit.isSuicideUnit,
                 isOrganic = unit.initialType.isOrganic,
+                isRepairable = unit is Mechanical && unit.initialType.race == Race.Terran,
                 isCloaked = unit is Cloakable && (unit.isCloaked || unit.order == Order.Cloak),
                 isBurrowed = unit is Burrowable && (unit.isBurrowed || unit.order == Order.Burrowing)
         )
@@ -211,6 +219,7 @@ class SimUnit(val id: Int? = 0,
                 hitPoints = type.maxHitPoints(),
                 shield = type.maxShields(),
                 canHeal = type == UnitType.Terran_Medic,
+                canRepair = type == UnitType.Terran_SCV,
                 airWeapon = if (type == UnitType.Terran_Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(type.airWeapon(), 0),
                 groundWeapon = if (type == UnitType.Terran_Bunker) Weapon(WeaponType.Gauss_Rifle, 0) else Weapon(type.groundWeapon(), 0),
                 isAir = type.isFlyer,
@@ -225,6 +234,7 @@ class SimUnit(val id: Int? = 0,
                 suicideUnit = when (type) { UnitType.Zerg_Scourge, UnitType.Terran_Vulture_Spider_Mine, UnitType.Protoss_Scarab -> true; else -> false
                 },
                 isOrganic = type.isOrganic,
+                isRepairable = type.isMechanical && type.race == Race.Terran,
                 isBurrowed = false,
                 isCloaked = false
         )
@@ -258,7 +268,7 @@ class SimUnit(val id: Int? = 0,
         val weapon = determineWeaponAgainst(other)
         return if (weapon.type() == WeaponType.None) 0.0
         else directDamage(other) / weapon.type().damageCooldown() *
-                (if (type == UnitType.Terran_Bunker) 60.0 else 1.0)
+                (if (type == UnitType.Terran_Bunker) 80.0 else 1.0)
     }
 
     fun determineWeaponAgainst(other: SimUnit) = if (other.isAir) airWeapon else groundWeapon

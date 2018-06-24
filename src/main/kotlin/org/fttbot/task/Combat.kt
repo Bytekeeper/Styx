@@ -52,7 +52,9 @@ object Combat {
                                                     NodeStatus.SUCCEEDED
                                             },
                                             Inline("Determine potentially better position") {
-                                                if (!unit.isFlying || FTTBot.frameCount - lastPositionCheck < 48 ||
+                                                if (FTTBot.frameCount - lastPositionCheck < 4 * 24 ||
+                                                        unit is Lurker ||
+                                                        unit is SiegeTank ||
                                                         (unit is Attacker && !unit.canMoveWithoutBreakingAttack) ||
                                                         !unit.canAttack(childBoard.target!!) ||
                                                         unit.isSuicideUnit)
@@ -71,7 +73,8 @@ object Combat {
                                                 var result: Position? = childBoard.betterPosition
                                                 for (i in 1..15) {
                                                     val pos = tv.setToRandomDirection().scl(rnd.nextFloat() * (weaponRange + 32)).add(childBoard.target!!.position.toVector()).toPosition()
-                                                    if (FTTBot.game.bwMap.isValidPosition(pos) && unit.getDistance(pos) < 128) {
+                                                    if (FTTBot.game.bwMap.isValidPosition(pos) &&
+                                                            (unit.isFlying || FTTBot.game.bwMap.isWalkable(pos.toWalkPosition())) && unit.getDistance(pos) < 128) {
                                                         simUnit.position = pos
                                                         if (simUnit.canAttack(simTarget)) {
                                                             val remainingThreats = relevantEnemies.count { it.canAttack(simUnit, 32) }
@@ -89,9 +92,10 @@ object Combat {
                                                     avoidDamageBelowHealth(unit, avgHealth),
                                                     fallback(
                                                             Condition("Good position?") {
-                                                                childBoard.betterPosition == null || unit.getDistance(childBoard.betterPosition!!) < 8
+                                                                childBoard.betterPosition == null || unit.getDistance(childBoard.betterPosition!!) < (if (unit.isFlying) 8 else 32)
                                                             },
-                                                            Delegate({ childBoard.betterPosition!!.getDistance(unit.targetPosition) > 8 }) { reach(unit, childBoard.betterPosition!!, 8) }
+                                                            Delegate({ childBoard.betterPosition!!.getDistance(unit.targetPosition) > (if (unit.isFlying) 8 else 32) })
+                                                            { reach(unit, childBoard.betterPosition!!, (if (unit.isFlying) 8 else 32)) }
                                                     ),
                                                     attack(unit, childBoard)
                                             )
@@ -109,7 +113,7 @@ object Combat {
         return fallback(
                 Condition("Health good, not under attack or just not fit for running?") {
                     val myHealth = (unit.hitPoints + unit.shields) / (unit.maxHitPoints() + unit.maxShields()).toDouble()
-                    !unit.isUnderAttack || myHealth >= hpPercent / 3 ||
+                    !unit.isUnderAttack || myHealth >= hpPercent / 2 ||
                             (unit is SiegeTank && unit.isSieged) ||
                             (unit is Lurker && unit.isBurrowed) ||
                             (unit.isSuicideUnit)
@@ -134,7 +138,7 @@ object Combat {
         val futurePosition = enemySim.position?.add(enemySim.velocity.scl(24f * 3).toPosition())
         return (enemySim.hitPoints + enemySim.shield) / max(attackerSim.damagePerFrameTo(enemySim), 0.001) +
                 (if (enemySim.type == UnitType.Zerg_Larva || enemySim.type == UnitType.Zerg_Egg || enemySim.type == UnitType.Protoss_Interceptor || enemySim.type.isAddon) 25000 else 0) +
-                (if (enemySim.type.isWorker) -300 else 0) +
+                (if (enemySim.type.isWorker) -150 else 0) +
                 1.0 * (futurePosition?.getDistance(attackerSim.position) ?: 0) +
                 2.0 * (enemySim.position?.getDistance(attackerSim.position) ?: 0) +
                 (if (enemySim.canAttack(attackerSim, 64))
@@ -198,7 +202,7 @@ object Combat {
     }
 
     private fun moveIntoAttackRange(unit: MobileUnit, board: AttackBoard): Fallback {
-        val reachBoard = ReachBoard(tolerance = 8)
+        val reachBoard = ReachBoard(tolerance = 32)
         return fallback(
                 Condition("Close enough?") {
                     val range = (unit as Attacker).maxRangeVs(board.target!!).toDouble() * (if (unit is Lurker && !unit.isBurrowed) 0.8 else 1.0)
@@ -334,14 +338,14 @@ object Combat {
                                     board.reluctant = board.myUnits - bestCombat.myUnits
                                     board.myUnits = bestCombat.myUnits
                                     board.eval = bestCombat.eval
-                                    if ( board.reluctant.all { it is Scourge } && board.reluctant.size > 2 && !board.reluctant.isEmpty()) {
-                                        println("DOH!")
+                                    if ((board.reluctant.all { it is Scourge } && board.reluctant.size > 2 || (board.eval < 0.6 && board.myUnits.any { it is Scourge })) && board.enemies.any { it.isFlying }) {
+//                                        println("DOH!")
                                     }
                                     NodeStatus.SUCCEEDED
                                 },
                                 Condition("Good combat eval?") {
                                     board.eval > 0.65 ||
-                                            board.eval > 0.45 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me, 32) } }
+                                            board.eval > 0.55 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me, 16) } }
                                 },
                                 Inline("Who should attack?") {
                                     Board.resources.reserveUnits(board.myUnits)

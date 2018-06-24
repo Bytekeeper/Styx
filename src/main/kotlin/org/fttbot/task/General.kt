@@ -4,7 +4,6 @@ import com.badlogic.gdx.math.MathUtils
 import com.badlogic.gdx.math.Vector2
 import org.fttbot.*
 import org.fttbot.Fallback.Companion.fallback
-import org.fttbot.MSequence.Companion.msequence
 import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.info.EnemyInfo
 import org.fttbot.info.MyInfo
@@ -40,35 +39,50 @@ object Actions {
 
     fun reach(unit: MobileUnit, board: ReachBoard): Node {
         // TODO: "Search" for a way
-        var nextWaypoint: Position? = null
-        return MaxTries("$unit -> ${board.position}", 12 * 60,
+        return sequence(
+                Inline("Make valid") {
+                    if (!FTTBot.game.bwMap.isValidPosition(board.position)) {
+                        board.position = Position(MathUtils.clamp(board.position!!.x, 0, FTTBot.game.bwMap.mapWidth() * 32),
+                                MathUtils.clamp(board.position!!.y, 0, FTTBot.game.bwMap.mapHeight() * 32))
+                    }
+                    NodeStatus.SUCCEEDED
+                },
                 fallback(
                         Condition("Reached ${board.position} with $unit") { hasReached(unit, board.position!!, board.tolerance) },
-                        Inline("Make valid") {
-                            if (!FTTBot.game.bwMap.isValidPosition(board.position)) {
-                                board.position = Position(MathUtils.clamp(board.position!!.x, 0, FTTBot.game.bwMap.mapWidth() * 32),
-                                        MathUtils.clamp(board.position!!.y, 0, FTTBot.game.bwMap.mapHeight() * 32))
-                            }
-                            NodeStatus.FAILED
-                        },
-                        Repeat(child = msequence("Move $unit to ${board.position}",
-                                ensureCanMove(unit),
-                                Inline("Next waypoint") {
-                                    if (unit.position.getDistance(board.position) < 200 || unit.isFlying) {
-                                        nextWaypoint = board.position
-                                    } else {
-                                        nextWaypoint = FTTBot.bwem.getPath(unit.position, board.position).firstOrNull { it.center.toPosition().getDistance(unit.position) >= 200 }?.center?.toPosition()
-                                                ?: board.position
-                                    }
-                                    NodeStatus.SUCCEEDED
-                                },
-                                fallback(
-                                        Condition("Correct targetpos?") { nextWaypoint!!.getDistance(unit.targetPosition) <= board.tolerance },
-                                        sequence(Delegate { MoveCommand(unit, nextWaypoint!!) })
-                                ),
-                                Delegate { CheckIsClosingIn(unit, nextWaypoint!!) }
-                        ))
-                ))
+                        sequence(Condition("Moving?") { unit.isMoving && unit.targetPosition.getDistance(board.position) < 16 }, Sleep),
+                        sequence(ensureCanMove(unit), Delegate { MoveCommand(unit, board.position!!) }, Sleep),
+                        Sleep
+                )
+        )
+//        var nextWaypoint: Position? = null
+//        return MaxTries("$unit -> ${board.position}", 12 * 60,
+//                fallback(
+//                        Condition("Reached ${board.position} with $unit") { hasReached(unit, board.position!!, board.tolerance) },
+//                        Inline("Make valid") {
+//                            if (!FTTBot.game.bwMap.isValidPosition(board.position)) {
+//                                board.position = Position(MathUtils.clamp(board.position!!.x, 0, FTTBot.game.bwMap.mapWidth() * 32),
+//                                        MathUtils.clamp(board.position!!.y, 0, FTTBot.game.bwMap.mapHeight() * 32))
+//                            }
+//                            NodeStatus.FAILED
+//                        },
+//                        Repeat(child = msequence("Move $unit to ${board.position}",
+//                                ensureCanMove(unit),
+//                                Inline("Next waypoint") {
+//                                    if (unit.position.getDistance(board.position) < 200 || unit.isFlying) {
+//                                        nextWaypoint = board.position
+//                                    } else {
+//                                        nextWaypoint = FTTBot.bwem.getPath(unit.position, board.position).firstOrNull { it.center.toPosition().getDistance(unit.position) >= 200 }?.center?.toPosition()
+//                                                ?: board.position
+//                                    }
+//                                    NodeStatus.SUCCEEDED
+//                                },
+//                                fallback(
+//                                        Condition("Correct targetpos?") { nextWaypoint!!.getDistance(unit.targetPosition) <= board.tolerance },
+//                                        sequence(Delegate { MoveCommand(unit, nextWaypoint!!) })
+//                                ),
+//                                Delegate { CheckIsClosingIn(unit, nextWaypoint!!) }
+//                        ))
+//                ))
     }
 
     fun reach(unit: List<MobileUnit>, reachBoard: ReachBoard): Node =
@@ -104,7 +118,8 @@ object Actions {
                 Condition("$unit not burrowed") { unit !is Burrowable || !unit.isBurrowed },
                 fallback(
                         Condition("$unit is unborrowing?") { unit.order == org.openbw.bwapi4j.type.Order.Unburrowing },
-                        Delegate { UnburrowCommand(unit) }
+                        sequence(Delegate { UnburrowCommand(unit) }, Sleep),
+                        Sleep
                 )
         )
     }

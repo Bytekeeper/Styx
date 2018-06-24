@@ -29,7 +29,7 @@ object Strategies {
                         val dpf = UnitQuery.enemyUnits.inRadius(it, 200)
                                 .filter { enemy -> enemy.canAttack(it, 16) }
                                 .sumByDouble { SimUnit.of(it).damagePerFrameTo(mySim) } + 0.01
-                        it.isUnderAttack && it.remainingBuildTime > (it.hitPoints + it.shields) / dpf - 12
+                        it.isUnderAttack && it.remainingBuildTime > (it.hitPoints + it.shields) / dpf - 6
                     },
                     Delegate { CancelCommand(it as Building) }
             )
