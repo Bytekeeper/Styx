@@ -66,10 +66,11 @@ object Combat {
                                                         .map { SimUnit.of(it) }
                                                 val simUnit = SimUnit.of(unit)
                                                 simUnit.position = childBoard.betterPosition
-                                                var bestThreats = if (childBoard.betterPosition == null) relevantEnemies.size else
+                                                var currentThreats = if (childBoard.betterPosition == null) relevantEnemies.size else
                                                     relevantEnemies.count { it.canAttack(simUnit, 32) }
-                                                if (bestThreats == 0)
+                                                if (currentThreats == 0)
                                                     return@Inline NodeStatus.SUCCEEDED
+                                                var bestThreats = currentThreats
                                                 var result: Position? = childBoard.betterPosition
                                                 for (i in 1..15) {
                                                     val pos = tv.setToRandomDirection().scl(rnd.nextFloat() * (weaponRange + 32)).add(childBoard.target!!.position.toVector()).toPosition()
@@ -85,7 +86,9 @@ object Combat {
                                                         }
                                                     }
                                                 }
-                                                childBoard.betterPosition = result
+                                                if (bestThreats < currentThreats / 2) {
+                                                    childBoard.betterPosition = result
+                                                }
                                                 NodeStatus.SUCCEEDED
                                             },
                                             sequence(

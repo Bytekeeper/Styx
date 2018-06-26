@@ -9,8 +9,9 @@ import org.fttbot.Parallel.Companion.parallel
 import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.estimation.BOPrediction
 import org.fttbot.info.*
-import org.fttbot.strategies.Strategies
 import org.fttbot.strategies.BuildPlans
+import org.fttbot.strategies.Strategies
+import org.fttbot.strategies.Utilities
 import org.fttbot.task.BoSearch
 import org.fttbot.task.Combat.attacking
 import org.fttbot.task.Combat.defending
@@ -76,7 +77,7 @@ object FTTBot : BWEventListener {
 //        game.interactionHandler.sendText("power overwhelming")
 
         Logger.getLogger("").level = Level.INFO
-        LOG.info("Version 17/06/18")
+        LOG.info("Version 26/06/18")
 
         val racePlayed = self.race
         when (racePlayed) {
@@ -185,6 +186,14 @@ object FTTBot : BWEventListener {
                     game.mapDrawer.drawLineMap(e.position, it.position, Color.YELLOW)
                 }
             }
+
+            game.mapDrawer.drawTextScreen(0, 40, "Expand : %.2f".format(Utilities.expansionUtility))
+            game.mapDrawer.drawTextScreen(0, 50, "Trainers : %.2f".format(Utilities.moreTrainersUtility))
+            game.mapDrawer.drawTextScreen(0, 60, "Workers : %.2f".format(Utilities.moreWorkersUtility))
+            game.mapDrawer.drawTextScreen(0, 70, "Supply : %.2f".format(Utilities.moreSupplyUtility))
+            game.mapDrawer.drawTextScreen(0, 80, "Gas : %.2f".format(Utilities.moreGasUtility))
+            game.mapDrawer.drawTextScreen(0, 90, "Lurkers : %.2f".format(Utilities.moreLurkersUtility))
+            game.mapDrawer.drawTextScreen(0, 100, "Mutas : %.2f".format(Utilities.moreMutasUtility))
         }
     }
 

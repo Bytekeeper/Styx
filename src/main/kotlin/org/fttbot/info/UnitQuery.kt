@@ -127,6 +127,7 @@ object UnitQuery {
     lateinit var myWorkers: List<Worker> private set
     lateinit var minerals : List<MineralPatch> private set
     lateinit var myBuildings: List<Building> private set
+    lateinit var myEggs: List<Egg> private set
 
     fun reset() {
         andStayDown.clear()
@@ -144,6 +145,7 @@ object UnitQuery {
         enemyUnits = ownedUnits.filter { it.player in FTTBot.enemies }
         myWorkers = myUnits.filterIsInstance(Worker::class.java).filter { it.isCompleted }
         myBuildings = myUnits.filterIsInstance(Building::class.java).filter { it.isCompleted }
+        myEggs = myUnits.filterIsInstance(Egg::class.java)
     }
 
     val geysers get() = allUnits.filter { it is VespeneGeyser }

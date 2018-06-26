@@ -134,7 +134,7 @@ class MCTS(val units: Map<UnitType, Int>, val tech: Set<TechType>, val upgrades:
     private fun expand(state: GameState, node: Node) {
         if (node.children != null) return
         node.children = (unitsToTest.filter { state.isValid(it) }
-                .map { Node(node, UnitMove(it)) } +
+                .map { Node(node, UnitMove(it)) }.sortedBy { it.move as UnitMove; it.move.unit.mineralPrice() } +
                 upgrades.filter { (ut, lvl) -> state.getUpgradeLevel(ut) < lvl && state.isValid(ut) }.map { (ut, _) -> Node(node, UpgradeMove(ut)) })
                 .toMutableList()
     }

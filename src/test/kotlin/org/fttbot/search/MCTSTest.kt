@@ -54,7 +54,6 @@ internal class MCTSTest {
         val search = MCTS(mapOf(UnitType.Zerg_Hydralisk to 10), setOf(), mapOf(), Race.Zerg)
         val start = System.currentTimeMillis()
         repeat(100) { search.step(state) }
-        val prng = Random()
         var n = search.root.children!!.minBy { it.frames }
         println("${n!!.frames} in ${System.currentTimeMillis() - start} ms");
         while (n != null) {

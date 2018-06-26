@@ -25,8 +25,7 @@ object MyInfo {
 
     fun pendingSupply(): Int = UnitQuery.myUnits
             .filter {
-                !it.isCompleted && it is SupplyProvider
-                        || it is Egg && it.buildType.supplyProvided() > 0
+                !it.isCompleted
             }
             .sumBy {
                 ((it as? SupplyProvider)?.supplyProvided() ?: 0) +

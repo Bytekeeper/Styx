@@ -362,7 +362,7 @@ object BoSearch : BaseNode() {
 
     private val LOG = Logger.getLogger(this::class.java.simpleName)
     private var mcts: MCTS? = null
-    val utility: Double = 0.4
+    override val utility: Double = 0.4
     private var relocateTo: MCTS.Node? = null
 
     fun run(available: Resources): NodeStatus {

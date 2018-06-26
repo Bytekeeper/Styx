@@ -147,7 +147,7 @@ object Actions {
                         return@Inline NodeStatus.FAILED
                     if (!unit.isFlying) {
                         Potential.addWallRepulsion(force, unit, 1.2f)
-                        Potential.addSafeAreaAttraction(force, unit, 1.4f)
+                        Potential.addSafeAreaAttraction(force, unit, 1.3f)
                         Potential.addCollisionRepulsion(force, unit, 0.8f)
                     } else {
                         Potential.addWallAttraction(force, unit, 0.5f)

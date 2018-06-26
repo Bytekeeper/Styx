@@ -1,6 +1,7 @@
 package org.fttbot
 
 import org.apache.logging.log4j.LogManager
+import java.util.*
 import kotlin.math.max
 
 enum class NodeStatus {
@@ -13,7 +14,7 @@ data class TreeTraceElement(val node: Node)
 
 interface Node {
     val tree: String get() = toString()
-
+    val utility: Double
     fun setParent(parent: Node)
     fun tick(): NodeStatus
     fun parentFinished() {}
@@ -33,6 +34,9 @@ interface Node {
     fun addFailTrace(trace: MutableList<TreeTraceElement>)
 
     infix fun onlyIf(condition: Node): Node = object : Node {
+        override val utility: Double
+            get() = max(condition.utility, this@Node.utility)
+
         override fun addTreeTrace(trace: MutableList<TreeTraceElement>) {
             trace.add(TreeTraceElement(this))
             this@Node.addTreeTrace(trace)
@@ -63,6 +67,9 @@ interface Node {
 
 abstract class BaseNode : Node {
     protected var _parent: Node? = null
+
+    override val utility: Double
+        get() = 0.0
 
     override fun setParent(parent: Node) {
         this._parent = parent
@@ -124,6 +131,9 @@ open class Decorator(val child: Node) : BaseNode() {
     override val tree: String
         get() = "Decorator(${child.tree})"
 
+    override val utility: Double
+        get() = child.utility
+
     override fun tick(): NodeStatus = child.tick()
 
     override fun parentFinished() {
@@ -151,6 +161,12 @@ class Delegate(val refresh: () -> Boolean = { false }, val subtreeProducer: () -
     private var subtree: Node? = null
 
     private var lastFailedDelegate: Node? = null
+
+    override val utility: Double
+        get() {
+            subtree = subtree ?: subtreeProducer()
+            return subtree!!.utility
+        }
 
     override fun tick(): NodeStatus {
         subtree = if (subtree != null && !refresh()) subtree else {
@@ -199,6 +215,7 @@ class MaxTries(val name: String, var maxTries: Int = Int.MAX_VALUE, child: Node)
 
 class Await(val name: String, var toWait: Int = Int.MAX_VALUE, val condition: () -> Boolean) : BaseNode() {
     private var startFrame = -1
+
     override fun tick(): NodeStatus {
         if (startFrame < 0) {
             startFrame = FTTBot.frameCount
@@ -246,7 +263,7 @@ class Retry(var times: Int, child: Node) : Decorator(child) {
     override fun toString(): String = "Retrying $remaining / $times times"
 }
 
-class Repeat(val times: Int = -1, child: Node, val name: String= "") : Decorator(child) {
+class Repeat(val times: Int = -1, child: Node, val name: String = "") : Decorator(child) {
     protected val LOG = LogManager.getLogger()
     var remaining = times
     override fun tick(): NodeStatus {
@@ -276,7 +293,10 @@ class Repeat(val times: Int = -1, child: Node, val name: String= "") : Decorator
     override fun toString(): String = "Repeat $name $remaining / $times"
 }
 
-class Parallel(val m: Int, children: List<Node>) : ParentNode(children) {
+open class Parallel(val m: Int, children: List<Node>) : ParentNode(children) {
+    override val utility: Double
+        get() = children.map { it.utility }.max() ?: 0.0
+
     override fun tick(): NodeStatus {
         val result = children.map { it.tick() }
         if (result.count { it == NodeStatus.SUCCEEDED } >= m) {
@@ -306,6 +326,10 @@ class MParallel(val m: Int, children: List<Node>) : ParentNode(children) {
     var activeChildren = super.children
     var succeeded = 0
     var failed = 0
+
+    override val utility: Double
+        get() = activeChildren.map { it.utility }.max() ?: 0.0
+
     override fun tick(): NodeStatus {
         val childResult = activeChildren.map { it to it.tick() }
         val result = childResult.unzip()
@@ -348,6 +372,10 @@ class DispatchParallel<T>(val name: String = "", val boardsToDispatch: () -> Col
     private val LOG = LogManager.getLogger()
     private val children = HashMap<T, Node>()
     private var lastFailedChildren = emptyList<Node>()
+
+    override val utility: Double
+        get() = children.values.map { it.utility }.max() ?: 0.0
+
     override fun tick(): NodeStatus {
         val toTransform = boardsToDispatch()
         val result = toTransform.map {
@@ -443,7 +471,10 @@ class Sleep(val timeOut: Int = Int.MAX_VALUE) : BaseNode() {
     }
 }
 
-class Fallback(children: List<Node>) : ParentNode(children) {
+open class Fallback(children: List<Node>) : ParentNode(children) {
+    override val utility: Double
+        get() = children.map { it.utility }.max() ?: 0.0
+
     override fun tick(): NodeStatus {
         children.forEach {
             val result = it.tick()
@@ -468,6 +499,9 @@ class Fallback(children: List<Node>) : ParentNode(children) {
 }
 
 open class Sequence(children: List<Node>) : ParentNode(children) {
+    override val utility: Double
+        get() = children.map { it.utility }.max() ?: 0.0
+
     override fun tick(): NodeStatus {
         children.forEach {
             val result = it.tick()
@@ -491,8 +525,40 @@ open class Sequence(children: List<Node>) : ParentNode(children) {
     }
 }
 
+class Utility(val utilityProvider: () -> Double, child: Node) : Decorator(child) {
+    override val utility: Double by LazyOnFrame { utilityProvider() }
+}
+
+class USequence(children: List<Node>) : Sequence(children) {
+    constructor(vararg children: Node) : this(children.toList())
+    override fun tick(): NodeStatus {
+        Collections.sort(children) { a, b -> b.utility.compareTo(a.utility) }
+        return super.tick()
+    }
+}
+
+class UFallback(children: List<Node>) : Fallback(children) {
+    constructor(vararg children: Node) : this(children.toList())
+    override fun tick(): NodeStatus {
+        Collections.sort(children) { a, b -> b.utility.compareTo(a.utility) }
+        return super.tick()
+    }
+}
+
+class UParallel(m: Int, children: List<Node>) : Parallel(m, children) {
+    constructor(m: Int, vararg children: Node) : this(m, children.toList())
+
+    override fun tick(): NodeStatus {
+        Collections.sort(children) { a, b -> b.utility.compareTo(a.utility) }
+        return super.tick()
+    }
+}
+
 class MSequence(val name: String, children: List<Node>) : ParentNode(children) {
     private var childIndex = 0
+
+    override val utility: Double
+        get() = children.subList(childIndex, children.size).map { it.utility }.max() ?: 0.0
 
     override fun tick(): NodeStatus {
         while (childIndex < children.size) {

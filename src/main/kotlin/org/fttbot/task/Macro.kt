@@ -4,6 +4,7 @@ import org.fttbot.*
 import org.fttbot.Fallback.Companion.fallback
 import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.info.*
+import org.fttbot.strategies.Utilities
 import org.fttbot.task.Actions.flee
 import org.fttbot.task.Actions.reachSafely
 import org.fttbot.task.Production.build
@@ -86,7 +87,7 @@ object Macro {
         val minerals = UnitQuery.minerals.count { it.getDistance(base) < 300 }
         val relevantWorkers = UnitQuery.myWorkers.filter { it.getDistance(base) < 300 && (it.isGatheringGas || it.isGatheringMinerals) }
         val workerDelta = relevantWorkers.size - minerals * 2
-        if ((minerals < 3 && workerDelta > 0) || workerDelta > 5) {
+        if ((minerals < 3 && workerDelta > 0) || workerDelta > 9) {
             val targetBase = MyInfo.myBases.filter { it.isReadyForResources }.minBy { targetBase ->
                 targetBase as PlayerUnit
                 UnitQuery.myWorkers.count { it.getDistance(targetBase) < 300 } - UnitQuery.minerals.count { it.getDistance(targetBase) < 300 } * 2
@@ -112,9 +113,7 @@ object Macro {
 
     fun preventSupplyBlock() = fallback(sequence(
             Condition("Enough minerals to prebuild supply?") {
-                val freeSupply = FTTBot.self.supplyTotal() - FTTBot.self.supplyUsed()
-                MyInfo.pendingSupply() + FTTBot.self.supplyTotal() < 400 &&
-                        max(0, MyInfo.pendingSupply() + freeSupply) < min(UnitQuery.myBases.size * 4, FTTBot.self.minerals() / 35)
+                Utilities.moreSupplyUtility >= 0.5
             },
             produceSupply(),
             Sleep),
@@ -123,7 +122,7 @@ object Macro {
 
     fun considerExpansion() = Repeat(child = fallback(
             Delegate { Macro.buildExpansion() } onlyIf Condition("should build exe") {
-                UnitQuery.myWorkers.size >= MyInfo.myBases.sumBy { it as PlayerUnit; UnitQuery.minerals.inRadius(it, 300).count() + 3 }
+                Utilities.expansionUtility >= 1.0
             },
             Sleep)
     )
