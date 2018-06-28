@@ -88,13 +88,14 @@ object Potential {
     }
 
     fun addSafeAreaAttraction(target: Vector2, unit: MobileUnit, scale: Float = 1f) {
+        val home = reallySafePlace()
         val homePath = FTTBot.bwem.getPath(unit.position,
-                reallySafePlace() ?: return)
+                home ?: return)
+        if (home.getDistance(unit.position) < 64) return
         val waypoint =
                 homePath.firstOrNull { it.center.toPosition().getDistance(unit.position) >= 4 * TilePosition.SIZE_IN_PIXELS }?.center?.toPosition()
-                        ?: reallySafePlace()
+                        ?: home
                         ?: return
-
         target.add((waypoint - unit.position).toVector().setLength(scale))
     }
 

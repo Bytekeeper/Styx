@@ -138,25 +138,25 @@ object Combat {
     }
 
     fun attackScore(attackerSim: SimUnit, enemySim: SimUnit): Double {
+        val wpn = attackerSim.determineWeaponAgainst(enemySim)
+        if (wpn.type() == WeaponType.None) return -100000.0;
+        val enemyWpn = enemySim.determineWeaponAgainst(attackerSim)
         val futurePosition = enemySim.position?.add(enemySim.velocity.scl(24f * 3).toPosition())
+        val futureDistance = futurePosition?.minus(attackerSim.position ?: futurePosition)?.toVector()?.len() ?: 30f
         return (enemySim.hitPoints + enemySim.shield) / max(attackerSim.damagePerFrameTo(enemySim), 0.001) +
                 (if (enemySim.type == UnitType.Zerg_Larva || enemySim.type == UnitType.Zerg_Egg || enemySim.type == UnitType.Protoss_Interceptor || enemySim.type.isAddon) 25000 else 0) +
                 (if (enemySim.type.isWorker) -150 else 0) +
                 1.0 * (futurePosition?.getDistance(attackerSim.position) ?: 0) +
                 2.0 * (enemySim.position?.getDistance(attackerSim.position) ?: 0) +
-                (if (enemySim.canAttack(attackerSim, 64))
+                (if (enemyWpn.type() != WeaponType.None)
                     -enemySim.damagePerFrameTo(attackerSim)
                 else
                     0.0) * (if (enemySim.hasSplashWeapon) 5000 else 3500) +
                 (if (enemySim.type == UnitType.Protoss_Carrier) -300 else 0) +
                 (if (enemySim.groundWeapon.type() != WeaponType.None || enemySim.airWeapon.type() != WeaponType.None || enemySim.type == UnitType.Terran_Bunker) -200.0 else 0.0) +
                 (if (enemySim.detected) 0 else 500) +
-                (if (attackerSim.canAttack(enemySim)) {
-                    if (attackerSim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed)
-                        -900
-                    else
-                        -300
-                } else 0) +
+                (fastsig(max(0.0, futureDistance.toDouble() - wpn.maxRange())) * 500 *
+                        (if (attackerSim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed) 5.0 else 1.0)) +
                 (enemySim.topSpeed - attackerSim.topSpeed) * 30
     }
 

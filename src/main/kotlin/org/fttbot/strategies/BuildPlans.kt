@@ -64,7 +64,7 @@ object BuildPlans {
             trainWorker(),
             trainWorker(),
             trainWorker()
-            )
+    )
 
     fun _3HatchMuta(): Node =
             mparallel(Int.MAX_VALUE,
@@ -80,7 +80,13 @@ object BuildPlans {
 
 
     fun _12poolMuta(): Node = mparallel(Int.MAX_VALUE,
-            Repeat(7, trainWorker()),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
             build(UnitType.Zerg_Spawning_Pool),
             buildGas(),
             trainWorker(),
@@ -107,7 +113,13 @@ object BuildPlans {
     )
 
     fun _12poolLurker(): Node = mparallel(Int.MAX_VALUE,
-            Repeat(7, trainWorker()),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
             build(UnitType.Zerg_Spawning_Pool),
             trainWorker(),
             trainWorker(),
@@ -129,15 +141,13 @@ object BuildPlans {
     )
 
     fun overpoolVsZerg(): Node = mparallel(Int.MAX_VALUE,
-            Repeat(5, trainWorker()),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            produceSupply(),
             build(UnitType.Zerg_Spawning_Pool),
-            trainWorker(),
-            buildGas(),
-            trainWorker(),
-            trainWorker(),
-            Repeat(child = fallback(Condition("Enough zerglings?") { UnitQuery.myUnits.count { it is Zergling || it is Egg && it.buildType == UnitType.Zerg_Zergling } >= 8 }, train(UnitType.Zerg_Zergling))),
-            trainWorker(),
-            trainWorker(),
             considerBaseDefense(),
             mainMutasZergUltra()
     )
@@ -151,7 +161,7 @@ object BuildPlans {
                     uMoreWorkers(),
                     Repeat(child = Utility({ Utilities.moreMutasUtility }, train(UnitType.Zerg_Mutalisk))),
                     Repeat(child = Utility({ min(1.0, UnitQuery.myUnits.count { it is Mutalisk } / (UnitQuery.myUnits.count { it is Ultralisk } * 3.0 + 15.0)) }, train(UnitType.Zerg_Ultralisk))),
-                    Repeat(child = Utility({ min(1.0, 3 / (0.1 + UnitQuery.myUnits.count { it is Zergling })) }, train(UnitType.Zerg_Zergling))),
+                    Repeat(child = Utility({ min(1.0, 5 / (0.1 + UnitQuery.myUnits.count { it is Zergling })) }, train(UnitType.Zerg_Zergling))),
                     Utility({
                         (UnitQuery.enemyUnits + EnemyInfo.seenUnits).count { it.isFlying && it !is Overlord } /
                                 (UnitQuery.myUnits.count { it is Scourge || it is Egg && it.buildType == UnitType.Zerg_Scourge } + 2.1)
@@ -195,7 +205,12 @@ object BuildPlans {
             sequence(
                     Condition("Zerg?")
                     { FTTBot.enemies[0].race == Race.Zerg },
-                    overpoolVsZerg()
+                    Delegate {
+                        if (MathUtils.random() < 0.7)
+                            overpoolVsZerg()
+                        else
+                            _3HatchMuta()
+                    }
             ),
             Delegate
             {

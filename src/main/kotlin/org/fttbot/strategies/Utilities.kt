@@ -14,7 +14,7 @@ import kotlin.math.min
 
 object Utilities {
     val expansionUtility by LazyOnFrame {
-        min(1.0, workerUtilization / (fastsig(UnitQuery.myBases.size * 2.0) + 0.1))
+        min(1.0, workerUtilization / (fastsig(UnitQuery.myBases.size * 1.2) + 0.5))
     }
 
     private val workerUtilization by LazyOnFrame {
@@ -24,19 +24,19 @@ object Utilities {
     }
 
     val moreTrainersUtility by LazyOnFrame {
-        MathUtils.clamp(Board.resources.minerals / (UnitQuery.myBases.size * 500.0 + 0.1), 0.0, 1.0)
+        MathUtils.clamp(Board.resources.minerals / (UnitQuery.myBases.size * 800.0 + 0.1), 0.0, 1.0)
     }
 
     val moreWorkersUtility by LazyOnFrame {
-        min(1.0 - workerUtilization * 0.8, max(0.0, max(1.0 - FTTBot.self.minerals() / 6000.0, 1.0 - FTTBot.self.gas() / 3000.0)))
+        min(1.0 - workerUtilization * 0.7, max(0.0, max(1.0 - FTTBot.self.minerals() / 6000.0, 1.0 - FTTBot.self.gas() / 3000.0)))
     }
 
     val moreLurkersUtility by LazyOnFrame {
-        min(1.0, UnitQuery.myWorkers.size / (UnitQuery.myUnits.count { it is Lurker || it is LurkerEgg } * 3.0 + 8.0))
+        min(1.0, UnitQuery.myWorkers.size / (UnitQuery.myUnits.count { it is Lurker || it is LurkerEgg } * 2.5 + 15.0))
     }
 
     val moreMutasUtility by LazyOnFrame {
-        min(1.0, UnitQuery.myWorkers.size / (UnitQuery.myUnits.count { it is Mutalisk } * 3.0 + 8.0))
+        min(1.0, UnitQuery.myWorkers.size / (UnitQuery.myUnits.count { it is Mutalisk } * 2.5 + 15.0))
     }
 
     val moreGasUtility by LazyOnFrame {
