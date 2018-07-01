@@ -146,18 +146,20 @@ object Combat {
         return (enemySim.hitPoints + enemySim.shield) / max(attackerSim.damagePerFrameTo(enemySim), 0.001) +
                 (if (enemySim.type == UnitType.Zerg_Larva || enemySim.type == UnitType.Zerg_Egg || enemySim.type == UnitType.Protoss_Interceptor || enemySim.type.isAddon) 25000 else 0) +
                 (if (enemySim.type.isWorker) -150 else 0) +
-                1.0 * (futurePosition?.getDistance(attackerSim.position) ?: 0) +
+                (if (enemySim.type.spaceProvided() > 0) -200 else 0) +
+                (if (enemySim.canHeal) -150 else 0) +
+                1.0 * futureDistance +
                 2.0 * (enemySim.position?.getDistance(attackerSim.position) ?: 0) +
                 (if (enemyWpn.type() != WeaponType.None)
                     -enemySim.damagePerFrameTo(attackerSim)
                 else
                     0.0) * (if (enemySim.hasSplashWeapon) 5000 else 3500) +
                 (if (enemySim.type == UnitType.Protoss_Carrier) -300 else 0) +
-                (if (enemySim.groundWeapon.type() != WeaponType.None || enemySim.airWeapon.type() != WeaponType.None || enemySim.type == UnitType.Terran_Bunker) -200.0 else 0.0) +
+                (if (enemySim.type == UnitType.Terran_Bunker) -200.0 else 0.0) +
                 (if (enemySim.detected) 0 else 500) +
-                (fastsig(max(0.0, futureDistance.toDouble() - wpn.maxRange())) * 500 *
-                        (if (attackerSim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed) 5.0 else 1.0)) +
-                (enemySim.topSpeed - attackerSim.topSpeed) * 30
+                (fastsig(max(0.0, futureDistance.toDouble() - wpn.maxRange())) * 200 *
+                        (if (attackerSim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed) 15.0 else 1.0)) +
+                (enemySim.topSpeed - attackerSim.topSpeed) * 50
     }
 
 
@@ -348,7 +350,7 @@ object Combat {
                                 },
                                 Condition("Good combat eval?") {
                                     board.eval > 0.65 ||
-                                            board.eval > 0.55 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me, 16) } }
+                                            board.eval > 0.52 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me, 16) } }
                                 },
                                 Inline("Who should attack?") {
                                     Board.resources.reserveUnits(board.myUnits)

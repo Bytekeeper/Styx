@@ -57,8 +57,8 @@ object CombatEval {
         val repairFactorA = fastsig(unitsOfPlayerA.count { it.canRepair }.toDouble() * 0.3) * 2.8 + 1.0
         val repairFactorB = fastsig(unitsOfPlayerB.count { it.canRepair }.toDouble() * 0.3) * 2.8 + 1.0
 
-        val alpha = strength(unitsOfPlayerA, unitsOfPlayerB, center, medicFactorA, repairFactorA, fallbackDistance)
-        val beta = strength(unitsOfPlayerB, unitsOfPlayerA, center, medicFactorB, repairFactorB, fallbackDistance)
+        val alpha = strength(unitsOfPlayerA, unitsOfPlayerB.filter { !it.suicideUnit }, center, medicFactorA, repairFactorA, fallbackDistance)
+        val beta = strength(unitsOfPlayerB, unitsOfPlayerA.filter { !it.suicideUnit }, center, medicFactorB, repairFactorB, fallbackDistance)
 
         // Lanchester's Law
         val eA = alpha.map { pow(it, strengthPower) }.average().or(0.0)
@@ -98,7 +98,7 @@ object CombatEval {
 
     private fun averageDamageOf(a: SimUnit, unitsB: List<SimUnit>) =
             if (!a.isPowered) 0.0
-            else if (unitsB.isEmpty()) 5.0
+            else if (unitsB.isEmpty()) 0.4
             else {
                 val damages = unitsB.map { b -> if (b.detected) a.damagePerFrameTo(b) else 0.0 }.filter { it > 0.0 }
                 if (damages.isEmpty()) 0.0

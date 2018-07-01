@@ -77,7 +77,7 @@ object FTTBot : BWEventListener {
 //        game.interactionHandler.sendText("power overwhelming")
 
         Logger.getLogger("").level = Level.INFO
-        LOG.info("Version 28/06/18")
+        LOG.info("Version 01/07/18")
 
         val racePlayed = self.race
         when (racePlayed) {
@@ -193,7 +193,13 @@ object FTTBot : BWEventListener {
             game.mapDrawer.drawTextScreen(0, 70, "Supply : %.2f".format(Utilities.moreSupplyUtility))
             game.mapDrawer.drawTextScreen(0, 80, "Gas : %.2f".format(Utilities.moreGasUtility))
             game.mapDrawer.drawTextScreen(0, 90, "Lurkers : %.2f".format(Utilities.moreLurkersUtility))
-            game.mapDrawer.drawTextScreen(0, 100, "Mutas : %.2f".format(Utilities.moreMutasUtility))
+            game.mapDrawer.drawTextScreen(0, 100, "Hydras : %.2f".format(Utilities.moreHydrasUtility))
+            game.mapDrawer.drawTextScreen(0, 110, "Mutas : %.2f".format(Utilities.moreMutasUtility))
+            game.mapDrawer.drawTextScreen(0, 120, "Ultras : %.2f".format(Utilities.moreUltrasUtility))
+            game.mapDrawer.drawTextScreen(0, 130, "Lings : %.2f".format(Utilities.moreLingsUtility))
+            game.mapDrawer.drawTextScreen(0, 140, "uWorker : %.2f".format(Utilities.workerUtilization))
+            game.mapDrawer.drawTextScreen(0, 150, "uMin : %.2f".format(Utilities.mineralsUtilization))
+            game.mapDrawer.drawTextScreen(0, 160, "uGas : %.2f".format(Utilities.gasUtilization))
         }
     }
 

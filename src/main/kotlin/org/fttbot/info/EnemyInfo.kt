@@ -10,7 +10,7 @@ import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.unit.*
 import kotlin.math.max
 
-const val DISCARD_HIDDEN_UNITS_AFTER = 480
+const val DISCARD_HIDDEN_UNITS_AFTER = 800
 
 object EnemyInfo {
     val seenUnits = ArrayList<PlayerUnit>()

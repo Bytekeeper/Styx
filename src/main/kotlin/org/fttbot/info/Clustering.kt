@@ -5,6 +5,7 @@ import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
+import kotlin.math.max
 
 class Cluster<U : Unit>(var position: Position, internal val units: MutableList<U>, private var aggPosition: Position = Position(0, 0), internal var lastUnitCount: Int = 1) {
     val byType: Map<UnitType, List<U>> by lazy {
@@ -47,9 +48,9 @@ class Cluster<U : Unit>(var position: Position, internal val units: MutableList<
                 val changes = clusterUnits.count { cu ->
                     val unit = cu.unit
                     val cluster = clusters.filter {
-                        it.position.getDistance(unit.position) +
-                                ((if (it is GroundAttacker) it.groundWeaponMaxRange else 0) +
-                                (if (it is AirAttacker) it.airWeaponMaxRange else 0)) / 2 < 450
+                        it.position.getDistance(unit.position) <
+                                max((if (it is GroundAttacker) it.groundWeaponMaxRange else 0),
+                                (if (it is AirAttacker) it.airWeaponMaxRange else 0)) + 350
                     }.reversed().maxBy { it.lastUnitCount }
                     if (cluster != null) {
                         cluster.aggPosition = cluster.aggPosition.add(unit.position)

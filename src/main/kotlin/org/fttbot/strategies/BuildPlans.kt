@@ -72,13 +72,6 @@ object BuildPlans {
                     mainMutasZergUltra()
             )
 
-    fun _3HatchLurker(): Node =
-            mparallel(1000,
-                    _3Hatch(),
-                    mainLurker()
-            )
-
-
     fun _12poolMuta(): Node = mparallel(Int.MAX_VALUE,
             trainWorker(),
             trainWorker(),
@@ -160,25 +153,31 @@ object BuildPlans {
                     uMoreSupply(),
                     uMoreWorkers(),
                     Repeat(child = Utility({ Utilities.moreMutasUtility }, train(UnitType.Zerg_Mutalisk))),
-                    Repeat(child = Utility({ min(1.0, UnitQuery.myUnits.count { it is Mutalisk } / (UnitQuery.myUnits.count { it is Ultralisk } * 3.0 + 15.0)) }, train(UnitType.Zerg_Ultralisk))),
-                    Repeat(child = Utility({ min(1.0, 5 / (0.1 + UnitQuery.myUnits.count { it is Zergling })) }, train(UnitType.Zerg_Zergling))),
+                    Repeat(child = Utility({ Utilities.moreUltrasUtility }, train(UnitType.Zerg_Ultralisk))),
+                    Repeat(child = Utility({ Utilities.moreLingsUtility }, train(UnitType.Zerg_Zergling))),
                     Utility({
                         (UnitQuery.enemyUnits + EnemyInfo.seenUnits).count { it.isFlying && it !is Overlord } /
                                 (UnitQuery.myUnits.count { it is Scourge || it is Egg && it.buildType == UnitType.Zerg_Scourge } + 2.1)
                     }, train(UnitType.Zerg_Scourge)),
-                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is AirAttacker } / (10.0 + 15 * FTTBot.self.getUpgradeLevel(UpgradeType.Zerg_Flyer_Attacks))) }, upgrade(UpgradeType.Zerg_Flyer_Attacks)))
-//            Repeat(UpgradeType.Zerg_Flyer_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Attacks) }),
-//            Repeat(UpgradeType.Zerg_Melee_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Melee_Attacks) }),
-//            Repeat(UpgradeType.Zerg_Flyer_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Carapace) }),
-//            upgrade(UpgradeType.Adrenal_Glands),
-//            Repeat(UpgradeType.Zerg_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Carapace) }),
-//            Repeat(UpgradeType.Zerg_Flyer_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Flyer_Carapace) }),
-//            upgrade(UpgradeType.Anabolic_Synthesis),
-//            upgrade(UpgradeType.Chitinous_Plating),
-//            Repeat(UpgradeType.Zerg_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Carapace) })
-            ),
-            upgrade(UpgradeType.Metabolic_Boost)
+                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is AirAttacker } / (15.0 + 15 * FTTBot.self.getUpgradeLevel(UpgradeType.Zerg_Flyer_Attacks))) }, upgrade(UpgradeType.Zerg_Flyer_Attacks))),
+                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is AirAttacker } / (20.0 + 15 * FTTBot.self.getUpgradeLevel(UpgradeType.Zerg_Flyer_Carapace))) }, upgrade(UpgradeType.Zerg_Flyer_Carapace))),
+                    uMeleeAttacksUpgrade(),
+                    uGroundArmorUpgrade(),
+                    uMetabolicBoost(),
+                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Zergling } / 50.0) }, upgrade(UpgradeType.Adrenal_Glands))),
+                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Ultralisk } / 10.0) }, upgrade(UpgradeType.Anabolic_Synthesis))),
+                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Ultralisk } / 12.0) }, upgrade(UpgradeType.Chitinous_Plating)))
+            )
     )
+
+    private fun uMetabolicBoost() =
+            NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Zergling } / 20.0) }, upgrade(UpgradeType.Metabolic_Boost)))
+
+    private fun uGroundArmorUpgrade() =
+            NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is GroundAttacker } / (65.0 + 20 * FTTBot.self.getUpgradeLevel(UpgradeType.Zerg_Carapace))) }, upgrade(UpgradeType.Zerg_Carapace)))
+
+    private fun uMeleeAttacksUpgrade() =
+            NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is GroundAttacker } / (60.0 + 20 * FTTBot.self.getUpgradeLevel(UpgradeType.Zerg_Melee_Attacks))) }, upgrade(UpgradeType.Zerg_Melee_Attacks)))
 
     private fun uMoreGas() = NoFail(Utility({ Utilities.moreGasUtility }, buildGas()))
 
@@ -194,10 +193,7 @@ object BuildPlans {
                     Delegate
                     {
                         if (MathUtils.random() > 0.2f) {
-                            if (MathUtils.random() > 0.7f)
-                                _3HatchLurker()
-                            else
-                                _12poolLurker()
+                            _12poolLurker()
                         } else
                             _3HatchMuta()
                     }
@@ -215,10 +211,7 @@ object BuildPlans {
             Delegate
             {
                 if (MathUtils.random() > 0.9f) {
-                    if (MathUtils.random() > 0.7f)
-                        _3HatchLurker()
-                    else
-                        _12poolLurker()
+                    _12poolLurker()
                 } else
                     _12poolMuta()
             }
@@ -232,13 +225,14 @@ object BuildPlans {
                     uMoreSupply(),
                     uMoreWorkers(),
                     Repeat(child = Utility({ Utilities.moreLurkersUtility }, train(UnitType.Zerg_Lurker))),
-                    Repeat(child = Utility({ min(1.0, UnitQuery.myUnits.count { it is Lurker } / (0.1 + UnitQuery.myUnits.count { it is Hydralisk })) }, train(UnitType.Zerg_Hydralisk))),
+                    Repeat(child = Utility({ Utilities.moreHydrasUtility }, train(UnitType.Zerg_Hydralisk))),
+                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Lurker || it is Hydralisk } / (10.0 + 20 * FTTBot.self.getUpgradeLevel(UpgradeType.Zerg_Missile_Attacks))) }, upgrade(UpgradeType.Zerg_Missile_Attacks))),
+                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Hydralisk } / (12.0 + 20 * FTTBot.self.getUpgradeLevel(UpgradeType.Grooved_Spines))) }, upgrade(UpgradeType.Grooved_Spines))),
+                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Hydralisk } / (10.0 + 20 * FTTBot.self.getUpgradeLevel(UpgradeType.Muscular_Augments))) }, upgrade(UpgradeType.Muscular_Augments))),
+                    uGroundArmorUpgrade(),
+                    uMetabolicBoost(),
                     Repeat(child = Utility({ min(1.0, 3 / (0.1 + UnitQuery.myUnits.count { it is Zergling })) }, train(UnitType.Zerg_Zergling)))
             ),
-            upgrade(UpgradeType.Muscular_Augments),
-            upgrade(UpgradeType.Grooved_Spines),
-            upgrade(UpgradeType.Zerg_Carapace),
-            Repeat(UpgradeType.Zerg_Missile_Attacks.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Missile_Attacks) }),
             Repeat(UpgradeType.Zerg_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Carapace) })
     )
 

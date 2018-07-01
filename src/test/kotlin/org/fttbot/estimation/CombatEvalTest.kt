@@ -572,7 +572,7 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b, 192.0)
 
-        assertThat(probabilityToWin).isGreaterThan(0.6)
+        assertThat(probabilityToWin).isGreaterThan(0.5)
     }
 
     @Test
@@ -884,6 +884,6 @@ class CombatEvalTest {
 
         val probabilityToWin = CombatEval.probabilityToWin(a, b)
 
-        assertThat(probabilityToWin).isGreaterThan(0.5)
+        assertThat(probabilityToWin).isGreaterThan(0.25)
     }
 }

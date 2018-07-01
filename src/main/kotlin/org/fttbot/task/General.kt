@@ -154,7 +154,9 @@ object Actions {
                         Potential.addSafeAreaAttractionDirect(force, unit, 1.3f)
                     }
                     force.nor()
-                    reachBoard.position = unit.position + force.scl(unit.topSpeed.toFloat() * 20).toPosition()
+                    val pos = unit.position + force.scl(unit.topSpeed.toFloat() * 20).toPosition()
+                    reachBoard.position = Position(MathUtils.clamp(pos.x, 0, FTTBot.game.bwMap.mapWidth() * 32),
+                            MathUtils.clamp(pos.y, 0, FTTBot.game.bwMap.mapHeight() * 32))
                     NodeStatus.SUCCEEDED
                 },
                 Inline("Move move move") {

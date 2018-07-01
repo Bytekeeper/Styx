@@ -54,16 +54,6 @@ object Strategies {
             cancelGas()
     )
 
-    fun considerMoreTrainers(): Repeat {
-        return Repeat(child = fallback(
-                sequence(
-                        Condition("Too much money?") { Utilities.moreTrainersUtility >= 1.0 },
-                        Production.build(UnitType.Zerg_Hatchery)
-                ),
-                Sleep
-        ))
-    }
-
     fun considerBaseDefense(): Repeat {
         return Repeat(child = fallback(
                 DispatchParallel("ConsiderBaseDefenders", { MyInfo.myBases }) {
