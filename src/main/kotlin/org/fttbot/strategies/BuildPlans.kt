@@ -218,7 +218,7 @@ object BuildPlans {
     )
 
     fun mainLurker(): Node = mparallel(Int.MAX_VALUE,
-            USequence(
+            UParallel(Int.MAX_VALUE,
                     uExpand(),
                     uMoreHatches(),
                     uMoreGas(),

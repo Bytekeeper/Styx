@@ -422,7 +422,7 @@ class NoFail(child: Node) : Decorator(child) {
         val result = super.tick()
         return when (result) {
             NodeStatus.FAILED -> {
-                LogManager.getLogger().error("Unexpected fail: $child: ${getTreeTrace().joinToString("\n")}")
+                LogManager.getLogger().debug("Unexpected fail: $child: ${getTreeTrace().joinToString("\n")}")
                 NodeStatus.SUCCEEDED
             }
             NodeStatus.RUNNING -> NodeStatus.RUNNING

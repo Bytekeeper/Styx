@@ -121,7 +121,7 @@ object Combat {
                             (unit is Lurker && unit.isBurrowed) ||
                             (unit.isSuicideUnit)
                 },
-                flee(unit)
+                flee(unit, 64)
         )
     }
 
@@ -147,7 +147,7 @@ object Combat {
                 (if (enemySim.type == UnitType.Zerg_Larva || enemySim.type == UnitType.Zerg_Egg || enemySim.type == UnitType.Protoss_Interceptor || enemySim.type.isAddon) 25000 else 0) +
                 (if (enemySim.type.isWorker) -150 else 0) +
                 (if (enemySim.type.spaceProvided() > 0) -200 else 0) +
-                (if (enemySim.canHeal) -150 else 0) +
+                (if (enemySim.canHeal) -100 else 0) +
                 1.0 * futureDistance +
                 2.0 * (enemySim.position?.getDistance(attackerSim.position) ?: 0) +
                 (if (enemyWpn.type() != WeaponType.None)
@@ -157,8 +157,8 @@ object Combat {
                 (if (enemySim.type == UnitType.Protoss_Carrier) -300 else 0) +
                 (if (enemySim.type == UnitType.Terran_Bunker) -200.0 else 0.0) +
                 (if (enemySim.detected) 0 else 500) +
-                (fastsig(max(0.0, futureDistance.toDouble() - wpn.maxRange())) * 200 *
-                        (if (attackerSim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed) 15.0 else 1.0)) +
+                (fastsig(max(0.0, futureDistance.toDouble() - wpn.maxRange() )) * 150 *
+                        (if (attackerSim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed) 20.0 else 1.0)) +
                 (enemySim.topSpeed - attackerSim.topSpeed) * 50
     }
 
@@ -207,7 +207,7 @@ object Combat {
     }
 
     private fun moveIntoAttackRange(unit: MobileUnit, board: AttackBoard): Fallback {
-        val reachBoard = ReachBoard(tolerance = 32)
+        val reachBoard = ReachBoard(tolerance = 100)
         return fallback(
                 Condition("Close enough?") {
                     val range = (unit as Attacker).maxRangeVs(board.target!!).toDouble() * (if (unit is Lurker && !unit.isBurrowed) 0.8 else 1.0)
@@ -257,7 +257,7 @@ object Combat {
                                             val enemyCluster = Cluster.enemyClusters.minBy { base.getDistance(it.position) }
                                                     ?: return@Condition false
                                             board.enemies = enemyCluster.units.filter { enemy ->
-                                                UnitQuery.myBuildings.any { it.getDistance(base) < 300 && enemy.canAttack(it, 32) }
+                                                UnitQuery.myBuildings.any { it.getDistance(base) < 300 && enemy.canAttack(it, 64) }
                                             }
                                             !board.enemies.isEmpty()
                                         },

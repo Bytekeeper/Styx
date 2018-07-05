@@ -77,7 +77,7 @@ object FTTBot : BWEventListener {
 //        game.interactionHandler.sendText("power overwhelming")
 
         Logger.getLogger("").level = Level.INFO
-        LOG.info("Version 01/07/18")
+        LOG.info("Version 05/07/18")
 
         val racePlayed = self.race
         when (racePlayed) {

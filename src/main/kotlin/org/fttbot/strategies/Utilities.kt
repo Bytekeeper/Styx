@@ -14,7 +14,7 @@ import kotlin.math.min
 
 object Utilities {
     val expansionUtility by LazyOnFrame {
-        min(1.0, workerUtilization * (1.4 + fastsig(-MyInfo.myBases.count() + 2.0)))
+        min(1.0, workerUtilization * (1.5 + fastsig(-MyInfo.myBases.count() + 3.0)))
     }
 
     val workerUtilization by LazyOnFrame {
@@ -36,7 +36,7 @@ object Utilities {
     }
 
     val moreWorkersUtility by LazyOnFrame {
-        (1.0 - workerUtilization * 0.6) * max(1.0 - mineralsUtilization * 0.6, 1.0 - gasUtilization * 0.6)
+        (1.0 - workerUtilization * 0.5) * max(1.0 - mineralsUtilization * 0.6, 1.0 - gasUtilization * 0.6)
     }
 
     val moreLurkersUtility by LazyOnFrame {

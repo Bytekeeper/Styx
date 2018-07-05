@@ -268,7 +268,7 @@ class SimUnit(val id: Int? = 0,
         val weapon = determineWeaponAgainst(other)
         return if (weapon.type() == WeaponType.None) 0.0
         else directDamage(other) / weapon.type().damageCooldown() *
-                (if (type == UnitType.Terran_Bunker) 80.0 else 1.0)
+                (if (type == UnitType.Terran_Bunker) 100.0 else 1.0)
     }
 
     fun determineWeaponAgainst(other: SimUnit) = if (other.isAir) airWeapon else groundWeapon
