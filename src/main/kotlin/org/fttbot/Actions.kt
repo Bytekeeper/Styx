@@ -76,7 +76,6 @@ class UnburrowCommand(unit: PlayerUnit) : Order<PlayerUnit>(unit, { (this as Bur
 class GatherMinerals(worker: Worker, mineralPatch: MineralPatch) : Order<Worker>(worker, { gather(mineralPatch) })
 class GatherGas(worker: Worker, gasPatch: GasMiningFacility) : Order<Worker>(worker, { gather(gasPatch) })
 class Repair(worker: SCV, target: Mechanical) : Order<SCV>(worker, { repair(target) })
-class Heal(medic: Medic, target: Organic) : Order<Medic>(medic, { healing(target as PlayerUnit) })
 
 
 class ReserveUnit(val unit: PlayerUnit) : BaseNode() {

@@ -1,21 +1,18 @@
-package org.fttbot.task
+package org.fttbot.strategies
 
 import org.fttbot.*
 import org.fttbot.Fallback.Companion.fallback
 import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.info.*
-import org.fttbot.strategies.Utilities
 import org.fttbot.task.Actions.flee
 import org.fttbot.task.Actions.reachSafely
+import org.fttbot.task.Production
 import org.fttbot.task.Production.build
-import org.fttbot.task.Production.buildGas
-import org.fttbot.task.Production.produceSupply
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.org.apache.commons.lang3.mutable.MutableInt
+import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.PlayerUnit
 import java.util.*
-import kotlin.math.max
-import kotlin.math.min
 
 object Macro {
     val prng = SplittableRandom()
@@ -70,18 +67,6 @@ object Macro {
         )
     }
 
-    fun considerGas(): Node =
-            Repeat(child = fallback(
-                    sequence(
-                            Condition("Not enough gas mines?") {
-                                (FTTBot.self.minerals() / 3 > FTTBot.self.gas())
-                                        && MyInfo.myBases.any { base -> base as PlayerUnit; UnitQuery.geysers.any { it.getDistance(base) < 300 } }
-                            },
-                            buildGas()
-                    ),
-                    Sleep
-            ))
-
     fun moveSurplusWorkers() = DispatchParallel("Consider worker transfer", { MyInfo.myBases.filter { it.isReadyForResources } }) { base ->
         base as PlayerUnit
         val minerals = UnitQuery.minerals.count { it.getDistance(base) < 300 }
@@ -111,20 +96,16 @@ object Macro {
             Success
     }
 
-    fun preventSupplyBlock() = fallback(sequence(
-            Condition("Enough minerals to prebuild supply?") {
-                Utilities.moreSupplyUtility >= 0.5
-            },
-            produceSupply(),
-            Sleep),
-            Sleep
-    )
+    fun uMoreWorkers() = Repeat(child = Utility({ Utilities.moreWorkersUtility }, Production.trainWorker()))
 
-    fun considerExpansion() = Repeat(child = fallback(
-            Delegate { Macro.buildExpansion() } onlyIf Condition("should build exe") {
-                Utilities.expansionUtility >= 1.0
-            },
-            Sleep)
-    )
+    fun uMoreSupply() = Repeat(child = Utility({ Utilities.moreSupplyUtility }, Production.produceSupply()))
+
+
+    fun uMoreGas() = NoFail(Utility({ Utilities.moreGasUtility }, Production.buildGas()))
+
+    fun uMoreHatches() =
+            NoFail(Utility({ Utilities.moreTrainersUtility }, fallback(build(UnitType.Zerg_Hatchery), Sleep)))
+
+    fun uExpand() = NoFail(Utility({ Utilities.expansionUtility }, buildExpansion()))
 
 }

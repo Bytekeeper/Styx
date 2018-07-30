@@ -53,9 +53,10 @@ object Combat {
                                             },
                                             Inline("Determine potentially better position") {
                                                 if (FTTBot.frameCount - lastPositionCheck < 4 * 24 ||
+                                                        unit !is AirAttacker ||
                                                         unit is Lurker ||
                                                         unit is SiegeTank ||
-                                                        (unit is Attacker && !unit.canMoveWithoutBreakingAttack) ||
+                                                        !unit.canMoveWithoutBreakingAttack ||
                                                         !unit.canAttack(childBoard.target!!) ||
                                                         unit.isSuicideUnit)
                                                     return@Inline NodeStatus.SUCCEEDED
@@ -116,7 +117,7 @@ object Combat {
         return fallback(
                 Condition("Health good, not under attack or just not fit for running?") {
                     val myHealth = (unit.hitPoints + unit.shields) / (unit.maxHitPoints() + unit.maxShields()).toDouble()
-                    !unit.isUnderAttack || myHealth >= hpPercent / 2 ||
+                    myHealth >= hpPercent / 3 ||
                             (unit is SiegeTank && unit.isSieged) ||
                             (unit is Lurker && unit.isBurrowed) ||
                             (unit.isSuicideUnit)
@@ -139,27 +140,24 @@ object Combat {
 
     fun attackScore(attackerSim: SimUnit, enemySim: SimUnit): Double {
         val wpn = attackerSim.determineWeaponAgainst(enemySim)
-        if (wpn.type() == WeaponType.None) return -100000.0;
+        if (wpn.type() == WeaponType.None || !enemySim.detected) return -100000.0;
         val enemyWpn = enemySim.determineWeaponAgainst(attackerSim)
         val futurePosition = enemySim.position?.add(enemySim.velocity.scl(24f * 3).toPosition())
         val futureDistance = futurePosition?.minus(attackerSim.position ?: futurePosition)?.toVector()?.len() ?: 30f
         return (enemySim.hitPoints + enemySim.shield) / max(attackerSim.damagePerFrameTo(enemySim), 0.001) +
+                0.5 * (attackerSim.hitPoints + attackerSim.shield) / max(enemySim.damagePerFrameTo(attackerSim), 0.001) +
                 (if (enemySim.type == UnitType.Zerg_Larva || enemySim.type == UnitType.Zerg_Egg || enemySim.type == UnitType.Protoss_Interceptor || enemySim.type.isAddon) 25000 else 0) +
-                (if (enemySim.type.isWorker) -150 else 0) +
+                (if (enemySim.type.isWorker || enemySim.canHeal || enemySim.canRepair) -150 else 0) +
                 (if (enemySim.type.spaceProvided() > 0) -200 else 0) +
-                (if (enemySim.canHeal) -100 else 0) +
-                1.0 * futureDistance +
-                2.0 * (enemySim.position?.getDistance(attackerSim.position) ?: 0) +
-                (if (enemyWpn.type() != WeaponType.None)
-                    -enemySim.damagePerFrameTo(attackerSim)
-                else
-                    0.0) * (if (enemySim.hasSplashWeapon) 5000 else 3500) +
+                (if (attackerSim.isAir) 0.0 else 1.0 * futureDistance) +
+                1.5 * (enemySim.position?.getDistance(attackerSim.position) ?: 0) +
+                (if (attackerSim.hasSplashWeapon) -100 else 0) +
+                (fastsig(max(0.0, futureDistance.toDouble() - enemyWpn.maxRange() )) * -100 *
+                        (if (enemySim.type == UnitType.Zerg_Lurker && enemySim.isBurrowed) 20.0 else 1.0)) +
                 (if (enemySim.type == UnitType.Protoss_Carrier) -300 else 0) +
-                (if (enemySim.type == UnitType.Terran_Bunker) -200.0 else 0.0) +
-                (if (enemySim.detected) 0 else 500) +
                 (fastsig(max(0.0, futureDistance.toDouble() - wpn.maxRange() )) * 150 *
                         (if (attackerSim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed) 20.0 else 1.0)) +
-                (enemySim.topSpeed - attackerSim.topSpeed) * 50
+                (enemySim.topSpeed - attackerSim.topSpeed) * 30
     }
 
 
@@ -222,7 +220,7 @@ object Combat {
                         Inline("Update reach position to ${board.target?.position}") {
                             val target = board.target!!
                             val dst = min(128.0, target.getDistance(unit) / unit.topSpeed).toInt()
-                            reachBoard.position = EnemyInfo.predictedPositionOf(target, max(24, dst))
+                            reachBoard.position = EnemyInfo.predictedPositionOf(target, dst * 1.6)
                             if (!FTTBot.game.bwMap.isValidPosition(reachBoard.position)) {
                                 reachBoard.position = target.position
                             }
@@ -336,7 +334,7 @@ object Combat {
                                             }
                                         } else
                                             enemyPosition.getDistance(myCluster.position)
-                                        distanceToAttackers - 100 * it.eval + min(distanceToBase / 5.0, 400.0)
+                                        distanceToAttackers - 200 * it.eval + min(distanceToBase / 5.0, 400.0)
                                     }
                                     board.enemies = bestCombat?.enemy?.units
                                             ?: return@Inline NodeStatus.RUNNING
@@ -349,8 +347,8 @@ object Combat {
                                     NodeStatus.SUCCEEDED
                                 },
                                 Condition("Good combat eval?") {
-                                    board.eval > 0.65 ||
-                                            board.eval > 0.52 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me, 16) } }
+                                    board.eval > 0.6 ||
+                                            board.eval > 0.45 && myCluster.units.any { me -> board.enemies.any { it.canAttack(me, 16) } }
                                 },
                                 Inline("Who should attack?") {
                                     Board.resources.reserveUnits(board.myUnits)
@@ -370,11 +368,12 @@ object Combat {
         val reachBoard = ReachBoard(tolerance = 64)
         return sequence(
                 Inline("Find me some allies") {
-                    reachBoard.position = Cluster.mobileCombatUnits
+                    reachBoard.position = Cluster.myClusters
                             .filter { myCluster != it && (unit.isFlying || FTTBot.bwem.data.getMiniTile(it.position.toWalkPosition()).isWalkable) }
                             .minBy {
                                 it.position.getDistance(unit.position) -
-                                        it.units.count { it.initialType == unit.initialType } * 200
+                                        it.units.count { it.initialType == unit.initialType } * 300 -
+                                        0.1 * (Cluster.enemyClusters.minBy { ec -> ec.position.getDistance(it.position) }?.position?.getDistance(it.position) ?: 0)
                             }?.position
                             ?: if (!MyInfo.myBases.isEmpty()) (MyInfo.myBases[0] as PlayerUnit).position else return@Inline NodeStatus.RUNNING
                     NodeStatus.SUCCEEDED

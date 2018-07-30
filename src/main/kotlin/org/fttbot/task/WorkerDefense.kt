@@ -29,7 +29,6 @@ class WorkerDefense(val base: Position, val board: WorkerDefenseBoard) : BaseNod
         val simUnitsOfEnemy = enemyCluster.units.map { SimUnit.of(it) }
         val successForCompleteDefense = CombatEval.probabilityToWin(myCluster.units.filter { it is Attacker }.map { SimUnit.of(it) }, simUnitsOfEnemy)
         if (successForCompleteDefense < 0.4) {
-            // TODO: FLEE - you fools!
             return NodeStatus.FAILED
         }
         defendingWorkers.retainAll(Board.resources.units)

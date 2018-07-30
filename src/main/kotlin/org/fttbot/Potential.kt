@@ -2,10 +2,7 @@ package org.fttbot
 
 import bwem.CheckMode
 import com.badlogic.gdx.math.Vector2
-import org.fttbot.info.EnemyInfo
-import org.fttbot.info.UnitQuery
-import org.fttbot.info.canAttack
-import org.fttbot.info.inRadius
+import org.fttbot.info.*
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.WalkPosition
@@ -23,7 +20,7 @@ object Potential {
     }
 
     fun addThreatRepulsion(target: Vector2, unit: MobileUnit, avoidRange: Int? = null, scale: Float = 1f) {
-        val threats = (UnitQuery.enemyUnits + EnemyInfo.seenUnits).filter { it.canAttack(unit, avoidRange ?: 48) }
+        val threats = unit.potentialAttackers(avoidRange ?: 48)
         target.add(
                 threats.fold(Vector2()) { acc, playerUnit -> acc.sub(playerUnit.position.toVector()) }
                         .mulAdd(unit.position.toVector(), threats.size.toFloat())

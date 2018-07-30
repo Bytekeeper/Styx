@@ -198,8 +198,8 @@ object Production {
                                     Board.pendingUnits.add(unit)
                                     NodeStatus.SUCCEEDED
                                 },
-                                parallel(3,
-                                        ensureDependencies(unit),
+                                ensureDependencies(unit),
+                                parallel(2,
                                         ensureSupply(supplyUsed),
                                         fallback(ReserveResources(unit.mineralPrice(), unit.gasPrice()), Sleep)
                                 ),

@@ -22,7 +22,7 @@ object CombatEval {
 
     fun minAmountOfAdditionalsForProbability(myUnits: List<SimUnit>, additionalUnits: SimUnit, enemies: List<SimUnit>, minProbability: Double = 0.6): Int {
         if (enemies.isEmpty()) return -1
-        for (amount in 0..10) {
+        for (amount in 0..20) {
             val unitsA = (1..amount).map { additionalUnits }
             val result = probabilityToWin(myUnits + unitsA, enemies)
             if (result >= minProbability) return amount
@@ -54,8 +54,8 @@ object CombatEval {
 
         val medicFactorA = fastsig(unitsOfPlayerA.count { it.canHeal }.toDouble() * 2) * 1.5 + 1.0
         val medicFactorB = fastsig(unitsOfPlayerB.count { it.canHeal }.toDouble() * 2) * 1.5 + 1.0
-        val repairFactorA = fastsig(unitsOfPlayerA.count { it.canRepair }.toDouble() * 0.3) * 2.8 + 1.0
-        val repairFactorB = fastsig(unitsOfPlayerB.count { it.canRepair }.toDouble() * 0.3) * 2.8 + 1.0
+        val repairFactorA = fastsig(unitsOfPlayerA.count { it.canRepair }.toDouble() * 0.15) * 2.7 + 1.0
+        val repairFactorB = fastsig(unitsOfPlayerB.count { it.canRepair }.toDouble() * 0.15) * 2.7 + 1.0
 
         val alpha = strength(unitsOfPlayerA, unitsOfPlayerB.filter { !it.suicideUnit }, center, medicFactorA, repairFactorA, fallbackDistance)
         val beta = strength(unitsOfPlayerB, unitsOfPlayerA.filter { !it.suicideUnit }, center, medicFactorB, repairFactorB, fallbackDistance)

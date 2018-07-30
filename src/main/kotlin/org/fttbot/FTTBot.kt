@@ -16,7 +16,7 @@ import org.fttbot.task.BoSearch
 import org.fttbot.task.Combat.attacking
 import org.fttbot.task.Combat.defending
 import org.fttbot.task.GatherResources
-import org.fttbot.task.Macro.moveSurplusWorkers
+import org.fttbot.strategies.Macro.moveSurplusWorkers
 import org.fttbot.task.Scouting.scout
 import org.fttbot.task.Workers
 import org.openbw.bwapi4j.*
@@ -24,6 +24,7 @@ import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.PlayerUnit
+import org.openbw.bwapi4j.unit.RawUnitFactory
 import org.openbw.bwapi4j.unit.Unit
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
@@ -106,8 +107,8 @@ object FTTBot : BWEventListener {
                 parallel(100,
                         buildQueue,
                         NoFail(scout()),
-                        NoFail(defending()),
                         NoFail(attacking()),
+                        NoFail(defending()),
                         NoFail(moveSurplusWorkers()),
                         NoFail(Workers.avoidDamageToWorkers()),
                         NoFail(sequence(GatherResources, Sleep)),
@@ -200,6 +201,7 @@ object FTTBot : BWEventListener {
             game.mapDrawer.drawTextScreen(0, 140, "uWorker : %.2f".format(Utilities.workerUtilization))
             game.mapDrawer.drawTextScreen(0, 150, "uMin : %.2f".format(Utilities.mineralsUtilization))
             game.mapDrawer.drawTextScreen(0, 160, "uGas : %.2f".format(Utilities.gasUtilization))
+            game.mapDrawer.drawTextScreen(0, 170, "S : %d".format(self.supplyTotal()))
         }
     }
 

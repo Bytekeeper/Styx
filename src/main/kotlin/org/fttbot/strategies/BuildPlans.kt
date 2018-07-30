@@ -8,8 +8,23 @@ import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.info.EnemyInfo
 import org.fttbot.info.UnitQuery
 import org.fttbot.strategies.Strategies.considerBaseDefense
-import org.fttbot.task.Macro
-import org.fttbot.task.Macro.buildExpansion
+import org.fttbot.strategies.Upgrades.uAdrenalGlandsUpgrade
+import org.fttbot.strategies.Upgrades.uAnabolicSynthesisUpgrade
+import org.fttbot.strategies.Upgrades.uChitinousPlatingUpgrade
+import org.fttbot.strategies.Upgrades.uFlyerArmorUpgrade
+import org.fttbot.strategies.Upgrades.uGroundArmorUpgrade
+import org.fttbot.strategies.Upgrades.uMeleeAttacksUpgrade
+import org.fttbot.strategies.Upgrades.uMetabolicBoost
+import org.fttbot.strategies.Upgrades.uUpgradeFlyerAttacks
+import org.fttbot.strategies.Macro.buildExpansion
+import org.fttbot.strategies.Macro.uExpand
+import org.fttbot.strategies.Macro.uMoreGas
+import org.fttbot.strategies.Macro.uMoreHatches
+import org.fttbot.strategies.Macro.uMoreSupply
+import org.fttbot.strategies.Macro.uMoreWorkers
+import org.fttbot.strategies.Upgrades.uGrooveSpines
+import org.fttbot.strategies.Upgrades.uMissileAttacks
+import org.fttbot.strategies.Upgrades.uMuscularAugments
 import org.fttbot.task.Production
 import org.fttbot.task.Production.build
 import org.fttbot.task.Production.buildGas
@@ -18,18 +33,19 @@ import org.fttbot.task.Production.produceSupply
 import org.fttbot.task.Production.research
 import org.fttbot.task.Production.train
 import org.fttbot.task.Production.trainWorker
-import org.fttbot.task.Production.upgrade
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
-import org.openbw.bwapi4j.type.UpgradeType
 import org.openbw.bwapi4j.unit.*
-import kotlin.math.min
 
 object BuildPlans {
     fun _12HatchA(): Node =
             mparallel(1000,
-                    Repeat(5, Production.trainWorker()),
+                    trainWorker(),
+                    trainWorker(),
+                    trainWorker(),
+                    trainWorker(),
+                    trainWorker(),
                     produceSupply(),
                     trainWorker(),
                     trainWorker(),
@@ -43,7 +59,11 @@ object BuildPlans {
 
     fun _12HatchB(): Node =
             mparallel(1000,
-                    Repeat(5, Production.trainWorker()),
+                    trainWorker(),
+                    trainWorker(),
+                    trainWorker(),
+                    trainWorker(),
+                    trainWorker(),
                     produceSupply(),
                     trainWorker(),
                     trainWorker(),
@@ -55,7 +75,14 @@ object BuildPlans {
             )
 
     fun _3Hatch(): Node = mparallel(Int.MAX_VALUE,
-            Repeat(8, trainWorker()),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
+            trainWorker(),
             buildExpansion(),
             build(UnitType.Zerg_Spawning_Pool),
             considerBaseDefense(),
@@ -69,7 +96,8 @@ object BuildPlans {
     fun _3HatchMuta(): Node =
             mparallel(Int.MAX_VALUE,
                     _3Hatch(),
-                    mainMutasZergUltra()
+                    build(UnitType.Zerg_Spire),
+                    mainStrategy()
             )
 
     fun _12poolMuta(): Node = mparallel(Int.MAX_VALUE,
@@ -102,7 +130,7 @@ object BuildPlans {
             train(UnitType.Zerg_Mutalisk),
             train(UnitType.Zerg_Mutalisk),
             trainWorker(),
-            mainMutasZergUltra()
+            mainStrategy()
     )
 
     fun _12poolLurker(): Node = mparallel(Int.MAX_VALUE,
@@ -130,7 +158,7 @@ object BuildPlans {
             train(UnitType.Zerg_Lurker),
             train(UnitType.Zerg_Lurker),
             considerBaseDefense(),
-            mainLurker()
+            mainStrategy()
     )
 
     fun overpoolVsZerg(): Node = mparallel(Int.MAX_VALUE,
@@ -142,49 +170,48 @@ object BuildPlans {
             produceSupply(),
             build(UnitType.Zerg_Spawning_Pool),
             considerBaseDefense(),
-            mainMutasZergUltra()
+            build(UnitType.Zerg_Spire),
+            mainStrategy()
     )
 
-    fun mainMutasZergUltra(): Node = mparallel(Int.MAX_VALUE,
+    fun mainStrategy(): Node = mparallel(Int.MAX_VALUE,
             UParallel(Int.MAX_VALUE,
-                    uExpand(),
-                    uMoreHatches(),
-                    uMoreGas(),
-                    uMoreSupply(),
-                    uMoreWorkers(),
+                    defaultStrategy(),
                     Repeat(child = Utility({ Utilities.moreMutasUtility }, train(UnitType.Zerg_Mutalisk))),
                     Repeat(child = Utility({ Utilities.moreUltrasUtility }, train(UnitType.Zerg_Ultralisk))),
                     Repeat(child = Utility({ Utilities.moreLingsUtility }, train(UnitType.Zerg_Zergling))),
+                    Repeat(child = Utility({ Utilities.moreLurkersUtility }, train(UnitType.Zerg_Lurker))),
+                    Repeat(child = Utility({ Utilities.moreHydrasUtility }, train(UnitType.Zerg_Hydralisk))),
                     Utility({
                         (UnitQuery.enemyUnits + EnemyInfo.seenUnits).count { it.isFlying && it !is Overlord } /
                                 (UnitQuery.myUnits.count { it is Scourge || it is Egg && it.buildType == UnitType.Zerg_Scourge } + 2.1)
-                    }, train(UnitType.Zerg_Scourge)),
-                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is AirAttacker } / (15.0 + 15 * FTTBot.self.getUpgradeLevel(UpgradeType.Zerg_Flyer_Attacks))) }, upgrade(UpgradeType.Zerg_Flyer_Attacks))),
-                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is AirAttacker } / (20.0 + 15 * FTTBot.self.getUpgradeLevel(UpgradeType.Zerg_Flyer_Carapace))) }, upgrade(UpgradeType.Zerg_Flyer_Carapace))),
-                    uMeleeAttacksUpgrade(),
-                    uGroundArmorUpgrade(),
-                    uMetabolicBoost(),
-                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Zergling } / 50.0) }, upgrade(UpgradeType.Adrenal_Glands))),
-                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Ultralisk } / 10.0) }, upgrade(UpgradeType.Anabolic_Synthesis))),
-                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Ultralisk } / 12.0) }, upgrade(UpgradeType.Chitinous_Plating)))
+                    }, train(UnitType.Zerg_Scourge))
             )
     )
 
-    private fun uMetabolicBoost() =
-            NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Zergling } / 20.0) }, upgrade(UpgradeType.Metabolic_Boost)))
+    fun defaultStrategy() = UParallel(Int.MAX_VALUE,
+            uExpand(),
+            uMoreHatches(),
+            uMoreGas(),
+            uMoreSupply(),
+            uMoreWorkers(),
+            considerUpgrades()
+            )
 
-    private fun uGroundArmorUpgrade() =
-            NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is GroundAttacker } / (65.0 + 20 * FTTBot.self.getUpgradeLevel(UpgradeType.Zerg_Carapace))) }, upgrade(UpgradeType.Zerg_Carapace)))
-
-    private fun uMeleeAttacksUpgrade() =
-            NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is GroundAttacker } / (60.0 + 20 * FTTBot.self.getUpgradeLevel(UpgradeType.Zerg_Melee_Attacks))) }, upgrade(UpgradeType.Zerg_Melee_Attacks)))
-
-    private fun uMoreGas() = NoFail(Utility({ Utilities.moreGasUtility }, buildGas()))
-
-    private fun uMoreHatches() =
-            NoFail(Utility({ Utilities.moreTrainersUtility }, fallback(build(UnitType.Zerg_Hatchery), Sleep)))
-
-    private fun uExpand() = NoFail(Utility({ Utilities.expansionUtility }, buildExpansion()))
+    fun considerUpgrades(): Node = UParallel(Int.MAX_VALUE,
+            uMetabolicBoost(),
+            uMeleeAttacksUpgrade(),
+            uGroundArmorUpgrade(),
+            uMetabolicBoost(),
+            uAdrenalGlandsUpgrade(),
+            uAnabolicSynthesisUpgrade(),
+            uChitinousPlatingUpgrade(),
+            uUpgradeFlyerAttacks(),
+            uFlyerArmorUpgrade(),
+            uMissileAttacks(),
+            uGrooveSpines(),
+            uMuscularAugments()
+    )
 
     fun raceChoice(): Node = fallback(
             sequence(
@@ -217,29 +244,6 @@ object BuildPlans {
             }
     )
 
-    fun mainLurker(): Node = mparallel(Int.MAX_VALUE,
-            UParallel(Int.MAX_VALUE,
-                    uExpand(),
-                    uMoreHatches(),
-                    uMoreGas(),
-                    uMoreSupply(),
-                    uMoreWorkers(),
-                    Repeat(child = Utility({ Utilities.moreLurkersUtility }, train(UnitType.Zerg_Lurker))),
-                    Repeat(child = Utility({ Utilities.moreHydrasUtility }, train(UnitType.Zerg_Hydralisk))),
-                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Lurker || it is Hydralisk } / (10.0 + 20 * FTTBot.self.getUpgradeLevel(UpgradeType.Zerg_Missile_Attacks))) }, upgrade(UpgradeType.Zerg_Missile_Attacks))),
-                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Hydralisk } / (12.0 + 20 * FTTBot.self.getUpgradeLevel(UpgradeType.Grooved_Spines))) }, upgrade(UpgradeType.Grooved_Spines))),
-                    NoFail(Utility({ min(1.0, UnitQuery.myUnits.count { it is Hydralisk } / (10.0 + 20 * FTTBot.self.getUpgradeLevel(UpgradeType.Muscular_Augments))) }, upgrade(UpgradeType.Muscular_Augments))),
-                    uGroundArmorUpgrade(),
-                    uMetabolicBoost(),
-                    Repeat(child = Utility({ min(1.0, 3 / (0.1 + UnitQuery.myUnits.count { it is Zergling })) }, train(UnitType.Zerg_Zergling)))
-            ),
-            Repeat(UpgradeType.Zerg_Carapace.maxRepeats(), Delegate { upgrade(UpgradeType.Zerg_Carapace) })
-    )
-
-    private fun uMoreWorkers() = Repeat(child = Utility({ Utilities.moreWorkersUtility }, trainWorker()))
-
-    private fun uMoreSupply() = Repeat(child = Utility({ Utilities.moreSupplyUtility }, produceSupply()))
-
     fun _2HatchMuta(): Node =
             mparallel(1000,
                     Delegate {
@@ -262,6 +266,6 @@ object BuildPlans {
                     produce(UnitType.Zerg_Spire),
                     Macro.buildExpansion(),
                     fallback(buildGas(), Success),
-                    mainMutasZergUltra()
+                    mainStrategy()
             )
 }

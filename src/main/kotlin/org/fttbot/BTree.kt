@@ -280,7 +280,7 @@ class Repeat(val times: Int = -1, child: Node, val name: String = "") : Decorato
             }
         }
         if (maxLoops <= 0) {
-            LOG.error("Possible infinity loop: ${getTreeTrace()}")
+//            LOG.error("Possible infinity loop: ${getTreeTrace()}")
         }
         return NodeStatus.SUCCEEDED
     }
@@ -527,6 +527,10 @@ open class Sequence(children: List<Node>) : ParentNode(children) {
 
 class Utility(val utilityProvider: () -> Double, child: Node) : Decorator(child) {
     override val utility: Double by LazyOnFrame { utilityProvider() }
+
+    override fun tick(): NodeStatus =
+        if (utility < 0.1) NodeStatus.SUCCEEDED
+        else super.tick()
 }
 
 class USequence(children: List<Node>) : Sequence(children) {
