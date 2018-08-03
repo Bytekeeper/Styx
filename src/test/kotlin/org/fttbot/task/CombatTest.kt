@@ -2,6 +2,7 @@ package org.fttbot.task
 
 import javafx.geometry.Pos
 import org.assertj.core.api.Assertions.assertThat
+import org.fttbot.estimation.CombatEval
 import org.fttbot.estimation.SimUnit
 import org.junit.jupiter.api.Assertions.*
 import org.junit.jupiter.api.BeforeAll
@@ -27,8 +28,8 @@ internal class CombatTest {
         val zealot = SimUnit.of(UnitType.Protoss_Zealot)
         zealot.position = Position(0, 0)
 
-        val scoreGoon = Combat.attackScore(muta, goon)
-        val scoreZealot = Combat.attackScore(muta, zealot)
+        val scoreGoon = CombatEval.attackScore(muta, goon)
+        val scoreZealot = CombatEval.attackScore(muta, zealot)
         assertThat(scoreGoon).isLessThan(scoreZealot)
     }
 
@@ -37,7 +38,7 @@ internal class CombatTest {
         val muta = SimUnit.of(UnitType.Zerg_Mutalisk)
         val enemies = arrayOf(SimUnit.of(UnitType.Protoss_Corsair), SimUnit.of(UnitType.Protoss_Probe))
 
-        val target = enemies.map { it to Combat.attackScore(muta, it) }.minBy { it.second }
+        val target = enemies.map { it to CombatEval.attackScore(muta, it) }.minBy { it.second }
         assertThat(target).hasFieldOrPropertyWithValue("first.type", UnitType.Protoss_Corsair)
     }
 
@@ -50,8 +51,8 @@ internal class CombatTest {
         val zealot = SimUnit.of(UnitType.Protoss_Zealot)
         zealot.position = Position(0, 0)
 
-        val scoreGoon = Combat.attackScore(muta, corsair)
-        val scoreZealot = Combat.attackScore(muta, zealot)
+        val scoreGoon = CombatEval.attackScore(muta, corsair)
+        val scoreZealot = CombatEval.attackScore(muta, zealot)
         assertThat(scoreGoon).isLessThan(scoreZealot)
     }
 
@@ -60,7 +61,7 @@ internal class CombatTest {
         val muta = SimUnit.of(UnitType.Zerg_Mutalisk)
         val enemies = arrayOf(SimUnit.of(UnitType.Protoss_Carrier), SimUnit.of(UnitType.Protoss_Interceptor))
 
-        val target = enemies.map { it to Combat.attackScore(muta, it) }.minBy { it.second }
+        val target = enemies.map { it to CombatEval.attackScore(muta, it) }.minBy { it.second }
         assertThat(target).hasFieldOrPropertyWithValue("first.type", UnitType.Protoss_Carrier)
     }
 
@@ -69,7 +70,7 @@ internal class CombatTest {
         val muta = SimUnit.of(UnitType.Zerg_Mutalisk)
         val enemies = arrayOf(SimUnit.of(UnitType.Zerg_Hydralisk_Den), SimUnit.of(UnitType.Zerg_Hydralisk))
 
-        val target = enemies.map { it to Combat.attackScore(muta, it) }.minBy { it.second }
+        val target = enemies.map { it to CombatEval.attackScore(muta, it) }.minBy { it.second }
         assertThat(target).hasFieldOrPropertyWithValue("first.type", UnitType.Zerg_Hydralisk)
     }
 
@@ -78,7 +79,7 @@ internal class CombatTest {
         val lurker = SimUnit.of(UnitType.Zerg_Lurker)
         val enemies = arrayOf(SimUnit.of(UnitType.Terran_Firebat), SimUnit.of(UnitType.Terran_Supply_Depot))
 
-        val target = enemies.map { it to Combat.attackScore(lurker, it) }.minBy { it.second }
+        val target = enemies.map { it to CombatEval.attackScore(lurker, it) }.minBy { it.second }
         assertThat(target).hasFieldOrPropertyWithValue("first.type", UnitType.Terran_Firebat)
     }
 
@@ -88,7 +89,7 @@ internal class CombatTest {
         lurker.isBurrowed = true
         val enemies = arrayOf(SimUnit.of(UnitType.Terran_SCV), SimUnit.of(UnitType.Terran_Siege_Tank_Siege_Mode))
 
-        val target = enemies.map { it to Combat.attackScore(lurker, it) }.minBy { it.second }
+        val target = enemies.map { it to CombatEval.attackScore(lurker, it) }.minBy { it.second }
         assertThat(target).hasFieldOrPropertyWithValue("first.type", UnitType.Terran_Siege_Tank_Siege_Mode)
     }
 }

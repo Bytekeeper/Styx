@@ -3,28 +3,15 @@ package org.fttbot
 import bwem.BWEM
 import bwem.map.Map
 import org.apache.logging.log4j.LogManager
-import org.fttbot.Fallback.Companion.fallback
-import org.fttbot.MSequence.Companion.msequence
-import org.fttbot.Parallel.Companion.parallel
-import org.fttbot.Sequence.Companion.sequence
 import org.fttbot.estimation.BOPrediction
 import org.fttbot.info.*
-import org.fttbot.strategies.BuildPlans
-import org.fttbot.strategies.Strategies
 import org.fttbot.strategies.Utilities
-import org.fttbot.task.BoSearch
-import org.fttbot.task.Combat.attacking
-import org.fttbot.task.Combat.defending
-import org.fttbot.task.GatherResources
-import org.fttbot.strategies.Macro.moveSurplusWorkers
-import org.fttbot.task.Scouting.scout
-import org.fttbot.task.Workers
+import org.fttbot.ubb.*
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.PlayerUnit
-import org.openbw.bwapi4j.unit.RawUnitFactory
 import org.openbw.bwapi4j.unit.Unit
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.Future
@@ -49,10 +36,7 @@ object FTTBot : BWEventListener {
 
     private var showDebug: Boolean = false
 
-    private lateinit var bot: Node
-
-    private lateinit var buildQueue: Node
-
+    private lateinit var bot: List<UtilityProvider>
 
     fun start(showDebug: Boolean) {
         this.showDebug = showDebug
@@ -88,42 +72,12 @@ object FTTBot : BWEventListener {
             else -> throw IllegalStateException("Can't handle race ${racePlayed}")
         }
 
-        buildQueue = fallback(
-                msequence("buildQueue",
-                        BuildPlans.raceChoice(),
-                        Inline("Crap Check") {
-                            LOG.error("The buildqueue SUCCEEDED, so we're more or less dead: ${buildQueue.tree}")
-                            NodeStatus.SUCCEEDED
-                        }
-                ),
-                Inline("Crap Check") {
-                    LOG.error("The buildqueue FAILED, so we're more or less dead: ${buildQueue.tree}")
-                    LOG.error("Last failed trace: ${buildQueue.getFailTrace()}")
-                    NodeStatus.SUCCEEDED
-                }
-
-        )
-        bot = fallback(
-                parallel(100,
-                        buildQueue,
-                        NoFail(scout()),
-                        NoFail(attacking()),
-                        NoFail(defending()),
-                        NoFail(moveSurplusWorkers()),
-                        NoFail(Workers.avoidDamageToWorkers()),
-                        NoFail(sequence(GatherResources, Sleep)),
-                        NoFail(Workers.returnWanderingWorkers()),
-                        NoFail(Strategies.considerCanceling())
-                ),
-                Inline("This shouldn't have happened") {
-                    LOG.error("Main loop failed!")
-                    NodeStatus.SUCCEEDED
-                }
-        )
         UnitQuery.reset()
         Cluster.reset()
         EnemyInfo.reset()
 //        org.fttbot.Map.init()
+
+        bot = listOf(BuildWorker, GatherMinerals, BuildSupply, BuildSpawingPool)
     }
 
     override fun onFrame() {
@@ -142,7 +96,9 @@ object FTTBot : BWEventListener {
             Cluster.step()
 
             Board.reset()
-            bot.tick()
+            bot.flatMap { it() }
+                    .sortedByDescending { it.utility }
+                    .forEach { it.process(Board.resources) }
             if (UnitQuery.myWorkers.any { !it.exists() }) {
                 throw IllegalStateException()
             }
@@ -187,7 +143,6 @@ object FTTBot : BWEventListener {
                     game.mapDrawer.drawLineMap(e.position, it.position, Color.YELLOW)
                 }
             }
-
             game.mapDrawer.drawTextScreen(0, 40, "Expand : %.2f".format(Utilities.expansionUtility))
             game.mapDrawer.drawTextScreen(0, 50, "Trainers : %.2f".format(Utilities.moreTrainersUtility))
             game.mapDrawer.drawTextScreen(0, 60, "Workers : %.2f".format(Utilities.moreWorkersUtility))
@@ -208,12 +163,10 @@ object FTTBot : BWEventListener {
     override fun onUnitDestroy(unit: Unit) {
         if (unit !is PlayerUnit) return
         EnemyInfo.onUnitDestroy(unit)
-        BoSearch.onUnitDestroy(unit)
     }
 
     override fun onUnitCreate(unit: Unit) {
         if (unit !is PlayerUnit) return
-        BoSearch.onUnitCreate(unit)
     }
 
     override fun onUnitMorph(unit: Unit) {
@@ -242,7 +195,6 @@ object FTTBot : BWEventListener {
         // Unit changed owner
         if (unit is PlayerUnit) {
             EnemyInfo.onUnitRenegade(unit)
-            BoSearch.onUnitRenegade(unit)
         }
     }
 

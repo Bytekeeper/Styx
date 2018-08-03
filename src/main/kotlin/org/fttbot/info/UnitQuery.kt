@@ -22,6 +22,7 @@ fun Weapon.isMelee() = this != WeaponType.None && type().maxRange() <= MAX_MELEE
 
 fun <T : Unit> List<T>.inRadius(other: Unit, maxRadius: Int) = filter { other.getDistance(it) < maxRadius }
 fun <T : Unit> List<T>.inRadius(position: Position, maxRadius: Int) = filter { it.getDistance(position) < maxRadius }
+fun <T : Unit> List<T>.closestTo(unit: Unit) = minBy { it.getDistance(unit) }
 val Base.isReadyForResources get() = (this as PlayerUnit).isCompleted || this is Lair
 val PlayerUnit.isSuicideUnit get() = when (this) {
     is Scourge, is SpiderMine, is Scarab -> true

@@ -1,10 +1,9 @@
 package org.fttbot.estimation
 
 import com.badlogic.gdx.math.Vector2
-import org.fttbot.fastsig
+import org.fttbot.*
 import org.fttbot.info.isMelee
 import org.fttbot.info.isSuicideUnit
-import org.fttbot.or
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.*
 import org.openbw.bwapi4j.unit.*
@@ -69,6 +68,28 @@ object CombatEval {
         if (result.isNaN())
             throw IllegalStateException()
         return result
+    }
+
+    fun attackScore(attackerSim: SimUnit, enemySim: SimUnit): Double {
+        val wpn = attackerSim.determineWeaponAgainst(enemySim)
+        if (wpn.type() == WeaponType.None || !enemySim.detected) return -100000.0;
+        val enemyWpn = enemySim.determineWeaponAgainst(attackerSim)
+        val futurePosition = enemySim.position?.add(enemySim.velocity.scl(24f * 3).toPosition())
+        val futureDistance = futurePosition?.minus(attackerSim.position ?: futurePosition)?.toVector()?.len() ?: 30f
+        return (enemySim.hitPoints + enemySim.shield) / max(attackerSim.damagePerFrameTo(enemySim), 0.001) +
+                0.5 * (attackerSim.hitPoints + attackerSim.shield) / max(enemySim.damagePerFrameTo(attackerSim), 0.001) +
+                (if (enemySim.type == UnitType.Zerg_Larva || enemySim.type == UnitType.Zerg_Egg || enemySim.type == UnitType.Protoss_Interceptor || enemySim.type.isAddon) 25000 else 0) +
+                (if (enemySim.type.isWorker || enemySim.canHeal || enemySim.canRepair) -150 else 0) +
+                (if (enemySim.type.spaceProvided() > 0) -200 else 0) +
+                (if (attackerSim.isAir) 0.0 else 1.0 * futureDistance) +
+                1.5 * (enemySim.position?.getDistance(attackerSim.position) ?: 0) +
+                (if (attackerSim.hasSplashWeapon) -100 else 0) +
+                (fastsig(max(0.0, futureDistance.toDouble() - enemyWpn.maxRange() )) * -100 *
+                        (if (enemySim.type == UnitType.Zerg_Lurker && enemySim.isBurrowed) 20.0 else 1.0)) +
+                (if (enemySim.type == UnitType.Protoss_Carrier) -300 else 0) +
+                (fastsig(max(0.0, futureDistance.toDouble() - wpn.maxRange() )) * 150 *
+                        (if (attackerSim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed) 20.0 else 1.0)) +
+                (enemySim.topSpeed - attackerSim.topSpeed) * 30
     }
 
     private fun strength(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, center: Position, medicFactor: Double, repairFactor: Double, fallbackDistance: Double) =

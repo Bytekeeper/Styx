@@ -1,7 +1,6 @@
 package org.fttbot
 
 import org.fttbot.info.UnitQuery
-import org.fttbot.task.BoSearch
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType

@@ -2,7 +2,6 @@ package org.fttbot
 
 import org.fttbot.FTTBot.self
 import org.fttbot.info.UnitQuery
-import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.PlayerUnit
@@ -28,6 +27,13 @@ class Resources {
         private set
     var supply: Int = 0
         private set
+
+    fun canAfford(minerals: Int, gas: Int, supply: Int) =
+            (minerals == 0 || this.minerals >= minerals) &&
+                    (gas == 0 || this.gas >= gas) &&
+                    (supply == 0 || this.supply >= supply)
+
+    fun canAfford(unitType: UnitType) = canAfford(unitType.mineralPrice(), unitType.gasPrice(), unitType.supplyRequired())
 
     fun reserveUnits(toReserve: Collection<PlayerUnit>): Resources {
         require(_units.containsAll(toReserve))
@@ -61,5 +67,7 @@ class Resources {
         this._units.clear()
         this._units.addAll(units)
     }
+
+    fun reserve(unitType: UnitType) = reserve(unitType.mineralPrice(), unitType.gasPrice(), unitType.supplyRequired())
 }
 
