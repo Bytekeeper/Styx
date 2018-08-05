@@ -23,7 +23,6 @@ fun Weapon.isMelee() = this != WeaponType.None && type().maxRange() <= MAX_MELEE
 fun <T : Unit> List<T>.inRadius(other: Unit, maxRadius: Int) = filter { other.getDistance(it) < maxRadius }
 fun <T : Unit> List<T>.inRadius(position: Position, maxRadius: Int) = filter { it.getDistance(position) < maxRadius }
 fun <T : Unit> List<T>.closestTo(unit: Unit) = minBy { it.getDistance(unit) }
-val Base.isReadyForResources get() = (this as PlayerUnit).isCompleted || this is Lair
 val PlayerUnit.isSuicideUnit get() = when (this) {
     is Scourge, is SpiderMine, is Scarab -> true
     else -> false
@@ -49,7 +48,7 @@ val Attacker.stopFrames
         else -> 2
     }
 
-fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidates: List<Worker> = Board.resources.units.filterIsInstance(Worker::class.java)): Worker? {
+fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidates: List<Worker> = Board.resources.units.filterIsInstance<Worker>()): Worker? {
     val selection =
             if (forPosition != null) {
                 candidates.filter { it.getDistance(forPosition) <= maxRange }
@@ -150,7 +149,7 @@ object UnitQuery {
     }
 
     val geysers get() = allUnits.filter { it is VespeneGeyser }
-    val myBases get() = myUnits.filter { it is Base }
+    val myBases get() = myUnits.filter { it is ResourceDepot }
     // BWAPI sometimes "provides" units that aren't there - but those are also reported "hiddenAttack", so just ignore them
     val andStayDown = mutableSetOf<Pair<Int, UnitType>>()
 

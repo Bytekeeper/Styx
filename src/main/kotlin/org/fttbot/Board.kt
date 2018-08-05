@@ -69,5 +69,14 @@ class Resources {
     }
 
     fun reserve(unitType: UnitType) = reserve(unitType.mineralPrice(), unitType.gasPrice(), unitType.supplyRequired())
+
+    fun acquireFor(unitType: UnitType) =
+            if (!Board.resources.canAfford(unitType)) {
+                Board.resources.reserve(unitType)
+                false
+            } else {
+                Board.resources.reserve(unitType)
+                true
+            }
 }
 

@@ -6,7 +6,7 @@ import org.apache.logging.log4j.LogManager
 import org.fttbot.estimation.BOPrediction
 import org.fttbot.info.*
 import org.fttbot.strategies.Utilities
-import org.fttbot.ubb.*
+import org.fttbot.task.*
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.Race
@@ -36,7 +36,7 @@ object FTTBot : BWEventListener {
 
     private var showDebug: Boolean = false
 
-    private lateinit var bot: List<UtilityProvider>
+    private lateinit var bot: MParallelTask
 
     fun start(showDebug: Boolean) {
         this.showDebug = showDebug
@@ -77,8 +77,14 @@ object FTTBot : BWEventListener {
         EnemyInfo.reset()
 //        org.fttbot.Map.init()
 
-        bot = listOf(BuildWorker, GatherMinerals, BuildSupply, BuildSpawingPool)
+        bot = MParallelTask {
+            listOf(
+                    Train, GatherMinerals, Construct, Scouting, WorkerDefense
+            ).flatMap { it() }
+        }
     }
+
+    var tasks = listOf<Task>()
 
     override fun onFrame() {
         latency_frames = game.interactionHandler.latencyFrames
@@ -96,9 +102,8 @@ object FTTBot : BWEventListener {
             Cluster.step()
 
             Board.reset()
-            bot.flatMap { it() }
-                    .sortedByDescending { it.utility }
-                    .forEach { it.process() }
+            bot.process()
+            tasks = bot.tasks - bot.completedTasks
             if (UnitQuery.myWorkers.any { !it.exists() }) {
                 throw IllegalStateException()
             }
@@ -157,6 +162,11 @@ object FTTBot : BWEventListener {
             game.mapDrawer.drawTextScreen(0, 150, "uMin : %.2f".format(Utilities.mineralsUtilization))
             game.mapDrawer.drawTextScreen(0, 160, "uGas : %.2f".format(Utilities.gasUtilization))
             game.mapDrawer.drawTextScreen(0, 170, "S : %d".format(self.supplyTotal()))
+
+            tasks.forEachIndexed { index, task ->
+                val u = "%.2f".format(task.utility)
+                game.mapDrawer.drawTextScreen(300, index * 10, "$u : $task")
+            }
         }
     }
 
