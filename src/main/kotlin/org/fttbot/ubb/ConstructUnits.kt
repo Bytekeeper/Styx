@@ -1,5 +1,6 @@
 package org.fttbot.ubb
 
+import org.fttbot.Board.resources
 import org.fttbot.FTTBot
 import org.fttbot.Resources
 import org.fttbot.info.UnitQuery
@@ -10,7 +11,7 @@ class BuildWorker : Utility {
     override val utility: Double
         get() = Utilities.moreWorkersUtility
 
-    override fun process(resources: Resources) {
+    override fun process() {
         val worker = FTTBot.self.race.worker
         if (resources.canAfford(worker)) {
             resources.reserve(worker)
@@ -30,7 +31,7 @@ class BuildSupply : Utility {
     override val utility: Double
         get() = Utilities.moreSupplyUtility
 
-    override fun process(resources: Resources) {
+    override fun process() {
         val supply = FTTBot.self.race.supplyProvider
         if (resources.canAfford(supply)) {
             val trainer = resources.units.firstOrNull { it is Larva } as? Larva ?: return

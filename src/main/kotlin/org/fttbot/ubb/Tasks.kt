@@ -1,5 +1,6 @@
 package org.fttbot.ubb
 
+import org.fttbot.Board.resources
 import org.fttbot.Resources
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.closestTo
@@ -9,7 +10,7 @@ class GatherMinerals : Utility {
     override val utility: Double
         get() = 0.1
 
-    override fun process(resources: Resources) {
+    override fun process() {
         val workers = resources.units.filterIsInstance<Worker>()
         val worker = workers.firstOrNull { it.isGatheringMinerals }
                 ?: workers.firstOrNull { it.isIdle }

@@ -98,7 +98,7 @@ object FTTBot : BWEventListener {
             Board.reset()
             bot.flatMap { it() }
                     .sortedByDescending { it.utility }
-                    .forEach { it.process(Board.resources) }
+                    .forEach { it.process() }
             if (UnitQuery.myWorkers.any { !it.exists() }) {
                 throw IllegalStateException()
             }

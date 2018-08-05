@@ -1,5 +1,6 @@
 package org.fttbot.ubb
 
+import org.fttbot.Board.resources
 import org.fttbot.ConstructionPosition
 import org.fttbot.Resources
 import org.fttbot.info.UnitQuery
@@ -13,22 +14,25 @@ class BuildSpawingPool : Utility {
     override val utility: Double
         get() = if (required()) min(1.0, Utilities.moreLingsUtility * 1.1) else 0.0
 
-    private fun required() = UnitQuery.myBuildings.none { it is SpawningPool }
+    private fun required() = UnitQuery.myUnits.none { it is SpawningPool }
 
-    override fun process(resources: Resources) {
+    private var builder : Worker? = null
+
+    override fun process() {
         if (!required()) return
+
         if (!resources.canAfford(UnitType.Zerg_Spawning_Pool)) {
             resources.reserve(UnitType.Zerg_Spawning_Pool)
             return
         }
         val position = ConstructionPosition.findPositionFor(UnitType.Zerg_Spawning_Pool) ?: return
         val workers = resources.units.filterIsInstance<Worker>().sortedBy { it.getDistance(position.toPosition()) }
-        val builder = workers.firstOrNull { it.buildType == UnitType.Zerg_Spawning_Pool }
+        builder = if (workers.contains(builder)) builder else workers.firstOrNull { it.buildType == UnitType.Zerg_Spawning_Pool }
                 ?: workers.firstOrNull { it.isIdle } ?: workers.firstOrNull { it.isGatheringMinerals }
                 ?: workers.firstOrNull { it.isGatheringGas } ?: return
-        resources.reserveUnit(builder)
-        if (builder.buildType != UnitType.Zerg_Spawning_Pool) {
-            builder.build(position, UnitType.Zerg_Spawning_Pool)
+        resources.reserveUnit(builder!!)
+        if (builder!!.buildType != UnitType.Zerg_Spawning_Pool) {
+            builder!!.build(position, UnitType.Zerg_Spawning_Pool)
         }
     }
 
