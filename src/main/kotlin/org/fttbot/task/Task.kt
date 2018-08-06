@@ -33,6 +33,12 @@ abstract class Task {
     fun neverFail() = NeverFailing(this)
 }
 
+class SimpleTask(val task: () -> TaskStatus) : Task() {
+    override val utility: Double = 1.0
+
+    override fun processInternal(): TaskStatus = task()
+}
+
 abstract class Decorator(protected val delegate: Task) : Task() {
     override val utility: Double
         get() = delegate.utility
@@ -55,8 +61,8 @@ class Repeating(task: Task, private val times: Int = -1) : Decorator(task) {
 
     override fun processInternal(): TaskStatus {
         val result = super.processInternal()
-        if (result == TaskStatus.DONE && count > 0) {
-            count--
+        if (result == TaskStatus.DONE && count != 0) {
+            if (count > 0) count--
             super.reset()
             return TaskStatus.RUNNING
         }
