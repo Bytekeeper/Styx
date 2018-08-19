@@ -1,7 +1,9 @@
 package org.fttbot.info
 
-import org.fttbot.Board
+import org.fttbot.ProductionBoard
 import org.fttbot.FTTBot
+import org.fttbot.LazyOnFrame
+import org.fttbot.ResourcesBoard
 import org.fttbot.estimation.MAX_FRAMES_TO_ATTACK
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.UnitType
@@ -16,20 +18,23 @@ val PlayerUnit.isMyUnit get() = player == FTTBot.self
 val PlayerUnit.isEnemyUnit get() = player in FTTBot.enemies
 fun Attacker.getWeaponAgainst(target: Unit) = if (target.isFlying && this is AirAttacker) airWeapon else
     if (!target.isFlying && this is GroundAttacker) groundWeapon else Weapon(WeaponType.None, -1)
+
 fun Attacker.maxRangeVs(target: Unit) = (this as PlayerUnit).player.unitStatCalculator.weaponMaxRange(getWeaponAgainst(target).type())
 
 fun Weapon.isMelee() = this != WeaponType.None && type().maxRange() <= MAX_MELEE_RANGE
 
-fun <T : Unit> List<T>.inRadius(other: Unit, maxRadius: Int) = filter { other.getDistance(it) < maxRadius }
-fun <T : Unit> List<T>.inRadius(position: Position, maxRadius: Int) = filter { it.getDistance(position) < maxRadius }
+fun <T : Unit> Collection<T>.inRadius(other: Unit, maxRadius: Int) = filter { other.getDistance(it) < maxRadius }
+fun <T : Unit> Collection<T>.inRadius(position: Position, maxRadius: Int) = filter { it.getDistance(position) < maxRadius }
 fun <T : Unit> List<T>.closestTo(unit: Unit) = minBy { it.getDistance(unit) }
-val PlayerUnit.isSuicideUnit get() = when (this) {
-    is Scourge, is SpiderMine, is Scarab -> true
-    else -> false
-}
+val PlayerUnit.isSuicideUnit
+    get() = when (this) {
+        is Scourge, is SpiderMine, is Scarab -> true
+        else -> false
+    }
+
 fun PlayerUnit.isFasterThan(other: PlayerUnit) =
-    (this is MobileUnit && other !is MobileUnit) ||
-            (this is MobileUnit && other is MobileUnit && this.topSpeed > other.topSpeed)
+        (this is MobileUnit && other !is MobileUnit) ||
+                (this is MobileUnit && other is MobileUnit && this.topSpeed > other.topSpeed)
 
 
 // From https://docs.google.com/spreadsheets/d/1bsvPvFil-kpvEUfSG74U3E5PLSTC02JxSkiR8QdLMuw/edit#gid=0 resp. PurpleWave
@@ -48,7 +53,7 @@ val Attacker.stopFrames
         else -> 2
     }
 
-fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidates: List<Worker> = Board.resources.units.filterIsInstance<Worker>()): Worker? {
+fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidates: List<Worker> = ResourcesBoard.units.filterIsInstance<Worker>()): Worker? {
     val selection =
             if (forPosition != null) {
                 candidates.filter { it.getDistance(forPosition) <= maxRange }
@@ -125,9 +130,10 @@ object UnitQuery {
     lateinit var ownedUnits: List<PlayerUnit> private set
     lateinit var enemyUnits: List<PlayerUnit> private set
     lateinit var myWorkers: List<Worker> private set
-    lateinit var minerals : List<MineralPatch> private set
+    lateinit var minerals: List<MineralPatch> private set
     lateinit var myBuildings: List<Building> private set
     lateinit var myEggs: List<Egg> private set
+    private val myUnitByType = mutableMapOf<Any, LazyOnFrame<List<PlayerUnit>>>()
 
     fun reset() {
         andStayDown.clear()
@@ -135,24 +141,27 @@ object UnitQuery {
     }
 
     fun update(allUnits: Collection<Unit>) {
-        if (allUnits.any { andStayDown.contains(Pair(it.id, it.initialType)) }) {
-            println("BUUH!")
-        }
-        this.allUnits = allUnits.filter { it.isVisible && !andStayDown.contains(Pair(it.id, it.initialType))}
+        this.allUnits = allUnits.filter { it.isVisible && !andStayDown.contains(Pair(it.id, it.initialType)) }
         minerals = allUnits.filterIsInstance(MineralPatch::class.java)
         ownedUnits = this.allUnits.filterIsInstance(PlayerUnit::class.java)
-        myUnits = ownedUnits.filter { it.player == FTTBot.self && it.exists()}
+        myUnits = ownedUnits.filter { it.player == FTTBot.self && it.exists() }
         enemyUnits = ownedUnits.filter { it.player in FTTBot.enemies }
         myWorkers = myUnits.filterIsInstance(Worker::class.java).filter { it.isCompleted }
         myBuildings = myUnits.filterIsInstance(Building::class.java).filter { it.isCompleted }
         myEggs = myUnits.filterIsInstance(Egg::class.java)
     }
 
-    val geysers get() = allUnits.filter { it is VespeneGeyser }
-    val myBases get() = myUnits.filter { it is ResourceDepot }
-    // BWAPI sometimes "provides" units that aren't there - but those are also reported "hiddenAttack", so just ignore them
+    val geysers get() = allUnits.filterIsInstance<VespeneGeyser>()
+    val myBases get() = myUnits.filterIsInstance<ResourceDepot>()
+    // BWAPI sometimes "provides" units that aren't there - but those are also reported "hidden", so just ignore them
     val andStayDown = mutableSetOf<Pair<Int, UnitType>>()
 
     fun allUnits(): List<Unit> = allUnits
     fun inRadius(position: Position, radius: Int) = allUnits.inRadius(position, radius)
+
+    inline fun <reified T : PlayerUnit> my() = my(T::class.java)
+
+    fun <T : PlayerUnit> my(type: Class<T>) = myUnitByType.computeIfAbsent(type) {
+        LazyOnFrame { myUnits.filter { type.isInstance(it) } }
+    }.value as List<T>
 }

@@ -20,13 +20,22 @@ object CombatEval {
     var evalScale = 0.09
 
     fun minAmountOfAdditionalsForProbability(myUnits: List<SimUnit>, additionalUnits: SimUnit, enemies: List<SimUnit>, minProbability: Double = 0.6): Int {
-        if (enemies.isEmpty()) return -1
-        for (amount in 0..20) {
-            val unitsA = (1..amount).map { additionalUnits }
+        if (enemies.isEmpty()) return 0
+
+        var a = 0
+        var b = 50
+
+        while (b > a) {
+            val m = (a + b) / 2
+            val unitsA = (1..m).map { additionalUnits }
             val result = probabilityToWin(myUnits + unitsA, enemies)
-            if (result >= minProbability) return amount
+            if (result >= minProbability)
+                b = m
+            else
+                a = m + 1
         }
-        return -1
+
+        return if (b < 50) b else -1
     }
 
     fun bestProbilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, minProbabilityToAchieve: Double = 0.8): Pair<List<SimUnit>, Double> {

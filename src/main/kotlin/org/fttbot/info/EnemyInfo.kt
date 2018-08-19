@@ -24,9 +24,15 @@ object EnemyInfo {
         return unit.position.toVector().mulAdd(Vector2(unit.velocityX.toFloat(), unit.velocityY.toFloat()), deltaFrames.toFloat()).toPosition().asValidPosition()
     }
 
+    var lastNewEnemyFrame: Int = 0
+        private set
+
     fun onUnitShow(unit: PlayerUnit) {
         if (unit is Cloakable || unit is Lurker) hasInvisibleUnits = true
-        seenUnits.remove(unit)
+        val removed = seenUnits.remove(unit)
+        if (!removed) {
+            lastNewEnemyFrame = FTTBot.frameCount
+        }
     }
 
     fun onUnitHide(unit: PlayerUnit) {
@@ -52,7 +58,7 @@ object EnemyInfo {
 
     fun step() {
         enemyBases.clear()
-        enemyBases.addAll(Cluster.enemyClusters.filter { it.units.any { it is Building } })
+        enemyBases.addAll(Cluster.clusters.filter { it.units.any { it.isEnemyUnit && it is Building } })
         hasSeenBase = hasSeenBase || !enemyBases.isEmpty()
         if (!hasSeenBase) {
             val unexploredLocations = FTTBot.game.bwMap.startPositions.filter { !FTTBot.game.bwMap.isExplored(it) }

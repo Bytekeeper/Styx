@@ -5,12 +5,12 @@ fun main(args: Array<String>) {
 //    ProcessHelper.killStarcraftProcess()
 
     // Kill previous Chaoslauncher.exe process
-//    ProcessHelper.killChaosLauncherProcess()
+    ProcessHelper.killChaosLauncherProcess()
 
     // Autostart Chaoslauncher
     // Combined with Chaoslauncher -> Settings -> Run Starcraft on Startup
     // SC will be autostarted at this moment
-//    ProcessHelper.startChaosLauncherProcess()
+    ProcessHelper.startChaosLauncherProcess()
 
     FTTBot.start(args.contains("debug"))
 }

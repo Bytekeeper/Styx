@@ -1,11 +1,10 @@
 package org.fttbot.task
 
-import org.fttbot.Board
+import org.fttbot.ProductionBoard
+import org.fttbot.ResourcesBoard
 import org.fttbot.estimation.CombatEval
 import org.fttbot.estimation.SimUnit
-import org.fttbot.info.Cluster
-import org.fttbot.info.MyInfo
-import org.fttbot.info.findWorker
+import org.fttbot.info.*
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.unit.Attacker
 import org.openbw.bwapi4j.unit.PlayerUnit
@@ -20,44 +19,49 @@ class WorkerDefense(val defensePoint: Position) : Task() {
     private val defenderCombatTask = CoordinatedAttack()
 
     override fun processInternal(): TaskStatus {
-        val enemyCluster = Cluster.enemyClusters.minBy { it.position.getDistance(defensePoint) }
+        val defenseCluster = Cluster.clusters.minBy { it.position.getDistance(defensePoint) }
                 ?: return TaskStatus.DONE
-        if (enemyCluster.position.getDistance(defensePoint) > 300) {
+        if (defenseCluster.position.getDistance(defensePoint) > 300) {
             defendingWorkers.clear()
             return TaskStatus.DONE
         }
-        val myCluster = Cluster.myClusters.minBy { it.position.getDistance(defensePoint) } ?: return TaskStatus.DONE
-        val simUnitsOfEnemy = enemyCluster.units.map { SimUnit.of(it) }
-        val successForCompleteDefense = CombatEval.probabilityToWin(myCluster.units.filter { it is Attacker }.map { SimUnit.of(it) }, simUnitsOfEnemy)
+        val simUnitsOfEnemy = defenseCluster.units
+                .filter { it.isEnemyUnit }
+                .map { SimUnit.of(it) }
+        val successForCompleteDefense = CombatEval.probabilityToWin(defenseCluster.units
+                .filter { it.isMyUnit && it is Attacker }
+                .map { SimUnit.of(it) }, simUnitsOfEnemy)
         if (successForCompleteDefense < 0.4) {
             return TaskStatus.FAILED
         }
-        defendingWorkers.retainAll(Board.resources.units)
+        defendingWorkers.retainAll(ResourcesBoard.units)
         val successForCurrentRatio = CombatEval.probabilityToWin(
-                (defendingWorkers + myCluster.units.filter {
-                    it.isCompleted && it is Attacker && it !is Worker
+                (defendingWorkers + defenseCluster.units.filter {
+                    it.isCompleted && it is Attacker && it !is Worker && it.isMyUnit
                 }).map { SimUnit.of(it) }, simUnitsOfEnemy)
         if (successForCurrentRatio > 0.7) {
             defendingWorkers.minBy { it.hitPoints }?.let {
                 defendingWorkers.remove(it)
             }
         } else if (successForCurrentRatio < 0.5) {
-            findWorker(defensePoint, candidates = myCluster.units.filterIsInstance(Worker::class.java).filter { Board.resources.units.contains(it) })?.let {
+            findWorker(defensePoint, candidates = defenseCluster.units
+                    .filterIsInstance<Worker>()
+                    .filter { ResourcesBoard.units.contains(it) })?.let {
                 defendingWorkers.add(it)
             }
         }
         if (defendingWorkers.isEmpty()) return TaskStatus.DONE
-        Board.resources.reserveUnits(defendingWorkers)
+        ResourcesBoard.reserveUnits(defendingWorkers)
 
         defenderCombatTask.attackers = defendingWorkers
-        defenderCombatTask.targets = enemyCluster.units
+        defenderCombatTask.targets = defenseCluster.units
         defenderCombatTask.process()
 
         return TaskStatus.RUNNING
     }
 
     companion object : TaskProvider {
-        private val bases = ManagedTaskProvider({ MyInfo.myBases }, { WorkerDefense((it as PlayerUnit).position) })
+        private val bases = ManagedTaskProvider({ MyInfo.myBases }, { WorkerDefense((it as PlayerUnit).position).neverFail().repeat() })
         override fun invoke(): List<Task> = bases()
     }
 }

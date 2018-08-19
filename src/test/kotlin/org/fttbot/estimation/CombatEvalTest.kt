@@ -616,7 +616,7 @@ class CombatEvalTest {
 
         val minSunkens = CombatEval.minAmountOfAdditionalsForProbability(emptyList(), SimUnit.of(UnitType.Zerg_Spore_Colony), b)
 
-        assertThat(minSunkens).isEqualTo(-1)
+        assertThat(minSunkens).isEqualTo(0)
     }
 
     @Test
@@ -693,7 +693,7 @@ class CombatEvalTest {
                         SimUnit.of(UnitType.Protoss_Zealot)
                 ))
 
-        assertThat(minSunkens).isEqualTo(0)
+        assertThat(minSunkens).isEqualTo(-1)
     }
 
 

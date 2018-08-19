@@ -73,13 +73,13 @@ object FTTBot : BWEventListener {
         }
 
         UnitQuery.reset()
-        Cluster.reset()
         EnemyInfo.reset()
 //        org.fttbot.Map.init()
 
         bot = MParallelTask {
             listOf(
-                    Train, GatherMinerals, Construct, Scouting, WorkerDefense
+                    Train, GatherMinerals, ConstructBuilding, Scouting, WorkerDefense, Expanding, CoordinatedAttack,
+                    Upgrade, Research, WorkerTransfer, StrayWorkers, CoordinateClusters
             ).flatMap { it() }
         }
     }
@@ -101,7 +101,8 @@ object FTTBot : BWEventListener {
             EnemyInfo.step()
             Cluster.step()
 
-            Board.reset()
+            ProductionBoard.reset()
+            ResourcesBoard.reset()
             bot.process()
             tasks = bot.tasks - bot.completedTasks
             if (UnitQuery.myWorkers.any { !it.exists() }) {
@@ -114,7 +115,7 @@ object FTTBot : BWEventListener {
                         game.mapDrawer.drawTextMap(it.center, "ua")
                     }
             UnitQuery.myUnits.forEach {
-                game.mapDrawer.drawTextMap(it.position, "${it.id}(${it.lastCommand})")
+//                game.mapDrawer.drawTextMap(it.position, "${it.id}(${it.lastCommand})")
                 if (it is MobileUnit && it.targetPosition != null) {
                     game.mapDrawer.drawLineMap(it.position, it.targetPosition, Color.BLUE)
                 }
@@ -138,14 +139,9 @@ object FTTBot : BWEventListener {
 //                .forEach{
 //                    LOG.error("OHOH")
 //                }
-            Cluster.myClusters.forEach {
+            Cluster.clusters.forEach {
                 it.units.forEach { e ->
                     game.mapDrawer.drawLineMap(e.position, it.position, Color.WHITE)
-                }
-            }
-            Cluster.enemyClusters.forEach {
-                it.units.forEach { e ->
-                    game.mapDrawer.drawLineMap(e.position, it.position, Color.YELLOW)
                 }
             }
             game.mapDrawer.drawTextScreen(0, 40, "Expand : %.2f".format(Utilities.expansionUtility))
@@ -165,7 +161,7 @@ object FTTBot : BWEventListener {
 
             tasks.forEachIndexed { index, task ->
                 val u = "%.2f".format(task.utility)
-                game.mapDrawer.drawTextScreen(300, index * 10, "$u : $task")
+                game.mapDrawer.drawTextScreen(300, index * 10 + 20, "$u : $task")
             }
         }
     }

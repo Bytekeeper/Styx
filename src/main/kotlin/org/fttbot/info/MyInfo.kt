@@ -1,9 +1,10 @@
 package org.fttbot.info
 
 import bwem.area.Area
-import org.fttbot.Board
+import org.fttbot.ProductionBoard
 import org.fttbot.FTTBot
 import org.fttbot.LazyOnFrame
+import org.fttbot.ResourcesBoard
 import org.openbw.bwapi4j.unit.*
 
 object MyInfo {
@@ -30,5 +31,5 @@ object MyInfo {
             .sumBy {
                 ((it as? SupplyProvider)?.supplyProvided() ?: 0) +
                         ((it as? Egg)?.buildType?.supplyProvided() ?: 0)
-            } + Board.pendingUnits.sumBy { it.supplyProvided() } + Board.resources.supply
+            } + ProductionBoard.pendingUnits.sumBy { it.supplyProvided() } + ResourcesBoard.supply
 }
