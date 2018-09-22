@@ -3,6 +3,7 @@ package org.fttbot
 import org.fttbot.FTTBot.self
 import org.fttbot.info.UnitQuery
 import org.openbw.bwapi4j.TilePosition
+import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.PlayerUnit
 
@@ -17,8 +18,8 @@ object ProductionBoard {
 }
 
 object ResourcesBoard {
-    private val _units: MutableList<PlayerUnit> = ArrayList()
-    val units: List<PlayerUnit> get() = _units
+    private val _units = mutableSetOf<PlayerUnit>()
+    val units: Set<PlayerUnit> get() = _units
     var minerals: Int = 0
         private set
     var gas: Int = 0
@@ -68,13 +69,16 @@ object ResourcesBoard {
 
     fun reserve(unitType: UnitType) = reserve(unitType.mineralPrice(), unitType.gasPrice(), unitType.supplyRequired())
 
-    fun acquireFor(unitType: UnitType) =
-            if (!canAfford(unitType)) {
-                reserve(unitType)
+    fun acquire(minerals: Int = 0, gas: Int = 0, supply: Int = 0) =
+            if (!canAfford(minerals, gas, supply)) {
+                reserve(minerals, gas, supply)
                 false
             } else {
-                reserve(unitType)
+                reserve(minerals, gas, supply)
                 true
             }
+
+    fun acquireFor(unitType: UnitType) = acquire(unitType.mineralPrice(), unitType.gasPrice(), unitType.supplyRequired())
+    fun acquireFor(type: TechType) = acquire(type.mineralPrice(), type.gasPrice())
 }
 

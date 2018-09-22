@@ -1,10 +1,7 @@
 package org.fttbot.task
 
-import org.fttbot.FTTBot
 import org.fttbot.LazyOnFrame
-import org.fttbot.ResourcesBoard
-import org.openbw.bwapi4j.type.UnitType
-import org.openbw.bwapi4j.unit.PlayerUnit
+import org.fttbot.Locked
 import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KProperty
 
@@ -13,17 +10,17 @@ enum class TaskStatus {
     FAILED,
     DONE;
 
-    inline fun whenFailed(call: () -> Unit): TaskStatus {
+    inline fun andWhenFailed(call: () -> Unit): TaskStatus {
         if (this == FAILED) call()
         return this
     }
 
-    inline fun whenRunning(call: () -> Unit): TaskStatus {
+    inline fun andWhenRunning(call: () -> Unit): TaskStatus {
         if (this == RUNNING) call()
         return this
     }
 
-    inline fun whenNotDone(call: (TaskStatus) -> Unit): TaskStatus {
+    inline fun andWhenNotDone(call: (TaskStatus) -> Unit): TaskStatus {
         if (this != DONE) call(this)
         return this
     }
@@ -34,10 +31,12 @@ typealias UtilityProvider = () -> Double
 
 abstract class Task {
     abstract val utility: Double
-    protected val subtasks = mutableListOf<Task>()
+    private val subtasks = mutableListOf<Task>()
     private var lastStatus: TaskStatus = TaskStatus.DONE
+    val locks = mutableListOf<Locked<*>>()
 
     fun process(): TaskStatus {
+        locks.forEach(Locked<*>::release)
         val result = processInternal()
         if (result != TaskStatus.RUNNING && result != lastStatus) {
             reset()
@@ -46,17 +45,18 @@ abstract class Task {
         return result
     }
 
-    abstract protected fun processInternal(): TaskStatus
     open fun reset() {
         subtasks.forEach(Task::reset)
     }
+
+    protected abstract fun processInternal(): TaskStatus
 
     fun repeat(times: Int = -1): Task = Repeating(this, times)
     fun neverFail() = NeverFailing(this)
     override fun toString(): String = this::class.java.name.substringAfterLast('.')
 
     fun processInSequence(vararg tasks: Task): TaskStatus {
-        return tasks.asSequence().map { it.process() }
+        return tasks.asSequence().sortedByDescending { it.utility }.map { it.process() }
                 .firstOrNull { it in arrayOf(TaskStatus.RUNNING, TaskStatus.FAILED) }
                 ?: TaskStatus.DONE
     }
@@ -87,18 +87,13 @@ class SubTask<out T : Task>(val initializer: () -> T) : ReadOnlyProperty<Task, T
             thisRef.registerTask(value as T)
         }
         return value as T
-
     }
 }
 
-class SimpleTask(val task: () -> TaskStatus) : Task() {
-    override val utility: Double = 1.0
+abstract class Action(override val utility: Double = 1.0) : Task()
 
-    override fun processInternal(): TaskStatus = task()
-}
-
-abstract class Action : Task() {
-    override val utility: Double = 1.0
+class Success(override val utility: Double) : Task() {
+    override fun processInternal(): TaskStatus = TaskStatus.DONE
 }
 
 abstract class Decorator(protected val delegate: Task) : Task() {
@@ -141,30 +136,6 @@ class Repeating(task: Task, private val times: Int = -1) : Decorator(task) {
     override fun toString() = "Repeating ($count/$times) $delegate"
 }
 
-class UnitLock<T : PlayerUnit>(val invariant: (T) -> Boolean = { true }) {
-    private var currentUnit: T? = null
-    var reassigned = false
-        private set
-
-    fun hasChangedTo(type: UnitType) = currentUnit?.let { FTTBot.game.getUnit(it.id).isA(type) } == true
-
-    fun acquire(search: ((T) -> Boolean) -> T?): T? {
-        reassigned = false
-        if (currentUnit == null || currentUnit?.exists() == false || !ResourcesBoard.units.contains(currentUnit!!) || !invariant(currentUnit!!)) {
-            reassigned = true
-            currentUnit = search(invariant)
-        }
-        if (currentUnit != null) {
-            ResourcesBoard.reserveUnit(currentUnit!!)
-        }
-        return currentUnit
-    }
-
-    fun release() {
-        currentUnit = null
-    }
-}
-
 abstract class CompoundTask(val provider: TaskProvider) : Task() {
     val tasks by LazyOnFrame {
         provider().sortedByDescending { it.utility }
@@ -194,7 +165,17 @@ class MParallelTask(provider: TaskProvider) : CompoundTask(provider) {
         completedTasks.clear()
         super.reset()
     }
+}
 
+class ParallelTask(provider: TaskProvider) : CompoundTask(provider) {
+    override fun processInternal(): TaskStatus {
+        val result = tasks.map { it.process() }
+        if (result.any { it == TaskStatus.FAILED })
+            return TaskStatus.FAILED
+        if (result.none { it == TaskStatus.RUNNING })
+            return TaskStatus.DONE
+        return TaskStatus.RUNNING
+    }
 }
 
 class ManagedTaskProvider<T>(val itemProvider: () -> List<T>, val taskProvider: (T) -> Task) : TaskProvider {

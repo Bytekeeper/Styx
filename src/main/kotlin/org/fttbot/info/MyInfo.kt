@@ -15,7 +15,7 @@ object MyInfo {
 
     val myBases: List<ResourceDepot> by LazyOnFrame {
         FTTBot.bwem.bases.mapNotNull { base ->
-            val myClosestBase = UnitQuery.myBases.minBy { it.tilePosition.getDistance(base.location) }
+            val myClosestBase = UnitQuery.my<ResourceDepot>().minBy { it.tilePosition.getDistance(base.location) }
                     ?: return@mapNotNull null
             if (myClosestBase.tilePosition.getDistance(base.location) > 5)
                 null

@@ -1,11 +1,9 @@
 package org.fttbot.task
 
-import org.fttbot.ProductionBoard
 import org.fttbot.ResourcesBoard
 import org.fttbot.info.MyInfo
+import org.fttbot.info.RadiusCache
 import org.fttbot.info.UnitQuery
-import org.fttbot.info.closestTo
-import org.fttbot.info.inRadius
 import org.openbw.bwapi4j.unit.ResourceDepot
 import org.openbw.bwapi4j.unit.Worker
 
@@ -25,7 +23,7 @@ class WorkerTransfer : Task() {
         workersInTransfer.entries.removeIf {
             it.key.position.getDistance(it.value.position) < 200
         }
-        val potentialWorkers = (UnitQuery.myWorkers - workersInTransfer.keys) intersect ResourcesBoard.units.filterIsInstance<Worker>()
+        val potentialWorkers = RadiusCache((UnitQuery.myWorkers - workersInTransfer.keys) intersect ResourcesBoard.units.filterIsInstance<Worker>())
 
         val baseInfos = MyInfo.myBases
                 .filter { it.isCompleted }
@@ -81,9 +79,9 @@ class StrayWorkers : Task() {
         strayWorkers.entries.removeIf { it.key.position.getDistance(it.value.position) < 200 }
         strayWorkers += (ResourcesBoard.units - strayWorkers.keys)
                 .filterIsInstance<Worker>()
-                .filter { UnitQuery.myBases.inRadius(it, 300).none() }
+                .filter { UnitQuery.my<ResourceDepot>().inRadius(it, 300).none() }
                 .mapNotNull {
-                    it to (UnitQuery.myBases.closestTo(it) ?: return@mapNotNull null)
+                    it to (UnitQuery.my<ResourceDepot>().closestTo(it) ?: return@mapNotNull null)
                 }
 
         strayWorkers.keys.forEach { ResourcesBoard.reserveUnit(it) }

@@ -5,7 +5,6 @@ import com.badlogic.gdx.math.Polygon
 import com.badlogic.gdx.math.Rectangle
 import org.fttbot.info.MyInfo
 import org.fttbot.info.UnitQuery
-import org.fttbot.info.inRadius
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.UnitType
@@ -67,7 +66,7 @@ object ConstructionPosition {
     }
 
     private fun outsideOfResourceLines(pos: TilePosition, unitType: UnitType): Boolean {
-        val base = UnitQuery.myBases.minBy { it.tilePosition.getDistance(pos) } ?: return true
+        val base = UnitQuery.my<ResourceDepot>().minBy { it.tilePosition.getDistance(pos) } ?: return true
         val poly = resourcePolygons.computeIfAbsent(base) {
             val relevantUnits = UnitQuery.inRadius(base.position, 300)
                     .filter { it is MineralPatch || it is VespeneGeyser || it is Refinery }
@@ -96,7 +95,7 @@ object ConstructionPosition {
 
     private fun findPositionForGas(unitType: UnitType): TilePosition? {
         val geysers = UnitQuery.geysers
-        UnitQuery.myBases.forEach { base ->
+        UnitQuery.my<ResourceDepot>().forEach { base ->
             val geyser = geysers.filter { it.getDistance(base) < 300 }.minBy { it.getDistance(base) }
             if (geyser != null) {
                 return geyser.initialTilePosition

@@ -41,12 +41,12 @@ data class GameState(var frame: Int,
                             .map { (ut, s) -> "$ut : $s" }.joinToString("\n")
 
     fun isValid(unit: UnitType): Boolean =
-            units.containsKey(unit.whatBuilds().first)
-                    && units.keys.containsAll(unit.requiredUnits())
+            units.containsKey(unit.whatBuilds().unitType)
+                    && units.keys.containsAll(unit.requiredUnits().keys)
                     && tech.contains(unit.requiredTech())
                     && unit.supplyRequired() <= freeSupply + pendingSupply
                     && (unit.gasPrice() <= gas || hasRefinery)
-                    && (!unit.isAddon || units[unit.whatBuilds().first]!!.any { it.addon == UnitType.None })
+                    && (!unit.isAddon || units[unit.whatBuilds().unitType]!!.any { it.addon == UnitType.None })
 
     fun isValid(tech: TechType): Boolean =
             units.containsKey(tech.requiredUnit())
@@ -91,7 +91,7 @@ data class GameState(var frame: Int,
 
         val availableAt: Int
         if (unit.isAddon) {
-            val building = units[unit.whatBuilds().first]!!.minBy { it.availableAt } ?: throw IllegalStateException()
+            val building = units[unit.whatBuilds().unitType]!!.minBy { it.availableAt } ?: throw IllegalStateException()
             passTimeWithDefaultWorkerLayout(building.availableAt)
             availableAt = frame + unit.buildTime()
             building.availableAt = availableAt
@@ -120,8 +120,8 @@ data class GameState(var frame: Int,
         if (unit.supplyRequired() > freeSupply) {
             throw IllegalStateException()
         }
-        val trainers = units[unit.whatBuilds().first] ?: throw IllegalStateException()
-        val requiredAddon = unit.requiredUnits().firstOrNull() { it.isAddon }
+        val trainers = units[unit.whatBuilds().unitType] ?: throw IllegalStateException()
+        val requiredAddon = unit.requiredUnits().keys.firstOrNull { it.isAddon }
         val filteredTrainers = if (requiredAddon != null) trainers.filter { it.addon == requiredAddon } else trainers
         val trainer = filteredTrainers.minBy { it.availableAt }!!
         passTimeWithDefaultWorkerLayout(trainer.availableAt)
@@ -220,7 +220,7 @@ data class GameState(var frame: Int,
                         Pair(it, upgradesInProgress[it] ?: GameState.UpgradeState(-1, 0, FTTBot.self.getUpgradeLevel(it)))
                     }.toMap().toMutableMap()
             val units = UnitQuery.myUnits.map {
-                it.initialType to GameState.UnitState(-1,
+                it.type to GameState.UnitState(-1,
                         if (!it.isCompleted && it is Building) it.remainingBuildTime
                         else if (it is TrainingFacility) it.remainingTrainTime
                         else 0)

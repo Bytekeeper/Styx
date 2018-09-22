@@ -3,7 +3,6 @@ package org.fttbot
 import bwem.BWEM
 import bwem.map.Map
 import org.apache.logging.log4j.LogManager
-import org.fttbot.estimation.BOPrediction
 import org.fttbot.info.*
 import org.fttbot.strategies.Utilities
 import org.fttbot.task.*
@@ -78,8 +77,8 @@ object FTTBot : BWEventListener {
 
         bot = MParallelTask {
             listOf(
-                    Train, GatherMinerals, ConstructBuilding, Scouting, WorkerDefense, Expanding, CoordinatedAttack,
-                    Upgrade, Research, WorkerTransfer, StrayWorkers, CoordinateClusters
+                    Train, GatherMinerals, ConstructBuilding, Scouting, WorkerDefense, Expanding, CombatController,
+                    Upgrade, Research, WorkerTransfer, StrayWorkers
             ).flatMap { it() }
         }
     }
@@ -115,12 +114,12 @@ object FTTBot : BWEventListener {
                         game.mapDrawer.drawTextMap(it.center, "ua")
                     }
             UnitQuery.myUnits.forEach {
-//                game.mapDrawer.drawTextMap(it.position, "${it.id}(${it.lastCommand})")
+                //                game.mapDrawer.drawTextMap(it.position, "${it.id}(${it.lastCommand})")
                 if (it is MobileUnit && it.targetPosition != null) {
-                    game.mapDrawer.drawLineMap(it.position, it.targetPosition, Color.BLUE)
+//                    game.mapDrawer.drawLineMap(it.position, it.targetPosition, Color.BLUE)
                 }
                 if (it is MobileUnit && it.targetUnit != null) {
-                    game.mapDrawer.drawLineMap(it.position, it.targetUnit.position, Color.RED)
+//                    game.mapDrawer.drawLineMap(it.position, it.targetUnit.position, Color.RED)
                 }
             }
 
@@ -132,17 +131,19 @@ object FTTBot : BWEventListener {
 
             EnemyInfo.seenUnits.forEach {
                 game.mapDrawer.drawCircleMap(it.position, 16, Color.RED)
-                game.mapDrawer.drawTextMap(it.position, "${it.initialType}")
+                game.mapDrawer.drawTextMap(it.position, "${it.type}")
             }
 
 //        UnitQuery.myWorkers.filter { it.lastCommand == UnitCommandType.Morph && !it.isMoving}
 //                .forEach{
 //                    LOG.error("OHOH")
 //                }
+//            System.exit(1)
             Cluster.clusters.forEach {
                 it.units.forEach { e ->
                     game.mapDrawer.drawLineMap(e.position, it.position, Color.WHITE)
                 }
+//                game.mapDrawer.drawTextMap(it.position, "${it.attackEval.second}")
             }
             game.mapDrawer.drawTextScreen(0, 40, "Expand : %.2f".format(Utilities.expansionUtility))
             game.mapDrawer.drawTextScreen(0, 50, "Trainers : %.2f".format(Utilities.moreTrainersUtility))
@@ -185,7 +186,6 @@ object FTTBot : BWEventListener {
 
     override fun onUnitShow(unit: Unit) {
         if (unit is PlayerUnit && unit.isEnemyUnit) {
-            BOPrediction.onSeenUnit(unit)
             EnemyInfo.onUnitShow(unit)
         }
     }
@@ -194,7 +194,7 @@ object FTTBot : BWEventListener {
         if (unit is PlayerUnit && unit.isEnemyUnit)
             EnemyInfo.onUnitHide(unit)
         if (unit is PlayerUnit && unit.isMyUnit)
-            UnitQuery.andStayDown += unit.id to unit.initialType
+            UnitQuery.andStayDown += unit.id to unit.type
     }
 
     override fun onUnitRenegade(unit: Unit?) {

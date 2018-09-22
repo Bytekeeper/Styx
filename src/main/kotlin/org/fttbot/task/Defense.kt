@@ -1,6 +1,5 @@
 package org.fttbot.task
 
-import org.fttbot.ProductionBoard
 import org.fttbot.ResourcesBoard
 import org.fttbot.estimation.CombatEval
 import org.fttbot.estimation.SimUnit
@@ -16,7 +15,9 @@ class WorkerDefense(val defensePoint: Position) : Task() {
     override val utility: Double
         get() = 1.0
 
-    private val defenderCombatTask = CoordinatedAttack()
+    private val defenderTask =  ManagedTaskProvider({ defendingWorkers }, {
+        ManageAttacker(it)
+    })
 
     override fun processInternal(): TaskStatus {
         val defenseCluster = Cluster.clusters.minBy { it.position.getDistance(defensePoint) }
@@ -53,11 +54,7 @@ class WorkerDefense(val defensePoint: Position) : Task() {
         if (defendingWorkers.isEmpty()) return TaskStatus.DONE
         ResourcesBoard.reserveUnits(defendingWorkers)
 
-        defenderCombatTask.attackers = defendingWorkers
-        defenderCombatTask.targets = defenseCluster.units
-        defenderCombatTask.process()
-
-        return TaskStatus.RUNNING
+        return processAll(defenderTask)
     }
 
     companion object : TaskProvider {

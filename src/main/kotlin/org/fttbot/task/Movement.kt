@@ -4,7 +4,7 @@ import org.fttbot.FTTBot
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.unit.MobileUnit
 
-class Move(val unit: MobileUnit, var to: Position, val tolerance: Int = 32) : Action() {
+class Move(val unit: MobileUnit, var to: Position = unit.position, val tolerance: Int = 32, utility: Double = 1.0) : Action(utility) {
     override fun toString(): String = "Moving $unit to $to"
 
     override fun processInternal() : TaskStatus {

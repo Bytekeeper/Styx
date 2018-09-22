@@ -17,6 +17,6 @@ internal class UnitVsUnitTest {
 
     @Test
     fun test() {
-        System.err.println(UnitVsUnit.bestUnitVs(UnitType.values().filter { it.whatBuilds().first.race == Race.Terran }, UnitType.Terran_Marine))
+        System.err.println(UnitVsUnit.bestUnitVs(UnitType.values().filter { it.whatBuilds().unitType.race == Race.Terran }, UnitType.Terran_Marine))
     }
 }

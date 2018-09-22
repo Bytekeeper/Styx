@@ -1,23 +1,31 @@
 package org.fttbot.task
 
-import org.fttbot.ProductionBoard
 import org.fttbot.FTTBot
+import org.fttbot.ProductionBoard
 import org.fttbot.ResourcesBoard
 import org.fttbot.info.UnitQuery
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.UpgradeType
 import org.openbw.bwapi4j.unit.GasMiningFacility
+import org.openbw.bwapi4j.unit.GasMiningFacilityImpl
 
 class EnsureUnitDependencies(val type: UnitType) : Action() {
-    private val buildingsToConstruct = ManagedTaskProvider<UnitType>({
-        type.requiredUnits()
-                .filter { it.isBuilding && UnitQuery.myUnits.none { u -> u.isA(it) } } -
-                ProductionBoard.pendingUnits - type.whatBuilds().first
-    }) { ConstructBuilding(it) }
+    private val buildingsToConstruct by SubTask {
+        ParallelTask(ManagedTaskProvider<UnitType>({
+            type.requiredUnits().keys
+                    .filter { it.isBuilding && UnitQuery.myUnits.none { u -> u.type == it } } -
+                    ProductionBoard.pendingUnits - type.whatBuilds().unitType
+        }) { ConstructBuilding(it) })
+    }
+
+    private val techToResearch by SubTask {
+        if (type.requiredTech() != TechType.None) Research(type.requiredTech()) { 1.0 }
+        else Success(1.0)
+    }
 
     override fun processInternal(): TaskStatus {
-        return processAll(buildingsToConstruct)
+        return processAll(buildingsToConstruct, techToResearch)
     }
 
 }
@@ -25,7 +33,7 @@ class EnsureUnitDependencies(val type: UnitType) : Action() {
 class HaveBuilding(val type: UnitType) : Action() {
     private val constructBuilding: ConstructBuilding by subtask { ConstructBuilding(type) }
     override fun processInternal(): TaskStatus {
-        val candidates = UnitQuery.myUnits.filter { it.isA(type) }
+        val candidates = UnitQuery.myUnits.filter { it.type == type }
         if (candidates.any { it.isCompleted }) return TaskStatus.DONE
         if (candidates.isNotEmpty() || ProductionBoard.pendingUnits.any { it == type }) return TaskStatus.RUNNING
 
@@ -37,20 +45,20 @@ class HaveGas(var amount: Int) : Action() {
     private val constructGasMine: ConstructBuilding by subtask { ConstructBuilding(FTTBot.self.race.refinery) }
     override fun processInternal(): TaskStatus {
         if (ResourcesBoard.gas >= amount || amount <= 0) return TaskStatus.DONE
-        if (UnitQuery.my<GasMiningFacility>().any()) return TaskStatus.RUNNING
+        if (UnitQuery.my<GasMiningFacilityImpl>().any()) return TaskStatus.RUNNING
         return constructGasMine.process()
     }
 }
 
 class EnsureTechDependencies(val type: TechType) : Action() {
-    private val researcherToHave: Task by subtask {
+    private val researcherToHave by SubTask {
         HaveBuilding(type.whatResearches())
     }
 
     private val gasToHave: Task by subtask { HaveGas(type.gasPrice()) }
 
-    private val dependencyToHave: Task by subtask {
-        ConstructBuilding(type.requiredUnit())
+    private val dependencyToHave by SubTask {
+        HaveBuilding(type.requiredUnit())
     }
 
     override fun processInternal(): TaskStatus {

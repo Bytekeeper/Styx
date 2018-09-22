@@ -12,7 +12,7 @@ import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 
-const val MAX_FRAMES_TO_ATTACK = 3
+const val MAX_FRAMES_TO_ATTACK = 24
 
 object CombatEval {
     var strengthPower = 0.7
@@ -38,12 +38,17 @@ object CombatEval {
         return if (b < 50) b else -1
     }
 
-    fun bestProbilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, minProbabilityToAchieve: Double = 0.8): Pair<List<SimUnit>, Double> {
+    fun bestEnemyToKill(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, fightingPosition: Float = 0.5f): SimUnit? =
+            unitsOfPlayerB.maxBy {
+                probabilityToWin(unitsOfPlayerA, unitsOfPlayerB - it, fightingPosition)
+            }
+
+    fun bestProbilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, minProbabilityToAchieve: Double = 0.8, fightingPosition: Float = 0.5f): Pair<List<SimUnit>, Double> {
         var best = unitsOfPlayerA
         var bestEval = probabilityToWin(best, unitsOfPlayerB)
         val typesRemaining = best.map { it.type }.toMutableSet()
         while (!typesRemaining.isEmpty() && bestEval < minProbabilityToAchieve) {
-            val bestType = typesRemaining.map { toTest -> toTest to probabilityToWin(best.filter { it.type != toTest }, unitsOfPlayerB) }
+            val bestType = typesRemaining.map { toTest -> toTest to probabilityToWin(best.filter { it.type != toTest }, unitsOfPlayerB, fightingPosition) }
                     .maxBy { it.second }!!
             if (bestType.second < bestEval)
                 break
@@ -54,11 +59,13 @@ object CombatEval {
         return best to bestEval
     }
 
-    fun probabilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, fallbackDistance: Double = 128.0): Double {
-        val amountOfUnits = max(1, unitsOfPlayerA.size + unitsOfPlayerB.size)
-        val center = (unitsOfPlayerA + unitsOfPlayerB)
-                .map { it.position }.fold(Position(0, 0)) { s, t -> if (t != null) s.add(t) else s }
-                .divide(Position(amountOfUnits, amountOfUnits))
+    fun probabilityToWin(unitsOfPlayerA: List<SimUnit>, unitsOfPlayerB: List<SimUnit>, fightingPosition: Float = 0.5f, fallbackDistance: Double = 128.0): Double {
+        val positionedUnits = (unitsOfPlayerA.mapNotNull { it.position?.toVector()?.scl(1 - fightingPosition) } +
+                unitsOfPlayerB.mapNotNull { it.position?.toVector()?.scl(fightingPosition) })
+        val center = positionedUnits
+                .fold(Vector2(0f, 0f), Vector2::add)
+                .scl(1f / positionedUnits.size)
+                .toPosition()
 
         val medicFactorA = fastsig(unitsOfPlayerA.count { it.canHeal }.toDouble() * 2) * 1.5 + 1.0
         val medicFactorB = fastsig(unitsOfPlayerB.count { it.canHeal }.toDouble() * 2) * 1.5 + 1.0
@@ -84,7 +91,8 @@ object CombatEval {
         if (wpn.type() == WeaponType.None || !enemySim.detected) return -100000.0;
         val enemyWpn = enemySim.determineWeaponAgainst(attackerSim)
         val futurePosition = enemySim.position?.add(enemySim.velocity.scl(24f * 3).toPosition())
-        val futureDistance = futurePosition?.minus(attackerSim.position ?: futurePosition)?.toVector()?.len() ?: 30f
+        val futureDistance = futurePosition?.minus(attackerSim.position
+                ?: futurePosition)?.toVector()?.len() ?: 30f
         return (enemySim.hitPoints + enemySim.shield) / max(attackerSim.damagePerFrameTo(enemySim), 0.001) +
                 0.5 * (attackerSim.hitPoints + attackerSim.shield) / max(enemySim.damagePerFrameTo(attackerSim), 0.001) +
                 (if (enemySim.type == UnitType.Zerg_Larva || enemySim.type == UnitType.Zerg_Egg || enemySim.type == UnitType.Protoss_Interceptor || enemySim.type.isAddon) 25000 else 0) +
@@ -93,10 +101,10 @@ object CombatEval {
                 (if (attackerSim.isAir) 0.0 else 1.0 * futureDistance) +
                 1.5 * (enemySim.position?.getDistance(attackerSim.position) ?: 0) +
                 (if (attackerSim.hasSplashWeapon) -100 else 0) +
-                (fastsig(max(0.0, futureDistance.toDouble() - enemyWpn.maxRange() )) * -100 *
+                (fastsig(max(0.0, futureDistance.toDouble() - enemyWpn.maxRange())) * -100 *
                         (if (enemySim.type == UnitType.Zerg_Lurker && enemySim.isBurrowed) 20.0 else 1.0)) +
                 (if (enemySim.type == UnitType.Protoss_Carrier) -300 else 0) +
-                (fastsig(max(0.0, futureDistance.toDouble() - wpn.maxRange() )) * 150 *
+                (fastsig(max(0.0, futureDistance.toDouble() - wpn.maxRange())) * 150 *
                         (if (attackerSim.type == UnitType.Zerg_Lurker && attackerSim.isBurrowed) 20.0 else 1.0)) +
                 (enemySim.topSpeed - attackerSim.topSpeed) * 30
     }
@@ -232,14 +240,16 @@ class SimUnit(val id: Int? = 0,
                 size = unit.size,
                 detected = unit.isDetected,
                 isPowered = unit.isPowered,
-                type = unit.initialType,
-                airHits = if (unit is Bunker) 1 else unit.initialType.maxAirHits(),
-                groundHits = if (unit is Bunker) 1 else unit.initialType.maxGroundHits(),
-                groundRange = ((unit as? GroundAttacker)?.groundWeaponMaxRange ?: 0) + (if (unit is Bunker) 64 else 0),
-                airRange = ((unit as? AirAttacker)?.airWeaponMaxRange ?: 0) + if (unit is Bunker) 64 else 0,
+                type = unit.type,
+                airHits = if (unit is Bunker) 1 else unit.type.maxAirHits(),
+                groundHits = if (unit is Bunker) 1 else unit.type.maxGroundHits(),
+                groundRange = ((unit as? GroundAttacker)?.groundWeaponMaxRange
+                        ?: 0) + (if (unit is Bunker) 64 else 0),
+                airRange = ((unit as? AirAttacker)?.airWeaponMaxRange
+                        ?: 0) + if (unit is Bunker) 64 else 0,
                 suicideUnit = unit.isSuicideUnit,
-                isOrganic = unit.initialType.isOrganic,
-                isRepairable = unit is Mechanical && unit.initialType.race == Race.Terran,
+                isOrganic = unit.type.isOrganic,
+                isRepairable = unit is Mechanical && unit.type.race == Race.Terran,
                 isCloaked = unit is Cloakable && (unit.isCloaked || unit.order == Order.Cloak),
                 isBurrowed = unit is Burrowable && (unit.isBurrowed || unit.order == Order.Burrowing)
         )

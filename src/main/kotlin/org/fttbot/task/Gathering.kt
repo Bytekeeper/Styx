@@ -1,6 +1,5 @@
 package org.fttbot.task
 
-import org.fttbot.ProductionBoard
 import org.fttbot.ResourcesBoard
 import org.fttbot.info.MyInfo
 import org.fttbot.info.UnitQuery

@@ -21,7 +21,7 @@ dependencies {
     compile("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
     compile(fileTree("lib").include("*.jar"))
     compile("com.badlogicgames.gdx:gdx:1.9.4")
-    compile("com.github.ptnplanet:Java-Naive-Bayes-Classifier:1.0.7")
+    compile("io.jenetics:jenetics:4.2.0")
 
 
     testCompile("org.junit.jupiter:junit-jupiter-api:5.0.2")

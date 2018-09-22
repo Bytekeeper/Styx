@@ -2,33 +2,34 @@ package org.fttbot.task
 
 import org.fttbot.FTTBot
 import org.fttbot.FTTConfig
+import org.fttbot.Locked
 import org.fttbot.info.EnemyInfo
 import org.fttbot.info.MyInfo
+import org.fttbot.info.UnitQuery
 import org.fttbot.strategies.Utilities
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.org.apache.commons.lang3.mutable.MutableInt
 import org.openbw.bwapi4j.type.UnitType
+import org.openbw.bwapi4j.unit.Building
 import org.openbw.bwapi4j.unit.PlayerUnit
 import java.util.*
 
 class Expanding : Task() {
     private val prng = SplittableRandom()
-    private val construct = ConstructBuilding(UnitType.Zerg_Hatchery)
+    private val construct by SubTask {
+        ConstructBuilding(UnitType.Zerg_Hatchery)
+    }
+    private var expansionPosition = Locked<TilePosition>(this, { UnitQuery.ownedUnits.inRadius(it.toPosition(), 128).none { it is Building } })
 
     override val utility: Double
         get() = Utilities.expansionUtility
 
-    override fun reset() {
-        construct.at = null
-        super.reset()
-    }
-
     override fun processInternal(): TaskStatus {
-        if (construct.at == null) {
-            val bestExpansionPosition = findBestExpansionPosition() ?: return TaskStatus.FAILED
-
-            construct.at = bestExpansionPosition
-        }
+        val targetPosition = expansionPosition.compute {
+            val candidate = findBestExpansionPosition() ?: return@compute null
+            if (it(candidate)) candidate else null
+        } ?: return TaskStatus.FAILED
+        construct.at = targetPosition
         return construct.process()
     }
 

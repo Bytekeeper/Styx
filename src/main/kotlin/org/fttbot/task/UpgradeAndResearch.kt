@@ -1,16 +1,15 @@
 package org.fttbot.task
 
-import org.fttbot.ProductionBoard
 import org.fttbot.FTTBot
 import org.fttbot.ResourcesBoard
+import org.fttbot.UnitLocked
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UpgradeType
-import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.ResearchingFacility
 
 class Research(val type: TechType, val utilityProvider: UtilityProvider) : Task() {
     private val dependencies: Task by subtask { EnsureTechDependencies(type) }
-    private val researcherLock = UnitLock<PlayerUnit> { it as ResearchingFacility; !it.isResearching && !it.isUpgrading }
+    private val researcherLock = UnitLocked<ResearchingFacility>(this) { !it.isResearching && !it.isUpgrading }
 
     override val utility: Double
         get() = utilityProvider()
@@ -21,19 +20,16 @@ class Research(val type: TechType, val utilityProvider: UtilityProvider) : Task(
         if (FTTBot.self.hasResearched(type)) return TaskStatus.DONE
         if (FTTBot.self.isResearching(type)) return TaskStatus.RUNNING
 
-        dependencies.process().whenRunning { return TaskStatus.RUNNING }
+        dependencies.process().andWhenRunning { return TaskStatus.RUNNING }
 
-        if (!ResourcesBoard.canAfford(type.mineralPrice(), type.gasPrice())) {
-            ResourcesBoard.reserve(type.mineralPrice(), type.gasPrice())
+        if (!ResourcesBoard.acquireFor(type)) {
             return TaskStatus.RUNNING
         }
-        ResourcesBoard.reserve(type.mineralPrice(), type.gasPrice())
 
-        val researcher = researcherLock.acquire {
-            ResourcesBoard.units.firstOrNull { it.isA(type.whatResearches()) && it.isCompleted && !(it as ResearchingFacility).isResearching }
+        val researcher = researcherLock.compute { inv ->
+            ResourcesBoard.units.filterIsInstance<ResearchingFacility>()
+                    .firstOrNull { it.type == type.whatResearches() && it.isCompleted && inv(it) }
         } ?: return TaskStatus.RUNNING
-
-        researcher as ResearchingFacility
 
         researcher.research(type)
         return TaskStatus.RUNNING
@@ -48,7 +44,7 @@ class Research(val type: TechType, val utilityProvider: UtilityProvider) : Task(
 
 class Upgrade(val type: UpgradeType, val level: Int, val utilityProvider: UtilityProvider) : Task() {
     private val dependencies: Task by subtask { EnsureUpgradeDependencies(type, level) }
-    private val researcherLock = UnitLock<PlayerUnit> { it as ResearchingFacility; !it.isResearching && !it.isUpgrading }
+    private val researcherLock = UnitLocked<ResearchingFacility>(this) { !it.isResearching && !it.isUpgrading }
 
     override val utility: Double
         get() = utilityProvider()
@@ -59,19 +55,16 @@ class Upgrade(val type: UpgradeType, val level: Int, val utilityProvider: Utilit
         if (FTTBot.self.getUpgradeLevel(type) >= level) return TaskStatus.DONE
         if (FTTBot.self.isUpgrading(type)) return TaskStatus.RUNNING
 
-        dependencies.process().whenRunning { return TaskStatus.RUNNING }
+        dependencies.process().andWhenRunning { return TaskStatus.RUNNING }
 
-        if (!ResourcesBoard.canAfford(type.mineralPrice(level - 1), type.gasPrice(level - 1))) {
-            ResourcesBoard.reserve(type.mineralPrice(level - 1), type.gasPrice(level - 1))
+        if (!ResourcesBoard.acquire(type.mineralPrice(level - 1), type.gasPrice(level - 1))) {
             return TaskStatus.RUNNING
         }
-        ResourcesBoard.reserve(type.mineralPrice(level - 1), type.gasPrice(level - 1))
-
-        val researcher = researcherLock.acquire {
-            ResourcesBoard.units.firstOrNull { it.isA(type.whatUpgrades()) && it.isCompleted && !(it as ResearchingFacility).isUpgrading }
+        val researcher = researcherLock.compute { inv ->
+            ResourcesBoard.units.filterIsInstance<ResearchingFacility>().firstOrNull {
+                it.type == type.whatUpgrades() && it.isCompleted && inv(it)
+            }
         } ?: return TaskStatus.RUNNING
-
-        researcher as ResearchingFacility
 
         researcher.upgrade(type)
         return TaskStatus.RUNNING
@@ -80,7 +73,7 @@ class Upgrade(val type: UpgradeType, val level: Int, val utilityProvider: Utilit
 
     companion object : TaskProvider {
         private val upgrades: List<Task> = listOf(
-                Upgrade(UpgradeType.Metabolic_Boost, 1, { 0.7 }),
+                Upgrade(UpgradeType.Metabolic_Boost, 1, { 0.65 }),
                 Upgrade(UpgradeType.Grooved_Spines, 1, { 0.65 }),
                 Upgrade(UpgradeType.Muscular_Augments, 1, { 0.65 })
         )

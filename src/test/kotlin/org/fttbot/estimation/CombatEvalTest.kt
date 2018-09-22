@@ -533,7 +533,7 @@ class CombatEvalTest {
                 SimUnit.of(UnitType.Protoss_Dragoon)
         )
 
-        val probabilityToWin = CombatEval.probabilityToWin(a, b, 192.0)
+        val probabilityToWin = CombatEval.probabilityToWin(a, b, 0.5f, 192.0)
 
         assertThat(probabilityToWin).isLessThan(0.41)
     }
@@ -558,7 +558,7 @@ class CombatEvalTest {
                 SimUnit.of(UnitType.Protoss_Dragoon)
         )
 
-        val probabilityToWin = CombatEval.probabilityToWin(a, b, 192.0)
+        val probabilityToWin = CombatEval.probabilityToWin(a, b, 0.5f, 192.0)
 
         assertThat(probabilityToWin).isGreaterThan(0.6)
     }
@@ -570,7 +570,7 @@ class CombatEvalTest {
         )
         val b = listOf<SimUnit>()
 
-        val probabilityToWin = CombatEval.probabilityToWin(a, b, 192.0)
+        val probabilityToWin = CombatEval.probabilityToWin(a, b, 0.5f, 192.0)
 
         assertThat(probabilityToWin).isGreaterThan(0.5)
     }
