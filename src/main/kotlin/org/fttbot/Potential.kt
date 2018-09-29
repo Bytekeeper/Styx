@@ -32,7 +32,7 @@ object Potential {
         target.mulAdd(center.minus(unit.position).toVector().nor(), scale)
     }
 
-    fun addThreatRepulsion(target: Vector2, unit: MobileUnit, avoidRange: Int? = null, scale: Float = 1f) {
+    fun addThreatRepulsion(target: Vector2, unit: MobileUnit, avoidRange: Int? = null, scale: Float = 1.2f) {
         val threats = unit.potentialAttackers(avoidRange ?: 48)
         target.add(
                 threats.fold(Vector2()) { acc, playerUnit -> acc.sub(playerUnit.position.toVector()) }
@@ -49,7 +49,7 @@ object Potential {
         target.add(delta.setLength(scale))
     }
 
-    fun addCollisionRepulsion(target: Vector2, unit: MobileUnit, scale: Float = 0.8f) {
+    fun addCollisionRepulsion(target: Vector2, unit: MobileUnit, scale: Float = 0.3f) {
         val relevantUnits = UnitQuery.allUnits
                 .filter { it != unit && !it.isFlying && it.getDistance(unit) < 48 }
         val force = unit.position.toVector().scl(relevantUnits.size.toFloat())
@@ -105,7 +105,7 @@ object Potential {
         }
     }
 
-    fun addSafeAreaAttraction(target: Vector2, unit: MobileUnit, scale: Float = 1.3f) {
+    fun addSafeAreaAttraction(target: Vector2, unit: MobileUnit, scale: Float = 1.1f) {
         val home = reallySafePlace()
         val homePath = FTTBot.bwem.getPath(unit.position,
                 home ?: return)
@@ -125,7 +125,7 @@ object Potential {
                 }?.position
     }
 
-    fun addSafeAreaAttractionDirect(target: Vector2, unit: MobileUnit, scale: Float = 1.3f) {
+    fun addSafeAreaAttractionDirect(target: Vector2, unit: MobileUnit, scale: Float = 1.0f) {
         target.add(((reallySafePlace() ?: return) - unit.position).toVector().setLength(scale))
     }
 }

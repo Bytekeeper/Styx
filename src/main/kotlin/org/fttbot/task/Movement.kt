@@ -1,13 +1,23 @@
 package org.fttbot.task
 
 import org.fttbot.FTTBot
+import org.fttbot.plus
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.unit.MobileUnit
+import java.util.*
 
 class Move(val unit: MobileUnit, var to: Position = unit.position, val tolerance: Int = 32, utility: Double = 1.0) : Action(utility) {
     override fun toString(): String = "Moving $unit to $to"
 
-    override fun processInternal() : TaskStatus {
+    private var orderedPosition: Position? = null
+    private val prng = SplittableRandom()
+
+    init {
+        assert(unit.exists()) { "Can't order dead $unit to $to" }
+        assert(unit.isCompleted) { "Can't order incomplete $unit to $to" }
+    }
+
+    override fun processInternal(): TaskStatus {
         if (to.getDistance(unit.position) <= tolerance) {
             if (unit.targetPosition.getDistance(to) > tolerance) {
                 unit.move(to)
@@ -23,7 +33,13 @@ class Move(val unit: MobileUnit, var to: Position = unit.position, val tolerance
                             ?: to
 
         if (unit.targetPosition.getDistance(targetPosition) > 64) {
-            unit.move(targetPosition)
+            if (orderedPosition == targetPosition) {
+                // Didn't like the order, try a nearby position
+                unit.move(targetPosition.plus(Position(prng.nextInt(-32, 32), prng.nextInt(-32, 32))))
+            } else {
+                unit.move(targetPosition)
+            }
+            orderedPosition = targetPosition
         }
         return TaskStatus.RUNNING
     }

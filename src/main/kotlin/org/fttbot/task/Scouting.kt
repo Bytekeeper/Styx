@@ -2,6 +2,7 @@ package org.fttbot.task
 
 import org.fttbot.FTTBot
 import org.fttbot.Locked
+import org.fttbot.ResourcesBoard
 import org.fttbot.info.UnitQuery
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.unit.MobileUnit
@@ -28,7 +29,7 @@ class Scouting(val unit: MobileUnit) : Task() {
 
     companion object : TaskProvider {
         private val rng = SplittableRandom()
-        val ovis = ManagedTaskProvider({ UnitQuery.myUnits.filterIsInstance<Overlord>() }, { Scouting(it) })
+        val ovis = ManagedTaskProvider({ ResourcesBoard.completedUnits.filterIsInstance<Overlord>() }, { Scouting(it) })
         override fun invoke(): List<Task> = ovis()
     }
 }

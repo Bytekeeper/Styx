@@ -14,21 +14,32 @@ import kotlin.math.min
 
 const val MAX_MELEE_RANGE = 64
 
+fun UnitType.isMorphedFromOtherBuilding() = whatBuilds().unitType.isBuilding
+
 val Weapon.onCooldown get () = cooldown() >= FTTBot.latency_frames
 val PlayerUnit.isMyUnit get() = player == FTTBot.self
 val PlayerUnit.isEnemyUnit get() = player in FTTBot.enemies
-fun Attacker.getWeaponAgainst(target: Unit) = if (target.isFlying && this is AirAttacker) airWeapon else
-    if (!target.isFlying && this is GroundAttacker) groundWeapon else Weapon(WeaponType.None, -1)
+fun PlayerUnit.getWeaponAgainst(target: Unit) =
+        if (target.isFlying && this is AirAttacker) airWeapon
+        else if (!target.isFlying && this is GroundAttacker) groundWeapon
+        else if (this is Bunker) Weapon(UnitType.Terran_Marine.groundWeapon(), 0)
+        else Weapon(WeaponType.None, -1)
 
-fun Attacker.maxRangeVs(target: Unit) = (this as PlayerUnit).player.unitStatCalculator.weaponMaxRange(getWeaponAgainst(target).type())
-fun Attacker.maxRange() =
-        if (this is GroundAttacker) player.unitStatCalculator.weaponMaxRange(groundWeapon.type())
-        else player.unitStatCalculator.weaponMaxRange((this as AirAttacker).airWeapon.type())
+fun PlayerUnit.maxRangeVs(target: Unit) =
+        player.unitStatCalculator.weaponMaxRange(getWeaponAgainst(target).type()) +
+                (if (this is Bunker) 64 else 0)
+
+fun PlayerUnit.maxRange() =
+        (if (this is GroundAttacker) player.unitStatCalculator.weaponMaxRange(groundWeapon.type())
+        else player.unitStatCalculator.weaponMaxRange((this as AirAttacker).airWeapon.type())) +
+                (if (this is Bunker) 64 else 0)
 
 fun Weapon.isMelee() = this != WeaponType.None && type().maxRange() <= MAX_MELEE_RANGE
 
 fun <T : Unit> Collection<T>.closestTo(unit: Unit) = minBy { it.getDistance(unit) }
 
+
+fun PlayerUnit.isOccupied() = !ResourcesBoard.units.contains(this)
 val PlayerUnit.isSuicideUnit
     get() = when (this) {
         is Scourge, is SpiderMine, is Scarab -> true
@@ -56,7 +67,7 @@ val Attacker.stopFrames
         else -> 2
     }
 
-fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidates: List<Worker> = ResourcesBoard.units.filterIsInstance<Worker>()): Worker? {
+fun findWorker(forPosition: Position? = null, maxRange: Double = 800.0, candidates: List<Worker> = ResourcesBoard.completedUnits.filterIsInstance<Worker>()): Worker? {
     val selection =
             if (forPosition != null) {
                 candidates.filter { it.getDistance(forPosition) <= maxRange }
@@ -89,11 +100,11 @@ val Attacker.canMoveWithoutBreakingAttack
             (this as? AirAttacker)?.airWeapon?.attackIsComplete(this) != false
 
 fun Attacker.hasWeaponAgainst(target: Unit) =
-        WeaponType.None != (if (this is Bunker) UnitType.Terran_Marine.groundWeapon() else getWeaponAgainst(target).type())
+        WeaponType.None != getWeaponAgainst(target).type()
 
 fun PlayerUnit.canAttack(target: Unit, safety: Int = 0): Boolean {
     if (!isCompleted) return false
-    val weaponType = if (this is Bunker) UnitType.Terran_Marine.groundWeapon() else if (this is Attacker) getWeaponAgainst(target).type() else return false
+    val weaponType = getWeaponAgainst(target).type()
     if (weaponType == WeaponType.None) return false
     val distance = getDistance(target)
     val maxWeaponRange = player.unitStatCalculator.weaponMaxRange(weaponType)
@@ -182,6 +193,7 @@ object UnitQuery {
     lateinit var geysers: RadiusCache<VespeneGeyser> private set
     lateinit var myBuildings: RadiusCache<Building> private set
     lateinit var myEggs: List<Egg> private set
+    lateinit var myCompletedUnits: RadiusCache<PlayerUnit>
     private val myUnitByType = mutableMapOf<Any, LazyOnFrame<RadiusCache<PlayerUnit>>>()
 
     fun reset() {
@@ -189,15 +201,17 @@ object UnitQuery {
         update(emptyList())
     }
 
+
     fun update(allUnits: Collection<Unit>) {
         this.allUnits = RadiusCache(allUnits.filter { it.isVisible && !andStayDown.contains(Pair(it.id, it.type)) })
         minerals = RadiusCache(allUnits.filterIsInstance<MineralPatch>())
         geysers = RadiusCache(allUnits.filterIsInstance<VespeneGeyser>())
         ownedUnits = RadiusCache(this.allUnits.filterIsInstance<PlayerUnit>())
         myUnits = RadiusCache(ownedUnits.filter { it.player == FTTBot.self && it.exists() })
+        myCompletedUnits = RadiusCache(myUnits.filter { it.isCompleted })
         enemyUnits = RadiusCache(ownedUnits.filter { it.player in FTTBot.enemies })
-        myWorkers = RadiusCache(myUnits.filterIsInstance<Worker>().filter { it.isCompleted })
-        myBuildings = RadiusCache(myUnits.filterIsInstance<Building>().filter { it.isCompleted })
+        myWorkers = RadiusCache(myCompletedUnits.filterIsInstance<Worker>())
+        myBuildings = RadiusCache(myCompletedUnits.filterIsInstance<Building>())
         myEggs = myUnits.filterIsInstance(Egg::class.java)
     }
 

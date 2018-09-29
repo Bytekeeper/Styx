@@ -20,12 +20,12 @@ class GatherMinerals : Task() {
         val available = ResourcesBoard
         val myBases = MyInfo.myBases.filterIsInstance<PlayerUnit>()
                 .filter { it as ResourceDepot; it.isReadyForResources }
-        val units = available.units
+        val units = available.completedUnits.filterIsInstance<Worker>()
 
         val workerUnits = myBases.flatMap { base ->
             val relevantUnits = UnitQuery.inRadius(base.position, RESOURCE_RANGE)
             val refineries = relevantUnits.filter { it is GasMiningFacility && it.isMyUnit && it.isCompleted }.map { it as GasMiningFacility }
-            val remainingWorkers = units.filter { it.getDistance(base) < RESOURCE_RANGE && it is Worker && it.isMyUnit && it.isCompleted }.map { it as Worker }
+            val remainingWorkers = units.filter { it.getDistance(base) < RESOURCE_RANGE }
             val workersToAssign = remainingWorkers.toMutableList()
             val minerals = relevantUnits.filterIsInstance(MineralPatch::class.java).toMutableList()
 
@@ -66,7 +66,7 @@ class GatherMinerals : Task() {
             return@flatMap remainingWorkers
         }
         available.reserveUnits(workerUnits)
-        return TaskStatus.DONE
+        return TaskStatus.RUNNING
 
     }
 

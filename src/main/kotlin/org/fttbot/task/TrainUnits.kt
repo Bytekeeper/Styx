@@ -6,13 +6,18 @@ import org.fttbot.strategies.Utilities
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.Larva
+import org.openbw.bwapi4j.unit.Morphable
 
-class Train(val type: UnitType, val utilityProvider: () -> Double, var at: TilePosition? = null) : Task() {
+class Train(val type: UnitType, val utilityProvider: () -> Double = { 1.0 }, var at: TilePosition? = null) : Task() {
     override val utility: Double
         get() = utilityProvider()
 
-    private val trainerLock = UnitLocked<Larva>(this)
+    private val trainerLock = UnitLocked<Morphable>(this)
     private val dependencies: Task by subtask { EnsureUnitDependencies(type) }
+
+    init {
+        assert(!type.isBuilding) { "Can't train a building!" }
+    }
 
     override fun toString(): String = "Training $type"
 
@@ -20,12 +25,15 @@ class Train(val type: UnitType, val utilityProvider: () -> Double, var at: TileP
         if (trainerLock.entity?.type == type) return TaskStatus.DONE
         ProductionBoard.pendingUnits.add(type)
 
-        dependencies.process().andWhenFailed { return TaskStatus.FAILED }
+        val dependencyStatus = dependencies.process()
+        if (dependencyStatus == TaskStatus.FAILED) return TaskStatus.FAILED
 
         if (!ResourcesBoard.acquireFor(type))
             return TaskStatus.RUNNING
 
-        val trainer = trainerLock.compute { ResourcesBoard.units.firstOrNull { it is Larva } as? Larva }
+        if (dependencyStatus == TaskStatus.RUNNING) return TaskStatus.RUNNING
+
+        val trainer = trainerLock.compute { ResourcesBoard.completedUnits.firstOrNull { it.type == type.whatBuilds().unitType } as? Morphable }
                 ?: return TaskStatus.RUNNING
 
         trainer.morph(type)
@@ -43,6 +51,6 @@ class Train(val type: UnitType, val utilityProvider: () -> Double, var at: TileP
         private val mutas = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Mutalisk, { Utilities.moreMutasUtility }).repeat() })
         private val ovis = ManagedTaskProvider({ larvas }, { Train(FTTBot.self.race.supplyProvider, Utilities::moreSupplyUtility).repeat() })
 
-        override fun invoke(): List<Task> = workers() + lings() + ovis() + hydras() + mutas() + lurker()
+        override fun invoke(): List<Task> = workers() /*+ lings() + ovis() + hydras()*/ + mutas() + lurker()
     }
 }

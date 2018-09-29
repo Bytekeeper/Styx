@@ -178,7 +178,7 @@ class ParallelTask(provider: TaskProvider) : CompoundTask(provider) {
     }
 }
 
-class ManagedTaskProvider<T>(val itemProvider: () -> List<T>, val taskProvider: (T) -> Task) : TaskProvider {
+class ManagedTaskProvider<T>(val itemProvider: () -> Collection<T>, val taskProvider: (T) -> Task) : TaskProvider {
     val tasks = mutableMapOf<T, Task>()
 
     override fun invoke(): List<Task> {

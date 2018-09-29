@@ -6,8 +6,16 @@ import org.fttbot.FTTBot
 import org.fttbot.LazyOnFrame
 import org.fttbot.ResourcesBoard
 import org.openbw.bwapi4j.unit.*
+import java.lang.Double.max
+import kotlin.math.max
 
 object MyInfo {
+    var gasPerFrame = 0.0
+    var mineralsPerFrame = 0.0
+    var lastGas = 0
+    var lastMinerals = 0
+    var lastFrame = 0
+
     val occupiedAreas by LazyOnFrame<Map<Area, List<PlayerUnit>>> {
         UnitQuery.myUnits.filter { it is Attacker && it !is Worker }
                 .groupBy { FTTBot.bwem.getArea(it.tilePosition) }
@@ -32,4 +40,24 @@ object MyInfo {
                 ((it as? SupplyProvider)?.supplyProvided() ?: 0) +
                         ((it as? Egg)?.buildType?.supplyProvided() ?: 0)
             } + ProductionBoard.pendingUnits.sumBy { it.supplyProvided() } + ResourcesBoard.supply
+
+
+    fun step() {
+        val frameDelta = FTTBot.frameCount - lastFrame
+        if (frameDelta > 0) {
+            val mineralDelta = max(0, FTTBot.self.minerals() - lastMinerals).toDouble() / frameDelta
+            val gasDelta = max(0, FTTBot.self.gas() - lastGas).toDouble() / frameDelta
+            mineralsPerFrame = 0.995 * mineralsPerFrame + 0.005 * mineralDelta
+            gasPerFrame = 0.995 * gasPerFrame + 0.005 * gasDelta
+        }
+        lastFrame = FTTBot.frameCount
+        lastGas = FTTBot.self.gas()
+        lastMinerals = FTTBot.self.minerals()
+    }
+
+    fun reset() {
+        lastGas = FTTBot.self.gas()
+        lastMinerals = FTTBot.self.minerals()
+        lastFrame = FTTBot.frameCount
+    }
 }

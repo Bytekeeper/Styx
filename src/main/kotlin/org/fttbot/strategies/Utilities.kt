@@ -67,7 +67,7 @@ object Utilities {
     val moreHydrasUtility by LazyOnFrame { evalUnit(UnitType.Zerg_Hydralisk, 0.7) }
 
     val moreMutasUtility by LazyOnFrame {
-        evalUnit(UnitType.Zerg_Mutalisk, 0.7)
+        evalUnit(UnitType.Zerg_Mutalisk, 0.9)
     }
 
     val moreUltrasUtility by LazyOnFrame {

@@ -25,14 +25,12 @@ class Attack(val unit: PlayerUnit, var target: PlayerUnit? = null) : Task() {
 
 }
 
-class ManageAttacker(val attacker: Attacker) : Task() {
+class ManageAttacker(val attacker: Attacker, val myCluster: Cluster<PlayerUnit>) : Task() {
     override val utility: Double
         get() = 1.0
 
     override fun processInternal(): TaskStatus {
-        if (attacker is Worker) return TaskStatus.RUNNING
-        val myCluster = attacker.myCluster
-        val force = Vector2()
+        if (attacker.isOccupied()) return TaskStatus.RUNNING
         val id = attacker.id
         val isFlying = attacker.isFlying
         val position = attacker.position
@@ -79,6 +77,8 @@ class ManageAttacker(val attacker: Attacker) : Task() {
                         }
 
             }
+
+            val force = Vector2()
             val threats = attacker.potentialAttackers(32)
             if (threats.isEmpty()) {
                 (UnitQuery.enemyUnits.inRadius(attacker, 400) + EnemyInfo.seenUnits.filter { it.getDistance(attacker) <= 400 })
@@ -95,9 +95,10 @@ class ManageAttacker(val attacker: Attacker) : Task() {
                             }
                             return TaskStatus.RUNNING
                         }
+                val myAttackers = myCluster.units.count { it is Attacker && it is MobileUnit }
                 val bestCluster = Cluster.clusters
                         .asSequence()
-                        .filter { it.attackEval.second > 0.6 && it != myCluster }
+                        .filter { it.units.count { it is Attacker && it is MobileUnit } > myAttackers }
                         .minBy { it.position.getDistance(position) } ?: myCluster
                 if (attacker.getDistance(bestCluster.position) > 200) {
                     Potential.joinAttraction(force, attacker, bestCluster.myUnits)
@@ -109,14 +110,16 @@ class ManageAttacker(val attacker: Attacker) : Task() {
                 } else {
                     Potential.addSafeAreaAttraction(force, attacker)
                 }
+                if (!isFlying) {
+                    Potential.addWallRepulsion(force, attacker)
+                    Potential.addCollisionRepulsion(force, attacker)
+                }
             }
             if (!isFlying) {
-                Potential.addWallRepulsion(force, attacker)
                 Potential.addChokeRepulsion(force, attacker)
-                Potential.addCollisionRepulsion(force, attacker)
             }
             Potential.addThreatRepulsion(force, attacker)
-            if (force.len() > 0.7) {
+            if (force.len() > 0.9) {
                 val pos = Potential.wrapUp(attacker, force)
                 if (attacker.targetPosition.getDistance(pos) > 16) {
                     attacker.move(pos)
@@ -128,15 +131,39 @@ class ManageAttacker(val attacker: Attacker) : Task() {
     }
 }
 
-class CombatController() : Task() {
+class CombatCluster(val cluster: Cluster<PlayerUnit>) : Task() {
+    override val utility: Double = 1.0
+
+    private val attackerTasks = ManagedTaskProvider({
+        cluster.myUnits
+                .filterIsInstance<Attacker>()
+                .filter { it !is Worker }
+    }) {
+        ManageAttacker(it, cluster)
+    }
+
+    override fun processInternal(): TaskStatus {
+        return processAll(attackerTasks)
+    }
+
+}
+
+
+class CombatController : Task() {
     private val rng = SplittableRandom()
     override val utility: Double = 1.0
 
-    private val attackerTasks = ManagedTaskProvider({ ResourcesBoard.units.filterIsInstance<Attacker>() }, {
-        ManageAttacker(it)
+    private val combatClusterTasks = ManagedTaskProvider({ Cluster.clusters }, {
+        CombatCluster(it)
     })
 
-    override fun processInternal(): TaskStatus = processAll(attackerTasks)
+    private val freeSquadTask = ManagedTaskProvider({ Cluster.squads }) {
+        CombatCluster(it)
+    }
+
+    override fun processInternal(): TaskStatus {
+        return processAll(*(combatClusterTasks() + freeSquadTask()).toTypedArray())
+    }
 
     companion object : TaskProvider {
         private val tasks = listOf(CombatController().neverFail().repeat())

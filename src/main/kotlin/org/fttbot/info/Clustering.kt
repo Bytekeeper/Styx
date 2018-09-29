@@ -43,20 +43,22 @@ class Cluster<U : PlayerUnit>(var position: Position, internal val units: Mutabl
             clusterOf.clusters.values.toSet()
         }
 
-        var squads = ClusterSet<PlayerUnit>()
-            private set
+        private var squadClusters = ClusterSet<PlayerUnit>()
+        val squads by LazyOnFrame {
+            squadClusters.clusters.values.toSet()
+        }
 
         fun step() {
             val relevantUnits = (UnitQuery.ownedUnits + EnemyInfo.seenUnits)
                     .filter { it !is Larva && it !is Spell }
             if (clusterOf.completed) {
-                clusterOf.restart(relevantUnits, { ((it as? Attacker)?.maxRange() ?: 0) + 128 }, 3)
+                clusterOf.restart(relevantUnits, { ((it as? Attacker)?.maxRange() ?: 0) + 64 }, 3)
             }
             clusterOf.step()
-            if (squads.completed) {
-                squads.restart(UnitQuery.myUnits.filter { it is Attacker }, { 128 }, 3)
+            if (squadClusters.completed) {
+                squadClusters.restart(UnitQuery.myUnits.filter { it is Attacker }, { 128 }, 3)
             }
-            squads.step()
+            squadClusters.step()
         }
     }
 }

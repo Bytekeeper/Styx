@@ -77,12 +77,14 @@ class StrayWorkers : Task() {
     override fun processInternal(): TaskStatus {
         strayWorkers.keys.retainAll(ResourcesBoard.units)
         strayWorkers.entries.removeIf { it.key.position.getDistance(it.value.position) < 200 }
-        strayWorkers += (ResourcesBoard.units - strayWorkers.keys)
+        strayWorkers += (ResourcesBoard.completedUnits - strayWorkers.keys)
+                .asSequence()
                 .filterIsInstance<Worker>()
                 .filter { UnitQuery.my<ResourceDepot>().inRadius(it, 300).none() }
                 .mapNotNull {
                     it to (UnitQuery.my<ResourceDepot>().closestTo(it) ?: return@mapNotNull null)
                 }
+                .toList()
 
         strayWorkers.keys.forEach { ResourcesBoard.reserveUnit(it) }
 

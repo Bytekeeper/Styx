@@ -15,8 +15,8 @@ class WorkerDefense(val defensePoint: Position) : Task() {
     override val utility: Double
         get() = 1.0
 
-    private val defenderTask =  ManagedTaskProvider({ defendingWorkers }, {
-        ManageAttacker(it)
+    private val defenderTask = ManagedTaskProvider({ defendingWorkers }, {
+        ManageAttacker(it, it.myCluster)
     })
 
     override fun processInternal(): TaskStatus {

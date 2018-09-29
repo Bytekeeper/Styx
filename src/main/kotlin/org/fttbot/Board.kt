@@ -5,11 +5,16 @@ import org.fttbot.info.UnitQuery
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
+import org.openbw.bwapi4j.unit.Egg
 import org.openbw.bwapi4j.unit.PlayerUnit
 
 object ProductionBoard {
     val pendingLocations = ArrayList<TilePosition>()
     val pendingUnits = ArrayList<UnitType>()
+
+    fun startedUnits() = UnitQuery.myUnits
+            .filter { !it.isCompleted }
+            .map { if (it is Egg) it.buildType else it.type }
 
     fun reset() {
         pendingUnits.clear()
@@ -20,6 +25,7 @@ object ProductionBoard {
 object ResourcesBoard {
     private val _units = mutableSetOf<PlayerUnit>()
     val units: Set<PlayerUnit> get() = _units
+    val completedUnits get() = units.filter { it.isCompleted }
     var minerals: Int = 0
         private set
     var gas: Int = 0
@@ -64,7 +70,7 @@ object ResourcesBoard {
         this.gas = self.gas()
         this.supply = self.supplyTotal() - self.supplyUsed()
         this._units.clear()
-        this._units.addAll(UnitQuery.myUnits.filter { it.isCompleted })
+        this._units.addAll(UnitQuery.myUnits)
     }
 
     fun reserve(unitType: UnitType) = reserve(unitType.mineralPrice(), unitType.gasPrice(), unitType.supplyRequired())

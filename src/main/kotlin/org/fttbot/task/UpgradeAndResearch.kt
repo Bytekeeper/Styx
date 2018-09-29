@@ -27,8 +27,8 @@ class Research(val type: TechType, val utilityProvider: UtilityProvider) : Task(
         }
 
         val researcher = researcherLock.compute { inv ->
-            ResourcesBoard.units.filterIsInstance<ResearchingFacility>()
-                    .firstOrNull { it.type == type.whatResearches() && it.isCompleted && inv(it) }
+            ResourcesBoard.completedUnits.filterIsInstance<ResearchingFacility>()
+                    .firstOrNull { it.type == type.whatResearches() && inv(it) }
         } ?: return TaskStatus.RUNNING
 
         researcher.research(type)
@@ -61,8 +61,8 @@ class Upgrade(val type: UpgradeType, val level: Int, val utilityProvider: Utilit
             return TaskStatus.RUNNING
         }
         val researcher = researcherLock.compute { inv ->
-            ResourcesBoard.units.filterIsInstance<ResearchingFacility>().firstOrNull {
-                it.type == type.whatUpgrades() && it.isCompleted && inv(it)
+            ResourcesBoard.completedUnits.filterIsInstance<ResearchingFacility>().firstOrNull {
+                it.type == type.whatUpgrades() && inv(it)
             }
         } ?: return TaskStatus.RUNNING
 
