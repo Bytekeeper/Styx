@@ -1,6 +1,7 @@
 package org.fttbot
 
 import org.fttbot.FTTBot.self
+import org.fttbot.info.MyInfo
 import org.fttbot.info.UnitQuery
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.TechType
@@ -33,12 +34,12 @@ object ResourcesBoard {
     var supply: Int = 0
         private set
 
-    fun canAfford(minerals: Int, gas: Int, supply: Int = 0) =
-            (minerals == 0 || this.minerals >= minerals) &&
-                    (gas == 0 || this.gas >= gas) &&
+    fun canAfford(minerals: Int, gas: Int, supply: Int = 0, futureFrames: Int = 0) =
+            (minerals == 0 || this.minerals + MyInfo.mineralsPerFrame * futureFrames >= minerals) &&
+                    (gas == 0 || this.gas + MyInfo.gasPerFrame * futureFrames >= gas) &&
                     (supply == 0 || this.supply >= supply)
 
-    fun canAfford(unitType: UnitType) = canAfford(unitType.mineralPrice(), unitType.gasPrice(), unitType.supplyRequired())
+    fun canAfford(unitType: UnitType, futureFrames: Int = 0) = canAfford(unitType.mineralPrice(), unitType.gasPrice(), unitType.supplyRequired(), futureFrames)
 
     fun reserveUnits(toReserve: Collection<PlayerUnit>): ResourcesBoard {
         require(_units.containsAll(toReserve))
@@ -53,10 +54,10 @@ object ResourcesBoard {
         return this
     }
 
-    fun release(minerals: Int, gas: Int, supply: Int) {
-        this.minerals += minerals
-        this.gas += gas
-        this.supply += supply
+    fun release(unit: PlayerUnit) {
+        require(!_units.contains(unit))
+        require(unit.exists())
+        _units += unit
     }
 
     fun reserveUnit(unit: PlayerUnit): ResourcesBoard {
@@ -73,10 +74,8 @@ object ResourcesBoard {
         this._units.addAll(UnitQuery.myUnits)
     }
 
-    fun reserve(unitType: UnitType) = reserve(unitType.mineralPrice(), unitType.gasPrice(), unitType.supplyRequired())
-
-    fun acquire(minerals: Int = 0, gas: Int = 0, supply: Int = 0) =
-            if (!canAfford(minerals, gas, supply)) {
+    fun acquire(minerals: Int = 0, gas: Int = 0, supply: Int = 0, futureFrames: Int = 0) =
+            if (!canAfford(minerals, gas, supply, futureFrames)) {
                 reserve(minerals, gas, supply)
                 false
             } else {

@@ -3,14 +3,14 @@ package org.fttbot
 import bwem.BWEM
 import bwem.map.Map
 import org.apache.logging.log4j.LogManager
-import org.fttbot.estimation.CombatEval
-import org.fttbot.estimation.SimUnit
 import org.fttbot.info.*
 import org.fttbot.strategies.Utilities
 import org.fttbot.task.*
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.Race
+import org.openbw.bwapi4j.type.UnitType
+import org.openbw.bwapi4j.type.UpgradeType
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Unit
@@ -78,10 +78,33 @@ object FTTBot : BWEventListener {
         MyInfo.reset()
 //        org.fttbot.Map.init()
 
+        val bo = listOf(
+                Train(UnitType.Zerg_Drone),
+                Train(UnitType.Zerg_Drone),
+                Train(UnitType.Zerg_Drone),
+                Train(UnitType.Zerg_Drone),
+                Train(UnitType.Zerg_Drone),
+                Train(UnitType.Zerg_Overlord),
+                Train(UnitType.Zerg_Drone),
+                Train(UnitType.Zerg_Drone),
+                Train(UnitType.Zerg_Drone),
+                Expand(),
+                Train(UnitType.Zerg_Drone),
+                Build(UnitType.Zerg_Spawning_Pool),
+                Train(UnitType.Zerg_Drone),
+                Build(UnitType.Zerg_Extractor),
+                Train(UnitType.Zerg_Zergling),
+                Train(UnitType.Zerg_Zergling),
+                Train(UnitType.Zerg_Zergling),
+                Train(UnitType.Zerg_Zergling)
+        )
+
         bot = MParallelTask {
             listOf(
-                    Train, GatherMinerals, ConstructBuilding, Scouting, WorkerDefense, Expanding, CombatController,
-                    /*Upgrade, Research, */WorkerTransfer, StrayWorkers
+                    { bo },
+                    Manners,
+                    Train, GatherMinerals, Build, Scouting, WorkerDefense, Expand, CombatController,
+                    Upgrade, Research, WorkerTransfer, StrayWorkers
             ).flatMap { it() }
         }
     }
@@ -118,7 +141,7 @@ object FTTBot : BWEventListener {
                         game.mapDrawer.drawTextMap(it.center, "ua")
                     }
             UnitQuery.myUnits.forEach {
-                //                game.mapDrawer.drawTextMap(it.position, "${it.id}(${it.lastCommand})")
+                game.mapDrawer.drawTextMap(it.position, "${it.id}(${it.lastCommand})")
                 if (it is MobileUnit && it.targetPosition != null) {
 //                    game.mapDrawer.drawLineMap(it.position, it.targetPosition, Color.BLUE)
                 }
@@ -143,15 +166,14 @@ object FTTBot : BWEventListener {
 //                    LOG.error("OHOH")
 //                }
 //            System.exit(1)
-            Cluster.squads.forEach { c ->
-                val bestCluster = Cluster.clusters
-                        .filter { it.enemyUnits.isNotEmpty() }
-                        .maxBy { ec ->
-                            val myUnits = (c.myUnits + ec.myUnits).distinct().map(SimUnit.Companion::of)
-                            CombatEval.probabilityToWin(myUnits, ec.enemySimUnits, 0.8f)
-                        } ?: return@forEach
-                game.mapDrawer.drawLineMap(c.position, bestCluster.position, Color.RED)
-//                game.mapDrawer.drawTextMap(it.position, "${it.attackEval.second}")
+            Cluster.clusters.forEach { c ->
+                val hull = c.enemyHull
+                hull.windowed(2) { p ->
+                    game.mapDrawer.drawLineMap(p[0], p[1], Color.RED)
+                }
+                if (hull.size > 1) {
+                    game.mapDrawer.drawLineMap(hull.last(), hull.first(), Color.RED)
+                }
             }
             game.mapDrawer.drawTextScreen(0, 40, "Expand : %.2f".format(Utilities.expansionUtility))
             game.mapDrawer.drawTextScreen(0, 50, "Trainers : %.2f".format(Utilities.moreTrainersUtility))
@@ -167,7 +189,7 @@ object FTTBot : BWEventListener {
             game.mapDrawer.drawTextScreen(0, 150, "uMin : %.2f".format(Utilities.mineralsUtilization))
             game.mapDrawer.drawTextScreen(0, 160, "uGas : %.2f".format(Utilities.gasUtilization))
             game.mapDrawer.drawTextScreen(0, 170, "S : %d".format(self.supplyTotal()))
-            game.mapDrawer.drawTextScreen(0, 170, "m/g p/f: %.2f %.2f".format(MyInfo.mineralsPerFrame, MyInfo.gasPerFrame))
+            game.mapDrawer.drawTextScreen(0, 180, "m/g p/f: %.2f %.2f".format(MyInfo.mineralsPerFrame, MyInfo.gasPerFrame))
 
             tasks.forEachIndexed { index, task ->
                 val u = "%.2f".format(task.utility)

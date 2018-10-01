@@ -42,7 +42,7 @@ class Research(val type: TechType, val utilityProvider: UtilityProvider) : Task(
     }
 }
 
-class Upgrade(val type: UpgradeType, val level: Int, val utilityProvider: UtilityProvider) : Task() {
+class Upgrade(val type: UpgradeType, val level: Int = 0, val utilityProvider: UtilityProvider = { 1.0 }) : Task() {
     private val dependencies: Task by subtask { EnsureUpgradeDependencies(type, level) }
     private val researcherLock = UnitLocked<ResearchingFacility>(this) { !it.isResearching && !it.isUpgrading }
 

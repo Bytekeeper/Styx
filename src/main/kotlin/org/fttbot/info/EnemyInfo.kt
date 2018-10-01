@@ -67,8 +67,8 @@ object EnemyInfo {
             }
         }
         seenUnits.removeIf {
-            it is MobileUnit && (it !is SiegeTank || !it.isSieged) && (it !is Worker) &&
-                    (FTTBot.frameCount - it.lastSpotted > DISCARD_HIDDEN_UNITS_AFTER) ||
+//            it is MobileUnit && (it !is SiegeTank || !it.isSieged) && (it !is Worker) &&
+//                    (FTTBot.frameCount - it.lastSpotted > DISCARD_HIDDEN_UNITS_AFTER) ||
                     ((it !is Burrowable || !it.isBurrowed) && FTTBot.game.bwMap.isVisible(it.tilePosition))
         }
         nextFrame = FTTBot.frameCount

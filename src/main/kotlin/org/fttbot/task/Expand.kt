@@ -14,15 +14,16 @@ import org.openbw.bwapi4j.unit.Building
 import org.openbw.bwapi4j.unit.PlayerUnit
 import java.util.*
 
-class Expanding : Task() {
+class Expand(val utilityProvider: () -> Double = { 1.0 }) : Task() {
     private val prng = SplittableRandom()
-    private val construct by SubTask {
-        ConstructBuilding(UnitType.Zerg_Hatchery)
-    }
-    private var expansionPosition = Locked<TilePosition>(this, { UnitQuery.ownedUnits.inRadius(it.toPosition(), 128).none { it is Building } })
 
     override val utility: Double
-        get() = Utilities.expansionUtility
+        get() = utilityProvider()
+
+    private val construct by SubTask {
+        Build(UnitType.Zerg_Hatchery)
+    }
+    private var expansionPosition = Locked<TilePosition>(this) { UnitQuery.ownedUnits.inRadius(it.toPosition(), 128).none { it is Building } }
 
     override fun processInternal(): TaskStatus {
         val targetPosition = expansionPosition.compute {
@@ -62,9 +63,11 @@ class Expanding : Task() {
         return targetBase?.location
     }
 
+
     companion object : TaskProvider {
-        private val expand: List<Task> = listOf(Expanding().neverFail().repeat())
+        private val expand: List<Task> = listOf(Expand { Utilities.expansionUtility }.nvr())
 
         override fun invoke(): List<Task> = expand
+
     }
 }

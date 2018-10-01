@@ -32,7 +32,8 @@ typealias UtilityProvider = () -> Double
 abstract class Task {
     abstract val utility: Double
     private val subtasks = mutableListOf<Task>()
-    private var lastStatus: TaskStatus = TaskStatus.DONE
+    var lastStatus: TaskStatus = TaskStatus.DONE
+        private set
     val locks = mutableListOf<Locked<*>>()
 
     fun process(): TaskStatus {
@@ -53,6 +54,7 @@ abstract class Task {
 
     fun repeat(times: Int = -1): Task = Repeating(this, times)
     fun neverFail() = NeverFailing(this)
+    fun nvr() = NeverFailing(Repeating(this))
     override fun toString(): String = this::class.java.name.substringAfterLast('.')
 
     fun processInSequence(vararg tasks: Task): TaskStatus {
@@ -133,7 +135,7 @@ class Repeating(task: Task, private val times: Int = -1) : Decorator(task) {
         super.reset()
     }
 
-    override fun toString() = "Repeating ($count/$times) $delegate"
+    override fun toString() = "R ($count/$times) $delegate"
 }
 
 abstract class CompoundTask(val provider: TaskProvider) : Task() {

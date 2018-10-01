@@ -66,7 +66,8 @@ object ConstructionPosition {
     }
 
     private fun outsideOfResourceLines(pos: TilePosition, unitType: UnitType): Boolean {
-        val base = UnitQuery.my<ResourceDepot>().minBy { it.tilePosition.getDistance(pos) } ?: return true
+        val base = UnitQuery.my<ResourceDepot>().minBy { it.tilePosition.getDistance(pos) }
+                ?: return true
         val poly = resourcePolygons.computeIfAbsent(base) {
             val relevantUnits = UnitQuery.inRadius(base.position, 300)
                     .filter { it is MineralPatch || it is VespeneGeyser || it is Refinery }
@@ -95,12 +96,14 @@ object ConstructionPosition {
 
     private fun findPositionForGas(unitType: UnitType): TilePosition? {
         val geysers = UnitQuery.geysers
-        UnitQuery.my<ResourceDepot>().forEach { base ->
+        return UnitQuery.my<ResourceDepot>().mapNotNull { base ->
             val geyser = geysers.filter { it.getDistance(base) < 300 }.minBy { it.getDistance(base) }
-            if (geyser != null) {
-                return geyser.initialTilePosition
-            }
-        }
-        return null
+            return@mapNotNull if (geyser != null) {
+                base to geyser.initialTilePosition
+            } else null
+        }.minBy {
+            if (it.first.isReadyForResources) -1
+            else it.first.remainingBuildTime
+        }?.second
     }
 }

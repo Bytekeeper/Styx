@@ -24,12 +24,13 @@ class Scouting(val unit: MobileUnit) : Task() {
             val position = FTTBot.bwem.bases[rng.nextInt(FTTBot.bwem.bases.size)].center
             if (it(position)) position else null
         } ?: return TaskStatus.RUNNING
-        return processInSequence(move, avoid)
+        val result = processInSequence(move, avoid)
+        return result
     }
 
     companion object : TaskProvider {
         private val rng = SplittableRandom()
-        val ovis = ManagedTaskProvider({ ResourcesBoard.completedUnits.filterIsInstance<Overlord>() }, { Scouting(it) })
+        val ovis = ManagedTaskProvider({ ResourcesBoard.completedUnits.filterIsInstance<Overlord>() }, { Scouting(it).neverFail() })
         override fun invoke(): List<Task> = ovis()
     }
 }

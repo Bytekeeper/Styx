@@ -4,33 +4,17 @@ import com.badlogic.gdx.math.Vector2
 import org.fttbot.Potential
 import org.fttbot.ResourcesBoard
 import org.fttbot.estimation.CombatEval
-import org.fttbot.estimation.SimUnit
 import org.fttbot.info.*
 import org.openbw.bwapi4j.unit.Attacker
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Worker
-import java.util.*
 
-class Attack(val unit: PlayerUnit, var target: PlayerUnit? = null) : Task() {
-    override val utility: Double = 1.0
-
-    override fun processInternal(): TaskStatus {
-        if (target == null || !target!!.exists()) return TaskStatus.FAILED
-        if (unit.orderTarget != target) {
-            (unit as Attacker).attack(target)
-        }
-        return TaskStatus.RUNNING
-    }
-
-}
-
-class ManageAttacker(val attacker: Attacker, val myCluster: Cluster<PlayerUnit>) : Task() {
+class ManageAttacker(val attacker: Attacker, val myCluster: Cluster<PlayerUnit>, val enemies: List<PlayerUnit>) : Task() {
     override val utility: Double
         get() = 1.0
 
     override fun processInternal(): TaskStatus {
-        if (attacker.isOccupied()) return TaskStatus.RUNNING
         val id = attacker.id
         val isFlying = attacker.isFlying
         val position = attacker.position
@@ -39,17 +23,14 @@ class ManageAttacker(val attacker: Attacker, val myCluster: Cluster<PlayerUnit>)
         if (attacker is MobileUnit) {
             if (myCluster.enemyUnits.isNotEmpty()) {
                 if (myCluster.attackEval.second >= 0.6 && myCluster.attackEval.first.any { it.id == id }) {
-                    ResourcesBoard.reserveUnit(attacker)
                     if (!attacker.canMoveWithoutBreakingAttack) return TaskStatus.RUNNING
 
-                    val buddies = UnitQuery.myUnits.inRadius(attacker, 400)
-                    val candidates = (UnitQuery.enemyUnits + EnemyInfo.seenUnits)
+                    val candidates = enemies
                             .filter { attacker.hasWeaponAgainst(it) && it.isDetected }
-                    val bestEnemyToKill = CombatEval.bestEnemyToKill(buddies.map(SimUnit.Companion::of),
-                            candidates.filter { attacker.canAttack(it, (attacker.topSpeed * 2).toInt()) }.map(SimUnit.Companion::of))
-                    val target = bestEnemyToKill?.let { candidates.firstOrNull { it.id == bestEnemyToKill.id } }
-                            ?: candidates.closestTo(attacker)
-                            ?: return TaskStatus.RUNNING
+
+                    val target = candidates.mapIndexed { index, playerUnit ->
+                        playerUnit to attacker.getDistance(playerUnit) + index * 16
+                    }.minBy { it.second }?.first ?: return TaskStatus.RUNNING
                     if (targetUnit != target && target.isVisible) {
                         if (attacker.canAttack(target, 48))
                             attacker.attack(target)
@@ -134,23 +115,37 @@ class ManageAttacker(val attacker: Attacker, val myCluster: Cluster<PlayerUnit>)
 class CombatCluster(val cluster: Cluster<PlayerUnit>) : Task() {
     override val utility: Double = 1.0
 
+    private val enemies = mutableListOf<PlayerUnit>()
+
     private val attackerTasks = ManagedTaskProvider({
         cluster.myUnits
+                .asSequence()
                 .filterIsInstance<Attacker>()
                 .filter { it !is Worker }
+                .toList()
     }) {
-        ManageAttacker(it, cluster)
+        ManageAttacker(it, cluster, enemies)
     }
 
     override fun processInternal(): TaskStatus {
+        val buddies = cluster.mySimUnits
+
+        enemies.clear()
+        enemies.addAll(cluster.enemyUnits.filter { it.isDetected })
+
+        enemies.sortByDescending {
+            if (it !is Attacker) return@sortByDescending 0.0
+            val thisOne = cluster.enemySimUnits.firstOrNull { e -> e.id == it.id }
+                    ?: return@sortByDescending 0.0
+            CombatEval.probabilityToWin(buddies, cluster.enemySimUnits - thisOne, 0.8f) +
+                    (if (it is Worker) 0.2 else 0.0)
+        }
         return processAll(attackerTasks)
     }
-
 }
 
 
 class CombatController : Task() {
-    private val rng = SplittableRandom()
     override val utility: Double = 1.0
 
     private val combatClusterTasks = ManagedTaskProvider({ Cluster.clusters }, {
@@ -166,7 +161,7 @@ class CombatController : Task() {
     }
 
     companion object : TaskProvider {
-        private val tasks = listOf(CombatController().neverFail().repeat())
+        private val tasks = listOf(CombatController().nvr())
         override fun invoke(): List<Task> = tasks
     }
 }

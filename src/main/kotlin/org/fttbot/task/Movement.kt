@@ -10,11 +10,17 @@ class Move(val unit: MobileUnit, var to: Position = unit.position, val tolerance
     override fun toString(): String = "Moving $unit to $to"
 
     private var orderedPosition: Position? = null
+    private var failedAttempts = 0
     private val prng = SplittableRandom()
 
     init {
         assert(unit.exists()) { "Can't order dead $unit to $to" }
         assert(unit.isCompleted) { "Can't order incomplete $unit to $to" }
+    }
+
+    override fun reset() {
+        super.reset()
+        failedAttempts = 0
     }
 
     override fun processInternal(): TaskStatus {
@@ -33,9 +39,13 @@ class Move(val unit: MobileUnit, var to: Position = unit.position, val tolerance
                             ?: to
 
         if (unit.targetPosition.getDistance(targetPosition) > 64) {
+            if (failedAttempts > 10) {
+                return TaskStatus.FAILED
+            }
             if (orderedPosition == targetPosition) {
                 // Didn't like the order, try a nearby position
                 unit.move(targetPosition.plus(Position(prng.nextInt(-32, 32), prng.nextInt(-32, 32))))
+                failedAttempts++
             } else {
                 unit.move(targetPosition)
             }

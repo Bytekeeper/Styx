@@ -59,7 +59,7 @@ class WorkerTransfer : Task() {
     }
 
     companion object : TaskProvider {
-        private val workerTransfer: Task = WorkerTransfer().neverFail().repeat()
+        private val workerTransfer: Task = WorkerTransfer().nvr()
 
         override fun invoke(): List<Task> = listOf(workerTransfer)
 
@@ -76,7 +76,7 @@ class StrayWorkers : Task() {
 
     override fun processInternal(): TaskStatus {
         strayWorkers.keys.retainAll(ResourcesBoard.units)
-        strayWorkers.entries.removeIf { it.key.position.getDistance(it.value.position) < 200 }
+        strayWorkers.entries.removeIf { it.key.position.getDistance(it.value.position) < 200 || !it.key.exists()}
         strayWorkers += (ResourcesBoard.completedUnits - strayWorkers.keys)
                 .asSequence()
                 .filterIsInstance<Worker>()
@@ -92,7 +92,7 @@ class StrayWorkers : Task() {
     }
 
     companion object : TaskProvider {
-        private val strayWorkers: Task = StrayWorkers().neverFail().repeat()
+        private val strayWorkers: Task = StrayWorkers().nvr()
 
         override fun invoke(): List<Task> = listOf(strayWorkers)
 

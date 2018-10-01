@@ -51,8 +51,8 @@ object Utilities {
         val needed = needed(type)
         if (needed < 0) return 0.0
         val eval = (base - fastsig(needed / 6.0) * 0.1) *
-                (1 + max(0.0, fastsig(((FTTBot.frameCount - EnemyInfo.lastNewEnemyFrame) / scaleFactor - UnitQuery.myUnits.count { it.type == type }) * 0.01)) * 0.3) *
-                (if ((type.allRequiredUnits() - type - UnitQuery.myUnits.map { it.type }).isEmpty()) 1.0 else 0.7)
+                (1 + max(0.0, fastsig(((FTTBot.frameCount - EnemyInfo.lastNewEnemyFrame) / scaleFactor - UnitQuery.myUnits.count { it.type == type }) * 0.01)) * 0.3)
+//        * (if ((type.allRequiredUnits() - type - UnitQuery.myUnits.map { it.type } - UnitType.Zerg_Larva).isEmpty()) 1.0 else 0.7)
         return MathUtils.clamp(eval, 0.0, 1.0)
     }
 
@@ -61,28 +61,28 @@ object Utilities {
     }
 
     val moreLurkersUtility by LazyOnFrame {
-        evalUnit(UnitType.Zerg_Lurker, 0.6)
+        evalUnit(UnitType.Zerg_Lurker, 0.4)
     }
 
     val moreHydrasUtility by LazyOnFrame { evalUnit(UnitType.Zerg_Hydralisk, 0.7) }
 
     val moreMutasUtility by LazyOnFrame {
-        evalUnit(UnitType.Zerg_Mutalisk, 0.9)
+        evalUnit(UnitType.Zerg_Mutalisk, 0.63)
     }
 
     val moreUltrasUtility by LazyOnFrame {
-        evalUnit(UnitType.Zerg_Ultralisk, 0.65)
+        evalUnit(UnitType.Zerg_Ultralisk, 0.6, 400.0)
     }
 
     val moreLingsUtility by LazyOnFrame {
-        evalUnit(UnitType.Zerg_Zergling, 0.71, 600.0)
+        evalUnit(UnitType.Zerg_Zergling, 0.65, 600.0)
     }
 
     val moreGasUtility by LazyOnFrame {
         if (MyInfo.myBases.none { base -> UnitQuery.geysers.any { it.getDistance(base) < 300 } })
             0.0
         else
-            min(1.0, FTTBot.self.minerals() / (UnitQuery.myUnits.count { it is GasMiningFacility } * 30.0 + FTTBot.self.gas() + 200.0))
+            min(1.0, FTTBot.self.minerals() / (UnitQuery.my<GasMiningFacility>().count() * 80.0 + FTTBot.self.gas() + 800.0))
     }
 
     val moreSupplyUtility by LazyOnFrame {

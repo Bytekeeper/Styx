@@ -22,21 +22,32 @@ class Train(val type: UnitType, val utilityProvider: () -> Double = { 1.0 }, var
     override fun toString(): String = "Training $type"
 
     override fun processInternal(): TaskStatus {
-        if (trainerLock.entity?.type == type) return TaskStatus.DONE
+        trainerLock.entity?.let { trained ->
+            if (UnitQuery.myUnits.any { it.id == trained.id && it.type != trained.type })
+                return TaskStatus.DONE
+            if (!trained.exists())
+                return TaskStatus.FAILED
+            if (ResourcesBoard.units.contains(trained)) {
+                // Relock
+                trainerLock.get()
+            }
+        }
+
         ProductionBoard.pendingUnits.add(type)
 
         val dependencyStatus = dependencies.process()
         if (dependencyStatus == TaskStatus.FAILED) return TaskStatus.FAILED
 
+        val trainer = trainerLock.compute { ResourcesBoard.completedUnits.firstOrNull { it.type == type.whatBuilds().unitType } as? Morphable }
+
         if (!ResourcesBoard.acquireFor(type))
             return TaskStatus.RUNNING
 
-        if (dependencyStatus == TaskStatus.RUNNING) return TaskStatus.RUNNING
+        if (dependencyStatus == TaskStatus.RUNNING || trainer == null) return TaskStatus.RUNNING
 
-        val trainer = trainerLock.compute { ResourcesBoard.completedUnits.firstOrNull { it.type == type.whatBuilds().unitType } as? Morphable }
-                ?: return TaskStatus.RUNNING
-
-        trainer.morph(type)
+        if (!trainer.morph(type)) {
+            trainerLock.release()
+        }
         return TaskStatus.RUNNING
     }
 
@@ -44,13 +55,13 @@ class Train(val type: UnitType, val utilityProvider: () -> Double = { 1.0 }, var
         val larvas by LazyOnFrame {
             UnitQuery.myUnits.filterIsInstance<Larva>()
         }
-        private val workers = ManagedTaskProvider({ larvas }, { Train(FTTBot.self.race.worker, Utilities::moreWorkersUtility).repeat() })
-        private val lings = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Zergling, { Utilities.moreLingsUtility }).repeat() })
-        private val hydras = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Hydralisk, { Utilities.moreHydrasUtility }).repeat() })
-        private val lurker = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Lurker, { Utilities.moreLurkersUtility }).repeat() })
-        private val mutas = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Mutalisk, { Utilities.moreMutasUtility }).repeat() })
-        private val ovis = ManagedTaskProvider({ larvas }, { Train(FTTBot.self.race.supplyProvider, Utilities::moreSupplyUtility).repeat() })
+        private val workers = ManagedTaskProvider({ larvas }, { Train(FTTBot.self.race.worker, Utilities::moreWorkersUtility).nvr() })
+        private val lings = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Zergling, { Utilities.moreLingsUtility }).nvr() })
+        private val hydras = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Hydralisk, { Utilities.moreHydrasUtility }).nvr() })
+        private val lurker = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Lurker, { Utilities.moreLurkersUtility }).nvr() })
+        private val mutas = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Mutalisk, { Utilities.moreMutasUtility }).nvr() })
+        private val ovis = ManagedTaskProvider({ larvas }, { Train(FTTBot.self.race.supplyProvider, Utilities::moreSupplyUtility).nvr() })
 
-        override fun invoke(): List<Task> = workers() /*+ lings() + ovis() + hydras()*/ + mutas() + lurker()
+        override fun invoke(): List<Task> = workers() + lings() + ovis() + hydras() + mutas() + lurker()
     }
 }

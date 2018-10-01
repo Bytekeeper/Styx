@@ -35,7 +35,7 @@ class EnsureUnitDependencies(val type: UnitType) : Action() {
 class HaveBuilding(val type: UnitType, val utilityProvider: () -> Double = { 1.0 }) : Task() {
     override val utility: Double
         get() = utilityProvider()
-    private val constructBuilding by SubTask { ConstructBuilding(type) }
+    private val constructBuilding by SubTask { Build(type) }
 
     override fun toString() = "Have $type"
 
@@ -73,7 +73,7 @@ class HaveUnit(val type: UnitType) : Action() {
 }
 
 class HaveGas(var amount: Int) : Action() {
-    private val constructGasMine: ConstructBuilding by subtask { ConstructBuilding(FTTBot.self.race.refinery) }
+    private val constructGasMine: Build by subtask { Build(FTTBot.self.race.refinery) }
     override fun processInternal(): TaskStatus {
         if (ResourcesBoard.gas >= amount || amount <= 0) return TaskStatus.DONE
         if (UnitQuery.my<GasMiningFacilityImpl>().any()) return TaskStatus.RUNNING

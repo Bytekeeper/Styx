@@ -27,7 +27,7 @@ class DVariable<T : Any, E>(private val other: Variable<E>) : Variable<T> {
     override fun get(): T = value
 
     fun compute(map: (E) -> T): T? {
-        if (other.isDirty()) {
+        if (other.isDirty() || !::value.isInitialized) {
             value = map(other.get())
         }
         return value
@@ -39,9 +39,8 @@ class DVariable<T : Any, E>(private val other: Variable<E>) : Variable<T> {
 open class Locked<T>(task: Task, val invariant: (T) -> Boolean = { true }) : Variable<T> {
     var entity: T? = null
         private set
-    private var locked = false
+    protected var locked = false
     private var dirty = false
-    private val eachFrame = EachFrame()
 
     init {
         task.locks += this
@@ -51,7 +50,7 @@ open class Locked<T>(task: Task, val invariant: (T) -> Boolean = { true }) : Var
     override fun isDirty(): Boolean = dirty
 
     fun compute(supplier: ((T) -> Boolean) -> T?): T? {
-        if (entity == null || !invariant(entity!!)) {
+        if (entity == null || !locked && !invariant(entity!!)) {
             dirty = true
             entity = supplier(invariant)
             if (entity != null && !invariant(entity!!)) {
@@ -73,7 +72,7 @@ open class Locked<T>(task: Task, val invariant: (T) -> Boolean = { true }) : Var
         entity = value
     }
 
-    fun release() {
+    open fun release() {
         if (!locked) {
             entity = null
         }
@@ -94,5 +93,12 @@ class UnitLocked<T : PlayerUnit> internal constructor(task: Task, invariant: (T)
             ResourcesBoard.reserveUnit(result)
         }
         return result
+    }
+
+    override fun release() {
+        if (locked && entity!!.exists() && !ResourcesBoard.units.contains(entity!!)) {
+            ResourcesBoard.release(entity!!)
+        }
+        super.release()
     }
 }

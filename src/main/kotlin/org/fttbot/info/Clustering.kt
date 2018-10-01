@@ -1,5 +1,6 @@
 package org.fttbot.info
 
+import com.badlogic.gdx.math.ConvexHull
 import org.fttbot.LazyOnFrame
 import org.fttbot.div
 import org.fttbot.estimation.CombatEval
@@ -37,7 +38,20 @@ class Cluster<U : PlayerUnit>(var position: Position, internal val units: Mutabl
         units.filter { it.isEnemyUnit }
     }
 
+    val enemyHull by LazyOnFrame {
+        val floatArray = FloatArray(enemyUnits.size * 2) { i ->
+            val pos = enemyUnits[i / 2].position
+            (if (i % 2 == 0) pos.x else pos.y).toFloat()
+        }
+        val polygon = convexHull.computePolygon(floatArray, false)
+        polygon.items.asSequence()
+                .take(polygon.size)
+                .windowed(2, 2, false) { p -> Position(p[0].toInt(), p[1].toInt()) }
+                .toList()
+    }
+
     companion object {
+        private val convexHull = ConvexHull()
         var clusterOf = ClusterSet<PlayerUnit>()
         val clusters by LazyOnFrame {
             clusterOf.clusters.values.toSet()

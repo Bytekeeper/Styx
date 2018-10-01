@@ -8,21 +8,24 @@ import org.fttbot.info.isMorphedFromOtherBuilding
 import org.fttbot.strategies.Utilities
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
+import org.openbw.bwapi4j.org.apache.commons.lang3.mutable.MutableInt
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.Building
+import org.openbw.bwapi4j.unit.GasMiningFacility
 import org.openbw.bwapi4j.unit.Morphable
 import org.openbw.bwapi4j.unit.Worker
+import kotlin.math.ceil
 
 fun TilePosition.getBuilding() = UnitQuery.myUnits.firstOrNull { it.tilePosition == this@getBuilding && it is Building } as? Building
 
-class ConstructBuilding(val type: UnitType, val utilityProvider: UtilityProvider = { 1.0 }, var at: TilePosition? = null) : Task() {
+class Build(val type: UnitType, val utilityProvider: UtilityProvider = { 1.0 }, var at: TilePosition? = null) : Task() {
     override val utility: Double get() = utilityProvider()
 
     private val inProgressLock = UnitLocked<Building>(this)
     private val builderLock = UnitLocked<Worker>(this)
     private val morphLock = UnitLocked<Morphable>(this)
     private val morphDependency by SubTask {
-        ConstructBuilding(type.whatBuilds().unitType, utilityProvider, at)
+        Build(type.whatBuilds().unitType, utilityProvider, at)
     }
     private var buildPositionLock = Locked<TilePosition>(this)
     private val moveToBuildPositionLock = builderLock.map<Move>();
@@ -34,12 +37,14 @@ class ConstructBuilding(val type: UnitType, val utilityProvider: UtilityProvider
         assert(type.isBuilding) { "Can't building a normal unit!" }
     }
 
-    override fun toString(): String = "ConstructBuilding $type"
+    override fun toString(): String = "Build $type"
 
     override fun processInternal(): TaskStatus {
         inProgressLock.compute {
             (if (type.isMorphedFromOtherBuilding())
                 ResourcesBoard.units.firstOrNull { u -> u.id == morphLock.entity?.id && u.type == type }
+            else if (type.isRefinery && builderLock.entity?.exists() == false)
+                UnitQuery.my<GasMiningFacility>().inRadius(builderLock.entity!!, 64).firstOrNull { !it.isCompleted }
             else
                 ResourcesBoard.units.firstOrNull { u -> u.id == builderLock.entity?.id && u.type == type }) as? Building
         }?.let {
@@ -55,7 +60,9 @@ class ConstructBuilding(val type: UnitType, val utilityProvider: UtilityProvider
     }
 
     private fun processBuildWithWorker(): TaskStatus {
-        processRequirements().andWhenNotDone { return it }
+        val dependencyStatus = processAll(dependencies, haveGas).andWhenFailed {
+            return TaskStatus.FAILED
+        }
 
         val buildPosition = buildPositionLock.compute {
             at ?: ConstructionPosition.findPositionFor(type)
@@ -65,10 +72,33 @@ class ConstructBuilding(val type: UnitType, val utilityProvider: UtilityProvider
             findWorker(buildPosition.toPosition(), maxRange = Double.MAX_VALUE)
         } ?: return TaskStatus.RUNNING
 
+        val length = MutableInt()
+        FTTBot.bwem.getPath(worker.position, buildPosition.toPosition(), length)
+        val futureFrames = ceil(length.value / worker.type.topSpeed()).toInt()
+
+        if (!ResourcesBoard.canAfford(type, futureFrames)) {
+            ResourcesBoard.acquireFor(type)
+            buildPositionLock.release()
+            builderLock.release()
+            return TaskStatus.RUNNING
+        }
+        val resourcesAcquired = ResourcesBoard.acquireFor(type)
+        if (dependencyStatus != TaskStatus.DONE) return dependencyStatus
+
         val moveToBuildPosition = moveToBuildPositionLock.compute { Move(it, it.position, 96) }!!
         moveToBuildPosition.to = buildPosition.toPosition() + Position(type.width() / 2, type.height() / 2)
 
-        moveToBuildPosition.process().andWhenNotDone { return it }
+        val moving = moveToBuildPosition.process()
+        if (moving == TaskStatus.FAILED) {
+            buildPositionLock.release()
+            return TaskStatus.RUNNING
+        } else if (moving == TaskStatus.RUNNING)
+            return TaskStatus.RUNNING
+
+        if (!resourcesAcquired) {
+            return TaskStatus.RUNNING
+        }
+
         if (worker.buildType != type || worker.targetPosition.toTilePosition().getDistance(buildPosition) > 3) {
             if (!worker.build(buildPosition, type)) {
                 buildPositionLock.release()
@@ -87,31 +117,23 @@ class ConstructBuilding(val type: UnitType, val utilityProvider: UtilityProvider
             return TaskStatus.RUNNING
         }
 
-        processRequirements().andWhenNotDone { return it }
+        val dependencyStatus = processAll(dependencies, haveGas).andWhenFailed { return TaskStatus.FAILED }
+
+        if (!ResourcesBoard.acquireFor(type)) {
+            return TaskStatus.RUNNING
+        }
+        if (dependencyStatus != TaskStatus.DONE) return dependencyStatus
 
         toMorph.morph(type)
         return TaskStatus.RUNNING
     }
 
-    fun processRequirements(): TaskStatus {
-        processAll(dependencies, haveGas)
-                .andWhenNotDone { return it }
-
-        if (!ResourcesBoard.acquireFor(type)) {
-            return TaskStatus.RUNNING
-        }
-        return TaskStatus.DONE
-    }
-
     companion object : TaskProvider {
         val taskList = listOf(
                 HaveBuilding(UnitType.Zerg_Spawning_Pool, { 0.7 }),
-                ConstructBuilding(UnitType.Zerg_Sunken_Colony, { 0.6 }),
-                ConstructBuilding(UnitType.Zerg_Sunken_Colony, { 0.6 }),
-                ConstructBuilding(UnitType.Zerg_Sunken_Colony, { 0.5 }),
-                ConstructBuilding(UnitType.Zerg_Sunken_Colony, { 0.5 }),
-                ConstructBuilding(UnitType.Zerg_Hatchery, Utilities::moreTrainersUtility).repeat(),
-                ConstructBuilding(UnitType.Zerg_Extractor, Utilities::moreGasUtility).neverFail().repeat()
+                Build(UnitType.Zerg_Sunken_Colony, { 0.6 }),
+                Build(UnitType.Zerg_Hatchery, Utilities::moreTrainersUtility).nvr(),
+                Build(UnitType.Zerg_Extractor, Utilities::moreGasUtility).nvr()
         )
 
         override fun invoke(): List<Task> = taskList

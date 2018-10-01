@@ -16,7 +16,7 @@ class WorkerDefense(val defensePoint: Position) : Task() {
         get() = 1.0
 
     private val defenderTask = ManagedTaskProvider({ defendingWorkers }, {
-        ManageAttacker(it, it.myCluster)
+        ManageAttacker(it, it.myCluster, it.myCluster.enemyUnits)
     })
 
     override fun processInternal(): TaskStatus {
@@ -58,7 +58,7 @@ class WorkerDefense(val defensePoint: Position) : Task() {
     }
 
     companion object : TaskProvider {
-        private val bases = ManagedTaskProvider({ MyInfo.myBases }, { WorkerDefense((it as PlayerUnit).position).neverFail().repeat() })
+        private val bases = ManagedTaskProvider({ MyInfo.myBases }, { WorkerDefense((it as PlayerUnit).position).nvr() })
         override fun invoke(): List<Task> = bases()
     }
 }
