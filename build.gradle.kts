@@ -22,7 +22,7 @@ dependencies {
     compile(fileTree("lib").include("*.jar"))
     compile("com.badlogicgames.gdx:gdx:1.9.4")
     compile("io.jenetics:jenetics:4.2.0")
-
+    compile("org.locationtech.jts:jts-core:1.16.0")
 
     testCompile("org.junit.jupiter:junit-jupiter-api:5.0.2")
     testCompile("org.junit.platform:junit-platform-launcher:1.2.0")

@@ -886,4 +886,18 @@ class CombatEvalTest {
 
         assertThat(probabilityToWin).isGreaterThan(0.25)
     }
+
+    @Test
+    fun `Muta vs SCV should be easy`() {
+        val a = listOf(
+                SimUnit.of(UnitType.Zerg_Mutalisk)
+        )
+        val b = listOf(
+                SimUnit.of(UnitType.Terran_SCV)
+        )
+
+        val probabilityToWin = CombatEval.probabilityToWin(a, b)
+
+        assertThat(probabilityToWin).isGreaterThan(0.6)
+    }
 }

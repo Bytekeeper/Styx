@@ -6,6 +6,8 @@ import org.fttbot.div
 import org.fttbot.estimation.CombatEval
 import org.fttbot.estimation.SimUnit
 import org.fttbot.plus
+import org.locationtech.jts.geom.Coordinate
+import org.locationtech.jts.geom.GeometryFactory
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.unit.Attacker
 import org.openbw.bwapi4j.unit.Larva
@@ -17,9 +19,14 @@ import kotlin.collections.set
 val PlayerUnit.myCluster get() = Cluster.clusterOf.clusters[this] ?: ClusterSet.NOISE
 
 class Cluster<U : PlayerUnit>(var position: Position, internal val units: MutableList<U>) {
+    private val geometryFactory = GeometryFactory()
+
     val attackEval by LazyOnFrame {
-        CombatEval.bestProbilityToWin(mySimUnits.filter { it.isAttacker },
-                enemySimUnits.filter { it.isAttacker }, 0.6, 0.8f)
+        val enemies = enemySimUnits.filter { it.isAttacker }
+        val myMob = mySimUnits.filter { it.isAttacker }
+        if (enemies.isEmpty()) myMob to 1.0
+        else CombatEval.bestProbilityToWin(myMob,
+                enemies, 0.6, 0.9f)
     }
 
     val mySimUnits by LazyOnFrame {
@@ -39,15 +46,12 @@ class Cluster<U : PlayerUnit>(var position: Position, internal val units: Mutabl
     }
 
     val enemyHull by LazyOnFrame {
-        val floatArray = FloatArray(enemyUnits.size * 2) { i ->
-            val pos = enemyUnits[i / 2].position
-            (if (i % 2 == 0) pos.x else pos.y).toFloat()
-        }
-        val polygon = convexHull.computePolygon(floatArray, false)
-        polygon.items.asSequence()
-                .take(polygon.size)
-                .windowed(2, 2, false) { p -> Position(p[0].toInt(), p[1].toInt()) }
-                .toList()
+        val points = enemyUnits.map { e -> Coordinate(e.position.x.toDouble(), e.position.y.toDouble()) }.toTypedArray()
+        geometryFactory.createMultiPointFromCoords(points).convexHull()
+    }
+
+    val enemyHullWithBuffer by LazyOnFrame {
+        enemyHull.buffer(384.0, 3)
     }
 
     companion object {

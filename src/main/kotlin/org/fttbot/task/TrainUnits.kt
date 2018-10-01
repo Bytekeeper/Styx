@@ -55,13 +55,13 @@ class Train(val type: UnitType, val utilityProvider: () -> Double = { 1.0 }, var
         val larvas by LazyOnFrame {
             UnitQuery.myUnits.filterIsInstance<Larva>()
         }
-        private val workers = ManagedTaskProvider({ larvas }, { Train(FTTBot.self.race.worker, Utilities::moreWorkersUtility).nvr() })
+        val workers = ManagedTaskProvider({ larvas }, { Train(FTTBot.self.race.worker, Utilities::moreWorkersUtility).nvr() })
         private val lings = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Zergling, { Utilities.moreLingsUtility }).nvr() })
         private val hydras = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Hydralisk, { Utilities.moreHydrasUtility }).nvr() })
         private val lurker = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Lurker, { Utilities.moreLurkersUtility }).nvr() })
-        private val mutas = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Mutalisk, { Utilities.moreMutasUtility }).nvr() })
-        private val ovis = ManagedTaskProvider({ larvas }, { Train(FTTBot.self.race.supplyProvider, Utilities::moreSupplyUtility).nvr() })
+        val mutas = ManagedTaskProvider({ larvas }, { Train(UnitType.Zerg_Mutalisk, { Utilities.moreMutasUtility }).nvr() })
+        val ovis = ManagedTaskProvider({ larvas }, { Train(FTTBot.self.race.supplyProvider, Utilities::moreSupplyUtility).nvr() })
 
-        override fun invoke(): List<Task> = workers() + lings() + ovis() + hydras() + mutas() + lurker()
+        override fun invoke(): List<Task> = workers() + lings() + hydras() + lurker()
     }
 }

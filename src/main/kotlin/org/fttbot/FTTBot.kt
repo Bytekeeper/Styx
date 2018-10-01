@@ -6,11 +6,13 @@ import org.apache.logging.log4j.LogManager
 import org.fttbot.info.*
 import org.fttbot.strategies.Utilities
 import org.fttbot.task.*
+import org.fttbot.task.Train.Companion.mutas
+import org.fttbot.task.Train.Companion.ovis
+import org.fttbot.task.Train.Companion.workers
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.Race
 import org.openbw.bwapi4j.type.UnitType
-import org.openbw.bwapi4j.type.UpgradeType
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Unit
@@ -88,23 +90,25 @@ object FTTBot : BWEventListener {
                 Train(UnitType.Zerg_Drone),
                 Train(UnitType.Zerg_Drone),
                 Train(UnitType.Zerg_Drone),
-                Expand(),
                 Train(UnitType.Zerg_Drone),
                 Build(UnitType.Zerg_Spawning_Pool),
-                Train(UnitType.Zerg_Drone),
                 Build(UnitType.Zerg_Extractor),
+                Train(UnitType.Zerg_Drone),
+                Expand(),
+                HaveBuilding(UnitType.Zerg_Lair),
                 Train(UnitType.Zerg_Zergling),
                 Train(UnitType.Zerg_Zergling),
-                Train(UnitType.Zerg_Zergling),
-                Train(UnitType.Zerg_Zergling)
+                Train(UnitType.Zerg_Drone),
+                Build(UnitType.Zerg_Spire),
+                Train(UnitType.Zerg_Overlord)
         )
 
         bot = MParallelTask {
             listOf(
-                    { bo },
+                    { bo }, { mutas() + ovis() + workers() },
                     Manners,
-                    Train, GatherMinerals, Build, Scouting, WorkerDefense, Expand, CombatController,
-                    Upgrade, Research, WorkerTransfer, StrayWorkers
+                    /*Train,*/ GatherMinerals, Build, Scouting, WorkerDefense, Expand, CombatController,
+                    /*Upgrade, Research, */WorkerTransfer, StrayWorkers
             ).flatMap { it() }
         }
     }
@@ -167,12 +171,13 @@ object FTTBot : BWEventListener {
 //                }
 //            System.exit(1)
             Cluster.clusters.forEach { c ->
-                val hull = c.enemyHull
-                hull.windowed(2) { p ->
+                val poly = c.enemyHull.buffer(384.0, 3)
+                        .coordinates.map { Position(it.x.toInt(), it.y.toInt()) }
+                poly.windowed(2) { p ->
                     game.mapDrawer.drawLineMap(p[0], p[1], Color.RED)
                 }
-                if (hull.size > 1) {
-                    game.mapDrawer.drawLineMap(hull.last(), hull.first(), Color.RED)
+                if (poly.size > 1) {
+                    game.mapDrawer.drawLineMap(poly.last(), poly.first(), Color.RED)
                 }
             }
             game.mapDrawer.drawTextScreen(0, 40, "Expand : %.2f".format(Utilities.expansionUtility))

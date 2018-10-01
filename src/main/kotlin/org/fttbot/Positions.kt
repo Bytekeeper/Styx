@@ -2,6 +2,7 @@ package org.fttbot
 
 import com.badlogic.gdx.math.MathUtils
 import com.badlogic.gdx.math.Vector2
+import org.locationtech.jts.geom.Coordinate
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
 
@@ -17,6 +18,8 @@ infix fun Position.cross(other: Position) = x * other.y - y * other.x
 operator fun Position.div(value: Int): Position = Position(this.x / value, this.y / value)
 
 
-
 fun Position.asValidPosition() = Position(MathUtils.clamp(x, 0, FTTBot.game.bwMap.mapWidth() * 32),
         MathUtils.clamp(y, 0, FTTBot.game.bwMap.mapHeight() * 32))
+
+fun Coordinate.toPosition() = Position(x.toInt(), y.toInt())
+fun Position.toCoordinate() = Coordinate(x.toDouble(), y.toDouble())

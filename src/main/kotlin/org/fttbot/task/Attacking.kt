@@ -2,9 +2,11 @@ package org.fttbot.task
 
 import com.badlogic.gdx.math.Vector2
 import org.fttbot.Potential
-import org.fttbot.ResourcesBoard
 import org.fttbot.estimation.CombatEval
 import org.fttbot.info.*
+import org.fttbot.minus
+import org.fttbot.toPosition
+import org.fttbot.toVector
 import org.openbw.bwapi4j.unit.Attacker
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.PlayerUnit
@@ -23,13 +25,15 @@ class ManageAttacker(val attacker: Attacker, val myCluster: Cluster<PlayerUnit>,
         if (attacker is MobileUnit) {
             if (myCluster.enemyUnits.isNotEmpty()) {
                 if (myCluster.attackEval.second >= 0.6 && myCluster.attackEval.first.any { it.id == id }) {
-                    if (!attacker.canMoveWithoutBreakingAttack) return TaskStatus.RUNNING
+                    if (!attacker.canMoveWithoutBreakingAttack)
+                        return TaskStatus.RUNNING
 
                     val candidates = enemies
                             .filter { attacker.hasWeaponAgainst(it) && it.isDetected }
 
                     val target = candidates.mapIndexed { index, playerUnit ->
-                        playerUnit to attacker.getDistance(playerUnit) + index * 16
+                        playerUnit to attacker.getDistance(playerUnit) + index * 16 -
+                                (if (targetUnit == playerUnit) 60 else 0)
                     }.minBy { it.second }?.first ?: return TaskStatus.RUNNING
                     if (targetUnit != target && target.isVisible) {
                         if (attacker.canAttack(target, 48))
@@ -40,16 +44,23 @@ class ManageAttacker(val attacker: Attacker, val myCluster: Cluster<PlayerUnit>,
                         attacker.move(target.position)
                     }
                     return TaskStatus.RUNNING
+                } else {
+                    val x = 2
                 }
             } else {
                 Cluster.clusters
                         .asSequence()
                         .filter { it.enemyUnits.isNotEmpty() }
                         .mapNotNull {
-                            val eval = CombatEval.probabilityToWin((myCluster.mySimUnits + it.mySimUnits).filter { it.isAttacker },
-                                    it.enemySimUnits.filter { it.isAttacker })
-                            if (eval < 0.7) null else it to eval
-                        }.minBy { it.second }?.let { (target, _) ->
+                            val enemies = it.enemySimUnits.filter { it.isAttacker }
+                            if (enemies.isEmpty() && it.enemyUnits.any { attacker.hasWeaponAgainst(it) })
+                                it to 1.0
+                            else {
+                                val eval = CombatEval.probabilityToWin((myCluster.mySimUnits + it.mySimUnits).filter { it.isAttacker },
+                                        enemies)
+                                if (eval < 0.6) null else it to eval
+                            }
+                        }.minBy { it.second * it.first.position.getDistance(position) }?.let { (target, _) ->
                             val targetPosition = target.enemyUnits.minBy { it.getDistance(attacker) }!!.position
                             if (attacker.targetPosition.getDistance(targetPosition) > 192) {
                                 attacker.move(targetPosition)
@@ -99,7 +110,13 @@ class ManageAttacker(val attacker: Attacker, val myCluster: Cluster<PlayerUnit>,
             if (!isFlying) {
                 Potential.addChokeRepulsion(force, attacker)
             }
-            Potential.addThreatRepulsion(force, attacker)
+            myCluster.enemyHullWithBuffer.coordinates.minBy { it.toPosition().getDistance(position) }?.toPosition()
+                    ?.let {
+                        val dx = (it - position).toVector().setLength(1.2f)
+                        force.add(dx)
+                    }
+
+//            Potential.addThreatRepulsion(force, attacker)
             if (force.len() > 0.9) {
                 val pos = Potential.wrapUp(attacker, force)
                 if (attacker.targetPosition.getDistance(pos) > 16) {
