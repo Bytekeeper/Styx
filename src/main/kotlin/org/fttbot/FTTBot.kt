@@ -184,6 +184,11 @@ object FTTBot : BWEventListener {
                 if (poly.size > 1) {
                     game.mapDrawer.drawLineMap(poly.last(), poly.first(), Color.RED)
                 }
+                c.myUnits.forEach { u ->
+                    game.mapDrawer.drawLineMap(u.position, c.position, Color.GREEN )
+                }
+                game.mapDrawer.drawCircleMap(c.position, 5, Color.GREEN, true)
+                game.mapDrawer.drawTextMap(c.position, "${c.attackEval.second}")
             }
             game.mapDrawer.drawTextScreen(0, 40, "Expand : %.2f".format(Utilities.expansionUtility))
             game.mapDrawer.drawTextScreen(0, 50, "Trainers : %.2f".format(Utilities.moreTrainersUtility))

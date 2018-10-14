@@ -28,10 +28,10 @@ class WorkerDefense(val defensePoint: Position) : Task() {
         }
         val simUnitsOfEnemy = defenseCluster.units
                 .filter { it.isEnemyUnit }
-                .map { factory.of(it, 0, 0).setUserObject(it) }
+                .map { factory.of(it) }
         val successForCompleteDefense = CombatEval.probabilityToWin(defenseCluster.units
                 .filter { it.isMyUnit && it is Attacker }
-                .map { factory.of(it, 0, 0).setUserObject(it) }, simUnitsOfEnemy)
+                .map { factory.of(it) }, simUnitsOfEnemy)
         if (successForCompleteDefense < 0.4) {
             return TaskStatus.FAILED
         }
@@ -39,7 +39,7 @@ class WorkerDefense(val defensePoint: Position) : Task() {
         val successForCurrentRatio = CombatEval.probabilityToWin(
                 (defendingWorkers + defenseCluster.units.filter {
                     it.isCompleted && it is Attacker && it !is Worker && it.isMyUnit
-                }).map { factory.of(it, 0, 0).setUserObject(it) }, simUnitsOfEnemy)
+                }).map { factory.of(it) }, simUnitsOfEnemy)
         if (successForCurrentRatio > 0.7) {
             defendingWorkers.minBy { it.hitPoints }?.let {
                 defendingWorkers.remove(it)

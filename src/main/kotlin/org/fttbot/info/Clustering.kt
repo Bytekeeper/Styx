@@ -46,11 +46,11 @@ class Cluster<U : PlayerUnit>(var position: Position, internal val units: Mutabl
     }
 
     val mySimUnits by LazyOnFrame {
-        myUnits.map { factory.of(it, 0, 0).setUserObject(it) }
+        myUnits.map { factory.of(it) }
     }
 
     val enemySimUnits by LazyOnFrame {
-        enemyUnits.map { factory.of(it, 0, 0).setUserObject(it) }
+        enemyUnits.map { factory.of(it) }
     }
 
     val myUnits by LazyOnFrame {
