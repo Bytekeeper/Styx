@@ -15,6 +15,7 @@ object MyInfo {
     var lastGas = 0
     var lastMinerals = 0
     var lastFrame = 0
+    val unitStatus = mutableMapOf<PlayerUnit, String>()
 
     val occupiedAreas by LazyOnFrame<Map<Area, List<PlayerUnit>>> {
         UnitQuery.myUnits.filter { it is Attacker && it !is Worker }
@@ -53,6 +54,7 @@ object MyInfo {
         lastFrame = FTTBot.frameCount
         lastGas = FTTBot.self.gas()
         lastMinerals = FTTBot.self.minerals()
+        unitStatus.clear()
     }
 
     fun reset() {

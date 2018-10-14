@@ -3,11 +3,13 @@ package org.fttbot.task
 import org.fttbot.FTTBot
 import org.fttbot.ResourcesBoard
 import org.fttbot.UnitLocked
+import org.fttbot.info.UnitQuery
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UpgradeType
+import org.openbw.bwapi4j.unit.Mutalisk
 import org.openbw.bwapi4j.unit.ResearchingFacility
 
-class Research(val type: TechType, val utilityProvider: UtilityProvider) : Task() {
+class Research(val type: TechType, val utilityProvider: UtilityProvider = { 1.0 }) : Task() {
     private val dependencies: Task by subtask { EnsureTechDependencies(type) }
     private val researcherLock = UnitLocked<ResearchingFacility>(this) { !it.isResearching && !it.isUpgrading }
 
@@ -42,7 +44,7 @@ class Research(val type: TechType, val utilityProvider: UtilityProvider) : Task(
     }
 }
 
-class Upgrade(val type: UpgradeType, val level: Int = 0, val utilityProvider: UtilityProvider = { 1.0 }) : Task() {
+class Upgrade(val type: UpgradeType, private val level: Int = 0, val utilityProvider: UtilityProvider = { 1.0 }) : Task() {
     private val dependencies: Task by subtask { EnsureUpgradeDependencies(type, level) }
     private val researcherLock = UnitLocked<ResearchingFacility>(this) { !it.isResearching && !it.isUpgrading }
 
@@ -74,8 +76,9 @@ class Upgrade(val type: UpgradeType, val level: Int = 0, val utilityProvider: Ut
     companion object : TaskProvider {
         private val upgrades: List<Task> = listOf(
                 Upgrade(UpgradeType.Metabolic_Boost, 1, { 0.65 }),
-                Upgrade(UpgradeType.Grooved_Spines, 1, { 0.65 }),
-                Upgrade(UpgradeType.Muscular_Augments, 1, { 0.65 })
+                Fallback(Sequence(Condition { UnitQuery.myUnits.any { it is Mutalisk } }, Upgrade(UpgradeType.Zerg_Flyer_Carapace, 1)), Running())
+//                Upgrade(UpgradeType.Grooved_Spines, 1, { 0.65 }),
+//                Upgrade(UpgradeType.Muscular_Augments, 1, { 0.65 })
         )
 
         override fun invoke(): List<Task> = upgrades

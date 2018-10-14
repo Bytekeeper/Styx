@@ -1,8 +1,8 @@
 package org.fttbot.task
 
+import org.bk.ass.BWAPI4JAgentFactory
 import org.fttbot.ResourcesBoard
 import org.fttbot.estimation.CombatEval
-import org.fttbot.estimation.SimUnit
 import org.fttbot.info.*
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.unit.Attacker
@@ -16,7 +16,7 @@ class WorkerDefense(val defensePoint: Position) : Task() {
         get() = 1.0
 
     private val defenderTask = ManagedTaskProvider({ defendingWorkers }, {
-        ManageAttacker(it, it.myCluster, it.myCluster.enemyUnits)
+        ManageAttacker(it)
     })
 
     override fun processInternal(): TaskStatus {
@@ -28,10 +28,10 @@ class WorkerDefense(val defensePoint: Position) : Task() {
         }
         val simUnitsOfEnemy = defenseCluster.units
                 .filter { it.isEnemyUnit }
-                .map { SimUnit.of(it) }
+                .map { factory.of(it, 0, 0).setUserObject(it) }
         val successForCompleteDefense = CombatEval.probabilityToWin(defenseCluster.units
                 .filter { it.isMyUnit && it is Attacker }
-                .map { SimUnit.of(it) }, simUnitsOfEnemy)
+                .map { factory.of(it, 0, 0).setUserObject(it) }, simUnitsOfEnemy)
         if (successForCompleteDefense < 0.4) {
             return TaskStatus.FAILED
         }
@@ -39,7 +39,7 @@ class WorkerDefense(val defensePoint: Position) : Task() {
         val successForCurrentRatio = CombatEval.probabilityToWin(
                 (defendingWorkers + defenseCluster.units.filter {
                     it.isCompleted && it is Attacker && it !is Worker && it.isMyUnit
-                }).map { SimUnit.of(it) }, simUnitsOfEnemy)
+                }).map { factory.of(it, 0, 0).setUserObject(it) }, simUnitsOfEnemy)
         if (successForCurrentRatio > 0.7) {
             defendingWorkers.minBy { it.hitPoints }?.let {
                 defendingWorkers.remove(it)
@@ -58,6 +58,7 @@ class WorkerDefense(val defensePoint: Position) : Task() {
     }
 
     companion object : TaskProvider {
+        private val factory = BWAPI4JAgentFactory()
         private val bases = ManagedTaskProvider({ MyInfo.myBases }, { WorkerDefense((it as PlayerUnit).position).nvr() })
         override fun invoke(): List<Task> = bases()
     }

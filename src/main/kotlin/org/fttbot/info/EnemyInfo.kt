@@ -3,7 +3,10 @@ package org.fttbot.info
 import bwem.area.Area
 import com.badlogic.gdx.math.Vector2
 import org.fttbot.*
+import org.openbw.bwapi4j.Player
 import org.openbw.bwapi4j.Position
+import org.openbw.bwapi4j.TilePosition
+import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.*
 
 const val DISCARD_HIDDEN_UNITS_AFTER = 800
@@ -60,12 +63,24 @@ object EnemyInfo {
         enemyBases.clear()
         enemyBases.addAll(Cluster.clusters.filter { it.units.any { it.isEnemyUnit && it is Building } })
         hasSeenBase = hasSeenBase || !enemyBases.isEmpty()
-        if (!hasSeenBase) {
-            val unexploredLocations = FTTBot.game.bwMap.startPositions.filter { !FTTBot.game.bwMap.isExplored(it) }
-            if (unexploredLocations.size == 1) {
-                enemyBases.add(Cluster(unexploredLocations.first().toPosition(), ArrayList()))
-            }
+        val unexploredLocations = FTTBot.game.bwMap.startPositions.filter { !FTTBot.game.bwMap.isExplored(it) }
+        if (!hasSeenBase && unexploredLocations.size == 1) {
+            enemyBases.add(Cluster(unexploredLocations.first().toPosition(), ArrayList()))
         }
+//        unexploredLocations.filter {tp ->
+//            val position = tp.toPosition()
+//            (seenUnits.filter { it.getDistance(position) < 300 } + UnitQuery.enemyUnits.inRadius(position, 300)).any { it is Building }
+//        }.map {tp ->
+//            object : Worker() {
+//                override fun getId(): Int = -1
+//                override fun getPosition(): Position = tp.toPosition()
+//                override fun getTilePosition(): TilePosition = tp
+//                override fun getPlayer(): Player = FTTBot.enemies[0]
+//                override fun getType(): UnitType = UnitType.Terran_SCV
+//            }
+//        }.forEach {
+//            seenUnits.add(it)
+//        }
         seenUnits.removeIf {
 //            it is MobileUnit && (it !is SiegeTank || !it.isSieged) && (it !is Worker) &&
 //                    (FTTBot.frameCount - it.lastSpotted > DISCARD_HIDDEN_UNITS_AFTER) ||

@@ -1,22 +1,27 @@
 package org.fttbot.task
 
 import com.badlogic.gdx.math.Vector2
-import org.fttbot.Potential
+import org.fttbot.*
 import org.fttbot.estimation.CombatEval
 import org.fttbot.info.*
-import org.fttbot.minus
-import org.fttbot.toPosition
-import org.fttbot.toVector
-import org.openbw.bwapi4j.unit.Attacker
-import org.openbw.bwapi4j.unit.MobileUnit
-import org.openbw.bwapi4j.unit.PlayerUnit
-import org.openbw.bwapi4j.unit.Worker
+import org.locationtech.jts.algorithm.distance.DistanceToPoint
+import org.locationtech.jts.algorithm.distance.PointPairDistance
+import org.openbw.bwapi4j.Position
+import org.openbw.bwapi4j.type.WeaponType
+import org.openbw.bwapi4j.unit.*
+import java.util.*
+import kotlin.math.PI
 
-class ManageAttacker(val attacker: Attacker, val myCluster: Cluster<PlayerUnit>, val enemies: List<PlayerUnit>) : Task() {
+class ManageAttacker(val attacker: Attacker, val _enemies: List<PlayerUnit>? = null) : Task() {
+    private val rng = SplittableRandom()
+    private var evasionPoint: Position? = null
+
     override val utility: Double
         get() = 1.0
 
     override fun processInternal(): TaskStatus {
+        val myCluster = attacker.myCluster
+        val enemies = _enemies ?: myCluster.enemyUnits
         val id = attacker.id
         val isFlying = attacker.isFlying
         val position = attacker.position
@@ -24,43 +29,62 @@ class ManageAttacker(val attacker: Attacker, val myCluster: Cluster<PlayerUnit>,
 
         if (attacker is MobileUnit) {
             if (myCluster.enemyUnits.isNotEmpty()) {
-                if (myCluster.attackEval.second >= 0.6 && myCluster.attackEval.first.any { it.id == id }) {
-                    if (!attacker.canMoveWithoutBreakingAttack)
+                if (myCluster.attackEval.second >= 0.6 && myCluster.attackEval.first.any { (it.userObject as PlayerUnit).id == id }) {
+
+                    // If we would die in the next 96 frames, don't attack (stupid logic :) )
+                    val sim = myCluster.attackSim
+                    if (sim.first.any { it.userObject == attacker }) {
+                        MyInfo.unitStatus[attacker] = "Attacking"
+                        if (!attacker.canMoveWithoutBreakingAttack)
+                            return TaskStatus.RUNNING
+
+                        val candidates = enemies
+                                .filter { attacker.hasWeaponAgainst(it) && it.isDetected }
+
+                        val target = candidates.mapIndexed { index, candidate ->
+                            candidate to attacker.getDistance(candidate) + index * (attacker.maxRange() + attacker.topSpeed * 10) -
+                                    (if (targetUnit == candidate) -60 else 0)
+                        }.minBy { it.second }?.first ?: return TaskStatus.RUNNING
+                        if (targetUnit != target && target.isVisible) {
+                            if (attacker.canAttack(target, 48)) {
+                                return TaskStatus.RUNNING
+                            }
+                        }
+                        val goal = EnemyInfo.predictedPositionOf(target, attacker.getDistance(target) / attacker.topSpeed)
+
+                        val potentialAttackers = attacker.potentialAttackers(32)
+                        if (evasionPoint == null || potentialAttackers.count { it.maxRangeVs(attacker) < it.getDistance(evasionPoint) - 32 } >= potentialAttackers.size) {
+                            evasionPoint = goal.add(Vector2(rng.nextInt(192).toFloat(), 0f).rotateRad((rng.nextDouble() * PI * 2).toFloat()).toPosition())
+                        }
+                        if (evasionPoint != null &&
+                                attacker.getDistance(evasionPoint!!) > 8 &&
+                                attacker.maxRangeVs(target) > target.getDistance(evasionPoint!!) &&
+                                potentialAttackers.count { it.maxRangeVs(attacker) < it.getDistance(evasionPoint) - 32 } < potentialAttackers.size) {
+                            MyInfo.unitStatus[attacker] = "Evade"
+                            if (evasionPoint!!.getDistance(attacker.targetPosition) < 8)
+                                attacker.move(evasionPoint)
+                        } else if (goal.getDistance(attacker.targetPosition) > 48) {
+                            evasionPoint = null
+                            attacker.move(goal)
+                        }
                         return TaskStatus.RUNNING
-
-                    val candidates = enemies
-                            .filter { attacker.hasWeaponAgainst(it) && it.isDetected }
-
-                    val target = candidates.mapIndexed { index, playerUnit ->
-                        playerUnit to attacker.getDistance(playerUnit) + index * 16 -
-                                (if (targetUnit == playerUnit) 60 else 0)
-                    }.minBy { it.second }?.first ?: return TaskStatus.RUNNING
-                    if (targetUnit != target && target.isVisible) {
-                        if (attacker.canAttack(target, 48))
-                            attacker.attack(target)
-                        else
-                            attacker.move(EnemyInfo.predictedPositionOf(target, attacker.getDistance(target) / attacker.topSpeed))
-                    } else if (attacker.targetPosition.getDistance(target.position) > 192) {
-                        attacker.move(target.position)
                     }
-                    return TaskStatus.RUNNING
-                } else {
-                    val x = 2
                 }
             } else {
                 Cluster.clusters
                         .asSequence()
-                        .filter { it.enemyUnits.isNotEmpty() }
+                        .filter { it.enemyUnits.isNotEmpty() && it != myCluster }
                         .mapNotNull {
-                            val enemies = it.enemySimUnits.filter { it.isAttacker }
+                            val enemies = it.enemySimUnits.filter { (it.userObject as PlayerUnit).isCombatRelevant() }
                             if (enemies.isEmpty() && it.enemyUnits.any { attacker.hasWeaponAgainst(it) })
                                 it to 1.0
                             else {
-                                val eval = CombatEval.probabilityToWin((myCluster.mySimUnits + it.mySimUnits).filter { it.isAttacker },
+                                val eval = CombatEval.probabilityToWin((myCluster.mySimUnits + it.mySimUnits).filter { (it.userObject as PlayerUnit).isCombatRelevant() },
                                         enemies)
-                                if (eval < 0.6) null else it to eval
+                                if (eval < 0.6 && it.myUnits.none { u -> u is Building }) null else it to eval
                             }
                         }.minBy { it.second * it.first.position.getDistance(position) }?.let { (target, _) ->
+                            MyInfo.unitStatus[attacker] = "Seeking Cluster in need"
                             val targetPosition = target.enemyUnits.minBy { it.getDistance(attacker) }!!.position
                             if (attacker.targetPosition.getDistance(targetPosition) > 192) {
                                 attacker.move(targetPosition)
@@ -71,15 +95,17 @@ class ManageAttacker(val attacker: Attacker, val myCluster: Cluster<PlayerUnit>,
             }
 
             val force = Vector2()
-            val threats = attacker.potentialAttackers(32)
+            val threats = attacker.potentialAttackers(96)
             if (threats.isEmpty()) {
                 (UnitQuery.enemyUnits.inRadius(attacker, 400) + EnemyInfo.seenUnits.filter { it.getDistance(attacker) <= 400 })
+                        .asSequence()
                         .filter {
                             attacker.hasWeaponAgainst(it) && it.isDetected &&
                                     (myCluster.attackEval.second >= 0.5 || it !is Attacker || it.maxRangeVs(attacker) < attacker.maxRangeVs(it))
                         }
                         .minBy { it.getDistance(attacker) }
                         ?.let {
+                            MyInfo.unitStatus[attacker] = "Kiting"
                             if (targetUnit != it && it.isVisible) {
                                 attacker.attack(it)
                             } else if (attacker.targetPosition.getDistance(it.position) > 64) {
@@ -110,19 +136,21 @@ class ManageAttacker(val attacker: Attacker, val myCluster: Cluster<PlayerUnit>,
             if (!isFlying) {
                 Potential.addChokeRepulsion(force, attacker)
             }
-            myCluster.enemyHullWithBuffer.coordinates.minBy { it.toPosition().getDistance(position) }?.toPosition()
-                    ?.let {
-                        val dx = (it - position).toVector().setLength(1.2f)
-                        force.add(dx)
-                    }
+            if (!myCluster.enemyHullWithBuffer.isEmpty) {
+                val ppd = PointPairDistance()
+                DistanceToPoint.computeDistance(myCluster.enemyHullWithBuffer.boundary, position.toCoordinate(), ppd)
+                val dx = (ppd.getCoordinate(0).toPosition() - position).toVector().setLength(1.8f)
+                force.add(dx)
+            }
 
 //            Potential.addThreatRepulsion(force, attacker)
             if (force.len() > 0.9) {
-                val pos = Potential.wrapUp(attacker, force)
+                val pos = Potential.wrapUp(attacker, force).asValidPosition()
                 if (attacker.targetPosition.getDistance(pos) > 16) {
                     attacker.move(pos)
                 }
             }
+            MyInfo.unitStatus[attacker] = "Retreat/Safe"
         }
 
         return TaskStatus.RUNNING
@@ -141,7 +169,7 @@ class CombatCluster(val cluster: Cluster<PlayerUnit>) : Task() {
                 .filter { it !is Worker }
                 .toList()
     }) {
-        ManageAttacker(it, cluster, enemies)
+        ManageAttacker(it, enemies)
     }
 
     override fun processInternal(): TaskStatus {
@@ -152,10 +180,12 @@ class CombatCluster(val cluster: Cluster<PlayerUnit>) : Task() {
 
         enemies.sortByDescending {
             if (it !is Attacker) return@sortByDescending 0.0
-            val thisOne = cluster.enemySimUnits.firstOrNull { e -> e.id == it.id }
+            val thisOne = cluster.enemySimUnits.firstOrNull { e -> (e.userObject as PlayerUnit).id == it.id }
                     ?: return@sortByDescending 0.0
+            val type = (thisOne.userObject as PlayerUnit).type
+            if (type.isBuilding && type.groundWeapon() == WeaponType.None && type.airWeapon() == WeaponType.None) return@sortByDescending 0.0
             CombatEval.probabilityToWin(buddies, cluster.enemySimUnits - thisOne, 0.8f) +
-                    (if (it is Worker) 0.2 else 0.0)
+                    (if (it is Worker) 0.02 else 0.0)
         }
         return processAll(attackerTasks)
     }
@@ -165,17 +195,11 @@ class CombatCluster(val cluster: Cluster<PlayerUnit>) : Task() {
 class CombatController : Task() {
     override val utility: Double = 1.0
 
-    private val combatClusterTasks = ManagedTaskProvider({ Cluster.clusters }, {
+    private val clusters = ParallelTask(ManagedTaskProvider({ Cluster.clusters }, {
         CombatCluster(it)
-    })
+    }))
 
-    private val freeSquadTask = ManagedTaskProvider({ Cluster.squads }) {
-        CombatCluster(it)
-    }
-
-    override fun processInternal(): TaskStatus {
-        return processAll(*(combatClusterTasks() + freeSquadTask()).toTypedArray())
-    }
+    override fun processInternal(): TaskStatus = clusters.process()
 
     companion object : TaskProvider {
         private val tasks = listOf(CombatController().nvr())

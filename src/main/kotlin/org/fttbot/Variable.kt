@@ -3,6 +3,8 @@ package org.fttbot
 import org.fttbot.task.Task
 import org.openbw.bwapi4j.unit.PlayerUnit
 
+fun <T> T.identity(): T = this
+
 interface Variable<T> {
     fun get(): T
     fun isDirty(): Boolean
@@ -76,6 +78,13 @@ open class Locked<T>(task: Task, val invariant: (T) -> Boolean = { true }) : Var
         if (!locked) {
             entity = null
         }
+        dirty = false
+        locked = false
+    }
+
+    open fun reset() {
+        locked = false
+        entity = null
         dirty = false
         locked = false
     }

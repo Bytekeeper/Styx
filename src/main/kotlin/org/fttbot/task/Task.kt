@@ -2,6 +2,7 @@ package org.fttbot.task
 
 import org.fttbot.LazyOnFrame
 import org.fttbot.Locked
+import org.fttbot.identity
 import kotlin.properties.ReadOnlyProperty
 import kotlin.reflect.KProperty
 
@@ -32,21 +33,22 @@ typealias UtilityProvider = () -> Double
 abstract class Task {
     abstract val utility: Double
     private val subtasks = mutableListOf<Task>()
-    var lastStatus: TaskStatus = TaskStatus.DONE
+    var taskStatus: TaskStatus = TaskStatus.DONE
         private set
     val locks = mutableListOf<Locked<*>>()
 
     fun process(): TaskStatus {
         locks.forEach(Locked<*>::release)
         val result = processInternal()
-        if (result != TaskStatus.RUNNING && result != lastStatus) {
+        if (result != TaskStatus.RUNNING && result != taskStatus) {
             reset()
         }
-        lastStatus = result
+        taskStatus = result
         return result
     }
 
     open fun reset() {
+        locks.forEach(Locked<*>::reset)
         subtasks.forEach(Task::reset)
     }
 
@@ -54,7 +56,7 @@ abstract class Task {
 
     fun repeat(times: Int = -1): Task = Repeating(this, times)
     fun neverFail() = NeverFailing(this)
-    fun nvr() = NeverFailing(Repeating(this))
+    fun nvr() = Repeating(NeverFailing(this))
     override fun toString(): String = this::class.java.name.substringAfterLast('.')
 
     fun processInSequence(vararg tasks: Task): TaskStatus {
@@ -94,8 +96,17 @@ class SubTask<out T : Task>(val initializer: () -> T) : ReadOnlyProperty<Task, T
 
 abstract class Action(override val utility: Double = 1.0) : Task()
 
-class Success(override val utility: Double) : Task() {
+class Condition(private val condition: () -> Boolean) : Action() {
+    override fun processInternal(): TaskStatus =
+            if (condition()) TaskStatus.DONE else TaskStatus.FAILED
+}
+
+class Success(utility: Double = 1.0) : Action(utility) {
     override fun processInternal(): TaskStatus = TaskStatus.DONE
+}
+
+class Running(utility: Double = 1.0) : Action(utility) {
+    override fun processInternal(): TaskStatus = TaskStatus.RUNNING
 }
 
 abstract class Decorator(protected val delegate: Task) : Task() {
@@ -169,7 +180,25 @@ class MParallelTask(provider: TaskProvider) : CompoundTask(provider) {
     }
 }
 
+open class Sequence(provider: TaskProvider) : CompoundTask(provider) {
+    constructor(vararg tasks: Task) : this(tasks.toList()::identity)
+
+    override fun processInternal(): TaskStatus =
+            tasks.asSequence().map { it.process() }.firstOrNull { it != TaskStatus.DONE }
+                    ?: TaskStatus.DONE
+}
+
+open class Fallback(provider: TaskProvider) : CompoundTask(provider) {
+    constructor(vararg tasks: Task) : this(tasks.toList()::identity)
+
+    override fun processInternal(): TaskStatus =
+            tasks.asSequence().map { it.process() }.firstOrNull { it != TaskStatus.FAILED }
+                    ?: TaskStatus.FAILED
+}
+
 class ParallelTask(provider: TaskProvider) : CompoundTask(provider) {
+    constructor(vararg tasks: Task) : this(tasks.toList()::identity)
+
     override fun processInternal(): TaskStatus {
         val result = tasks.map { it.process() }
         if (result.any { it == TaskStatus.FAILED })

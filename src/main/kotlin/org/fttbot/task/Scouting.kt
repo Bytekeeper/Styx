@@ -21,7 +21,10 @@ class Scouting(val unit: MobileUnit) : Task() {
 
     override fun processInternal(): TaskStatus {
         move.to = targetPosition.compute {
-            val position = FTTBot.bwem.bases[rng.nextInt(FTTBot.bwem.bases.size)].center
+            val unexploredLocation = FTTBot.game.bwMap.startPositions.filter { !FTTBot.game.bwMap.isExplored(it) }
+            val position =
+                    if (unexploredLocation.isNotEmpty()) unexploredLocation[rng.nextInt(unexploredLocation.size)].toPosition()
+                    else FTTBot.bwem.bases[rng.nextInt(FTTBot.bwem.bases.size)].center
             if (it(position)) position else null
         } ?: return TaskStatus.RUNNING
         val result = processInSequence(move, avoid)

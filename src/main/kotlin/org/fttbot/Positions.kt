@@ -23,3 +23,8 @@ fun Position.asValidPosition() = Position(MathUtils.clamp(x, 0, FTTBot.game.bwMa
 
 fun Coordinate.toPosition() = Position(x.toInt(), y.toInt())
 fun Position.toCoordinate() = Coordinate(x.toDouble(), y.toDouble())
+
+operator fun Position.component1() = x
+operator fun Position.component2() = y
+
+val POSITION_ZERO = Position(0, 0)

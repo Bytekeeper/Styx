@@ -1,10 +1,10 @@
 package org.fttbot.info
 
-import com.badlogic.gdx.math.ConvexHull
+import org.bk.ass.BWAPI4JAgentFactory
+import org.bk.ass.Simulator
 import org.fttbot.LazyOnFrame
 import org.fttbot.div
 import org.fttbot.estimation.CombatEval
-import org.fttbot.estimation.SimUnit
 import org.fttbot.plus
 import org.locationtech.jts.geom.Coordinate
 import org.locationtech.jts.geom.GeometryFactory
@@ -18,23 +18,39 @@ import kotlin.collections.set
 
 val PlayerUnit.myCluster get() = Cluster.clusterOf.clusters[this] ?: ClusterSet.NOISE
 
-class Cluster<U : PlayerUnit>(var position: Position, internal val units: MutableList<U>) {
+class Cluster<U : PlayerUnit>(var position: Position, internal val units: MutableList<U>, internal val source: Cluster<U>? = null) {
     private val geometryFactory = GeometryFactory()
 
     val attackEval by LazyOnFrame {
-        val enemies = enemySimUnits.filter { it.isAttacker }
-        val myMob = mySimUnits.filter { it.isAttacker }
+        val enemies = enemySimUnits.filter {
+            val playerUnit = it.userObject as PlayerUnit
+            playerUnit.isCombatRelevant()
+        }
+        val myMob = mySimUnits.filter {
+            val playerUnit = it.userObject as PlayerUnit
+            playerUnit.isCombatRelevant()
+        }
         if (enemies.isEmpty()) myMob to 1.0
         else CombatEval.bestProbilityToWin(myMob,
                 enemies, 0.6, 0.9f)
     }
 
+    val attackSim by LazyOnFrame {
+        val enemies = enemySimUnits.filter { (it.userObject as PlayerUnit).isCombatRelevant() }
+        val myMob = mySimUnits.filter { (it.userObject as PlayerUnit).isCombatRelevant() }
+        simulator.reset()
+        myMob.forEach(simulator::addAgentA)
+        enemies.forEach(simulator::addAgentB)
+        simulator.simulate()
+        simulator.agentsA to simulator.agentsB
+    }
+
     val mySimUnits by LazyOnFrame {
-        myUnits.map(SimUnit.Companion::of)
+        myUnits.map { factory.of(it, 0, 0).setUserObject(it) }
     }
 
     val enemySimUnits by LazyOnFrame {
-        enemyUnits.map(SimUnit.Companion::of)
+        enemyUnits.map { factory.of(it, 0, 0).setUserObject(it) }
     }
 
     val myUnits by LazyOnFrame {
@@ -51,38 +67,30 @@ class Cluster<U : PlayerUnit>(var position: Position, internal val units: Mutabl
     }
 
     val enemyHullWithBuffer by LazyOnFrame {
-        enemyHull.buffer(384.0, 3)
+        enemyHull.buffer(400.0, 3)
     }
 
     companion object {
-        private val convexHull = ConvexHull()
+        private val factory = BWAPI4JAgentFactory()
+        private val simulator = Simulator()
         var clusterOf = ClusterSet<PlayerUnit>()
         val clusters by LazyOnFrame {
             clusterOf.clusters.values.toSet()
         }
 
-        private var squadClusters = ClusterSet<PlayerUnit>()
-        val squads by LazyOnFrame {
-            squadClusters.clusters.values.toSet()
-        }
-
         fun step() {
-            val relevantUnits = (UnitQuery.ownedUnits + EnemyInfo.seenUnits)
-                    .filter { it !is Larva && it !is Spell }
             if (clusterOf.completed) {
+                val relevantUnits = (UnitQuery.ownedUnits + EnemyInfo.seenUnits)
+                        .filter { it !is Larva && it !is Spell }
                 clusterOf.restart(relevantUnits, { ((it as? Attacker)?.maxRange() ?: 0) + 64 }, 3)
             }
             clusterOf.step()
-            if (squadClusters.completed) {
-                squadClusters.restart(UnitQuery.myUnits.filter { it is Attacker }, { 128 }, 3)
-            }
-            squadClusters.step()
         }
     }
 }
 
 class ClusterSet<U : PlayerUnit>() {
-    var clusters = mutableMapOf<U, Cluster<U>>()
+    var clusters = mapOf<U, Cluster<U>>()
         private set
     private var workingSet = mutableMapOf<U, Cluster<U>>()
     var completed = true
@@ -108,7 +116,7 @@ class ClusterSet<U : PlayerUnit>() {
         processed.clear()
         this.it = this.db.iterator()
         completed = false
-        workingSet = clusters.values.distinct().map { Cluster(it.position, it.units.toMutableList()) }
+        workingSet = clusters.values.distinct().map { Cluster(it.position, it.units.toMutableList(), it) }
                 .flatMap { c -> c.units.map { it to c } }
                 .toMap().toMutableMap()
     }
@@ -164,10 +172,23 @@ class ClusterSet<U : PlayerUnit>() {
                 val aggPosition = it.units.fold(Position(0, 0)) { acc, u -> acc + u.position }
                 it.position = aggPosition / it.units.size
             }
-            noise.units.forEach { workingSet.put(it, Cluster(it.position, mutableListOf(it))) }
+            noise.units.forEach {
+                require(workingSet[it] == noise)
+                workingSet[it] = Cluster(it.position, mutableListOf(it))
+            }
             noise.units.clear()
             completed = true
-            clusters = workingSet
+            clusters = workingSet.map { entry ->
+                val source = entry.value.source
+                if (source == null)
+                    entry.toPair()
+                else {
+                    source.units.clear()
+                    source.units.addAll(entry.value.units)
+                    source.position = entry.value.position
+                    entry.key to source
+                }
+            }.toMap()
         }
     }
 }

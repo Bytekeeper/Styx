@@ -57,7 +57,7 @@ object Potential {
         target.add(force.setLength(scale))
     }
 
-    fun addWallRepulsion(target: Vector2, unit: MobileUnit, scale: Float = 1.6f) {
+    fun addWallRepulsion(target: Vector2, unit: MobileUnit, scale: Float = 1.9f) {
         val pos = unit.position.toWalkPosition()
         var bestAltitude = 0
         var bestPos: WalkPosition? = null

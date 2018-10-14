@@ -6,6 +6,7 @@ import org.apache.logging.log4j.LogManager
 import org.fttbot.info.*
 import org.fttbot.strategies.Utilities
 import org.fttbot.task.*
+import org.fttbot.task.Train.Companion.lings
 import org.fttbot.task.Train.Companion.mutas
 import org.fttbot.task.Train.Companion.ovis
 import org.fttbot.task.Train.Companion.workers
@@ -91,24 +92,27 @@ object FTTBot : BWEventListener {
                 Train(UnitType.Zerg_Drone),
                 Train(UnitType.Zerg_Drone),
                 Train(UnitType.Zerg_Drone),
-                Build(UnitType.Zerg_Spawning_Pool),
+                HaveBuilding(UnitType.Zerg_Spawning_Pool),
                 Build(UnitType.Zerg_Extractor),
+                Train(UnitType.Zerg_Drone),
+                Train(UnitType.Zerg_Drone),
                 Train(UnitType.Zerg_Drone),
                 Expand(),
                 HaveBuilding(UnitType.Zerg_Lair),
                 Train(UnitType.Zerg_Zergling),
                 Train(UnitType.Zerg_Zergling),
                 Train(UnitType.Zerg_Drone),
+                Train(UnitType.Zerg_Drone),
                 Build(UnitType.Zerg_Spire),
-                Train(UnitType.Zerg_Overlord)
+                Train(UnitType.Zerg_Drone)
         )
 
         bot = MParallelTask {
             listOf(
-                    { bo }, { mutas() + ovis() + workers() },
+                    { bo }, { mutas() + lings() + ovis() + workers() },
                     Manners,
                     /*Train,*/ GatherMinerals, Build, Scouting, WorkerDefense, Expand, CombatController,
-                    /*Upgrade, Research, */WorkerTransfer, StrayWorkers
+                    Upgrade, Research, WorkerTransfer, StrayWorkers
             ).flatMap { it() }
         }
     }
@@ -127,9 +131,9 @@ object FTTBot : BWEventListener {
         if (game.interactionHandler.frameCount % latency_frames == 0) {
             UnitQuery.update(game.allUnits)
 //        Exporter.export()
+            Cluster.step()
             EnemyInfo.step()
             MyInfo.step()
-            Cluster.step()
 
             ProductionBoard.reset()
             ResourcesBoard.reset()
@@ -145,7 +149,8 @@ object FTTBot : BWEventListener {
                         game.mapDrawer.drawTextMap(it.center, "ua")
                     }
             UnitQuery.myUnits.forEach {
-                game.mapDrawer.drawTextMap(it.position, "${it.id}(${it.lastCommand})")
+                val status = MyInfo.unitStatus[it] ?: it.lastCommand
+                game.mapDrawer.drawTextMap(it.position, "${it.id}(${status})")
                 if (it is MobileUnit && it.targetPosition != null) {
 //                    game.mapDrawer.drawLineMap(it.position, it.targetPosition, Color.BLUE)
                 }
@@ -196,10 +201,10 @@ object FTTBot : BWEventListener {
             game.mapDrawer.drawTextScreen(0, 170, "S : %d".format(self.supplyTotal()))
             game.mapDrawer.drawTextScreen(0, 180, "m/g p/f: %.2f %.2f".format(MyInfo.mineralsPerFrame, MyInfo.gasPerFrame))
 
-            tasks.forEachIndexed { index, task ->
-                val u = "%.2f".format(task.utility)
-                game.mapDrawer.drawTextScreen(300, index * 10 + 20, "$u : $task")
-            }
+//            tasks.forEachIndexed { index, task ->
+//                val u = "%.2f".format(task.utility)
+//                game.mapDrawer.drawTextScreen(300, index * 10 + 20, "$u : $task")
+//            }
         }
     }
 
