@@ -4,16 +4,15 @@ import bwem.BWEM
 import bwem.map.Map
 import org.apache.logging.log4j.LogManager
 import org.fttbot.info.*
+import org.fttbot.strategies.Strategies
 import org.fttbot.strategies.Utilities
 import org.fttbot.task.*
 import org.fttbot.task.Train.Companion.lings
-import org.fttbot.task.Train.Companion.mutas
 import org.fttbot.task.Train.Companion.ovis
 import org.fttbot.task.Train.Companion.workers
 import org.openbw.bwapi4j.*
 import org.openbw.bwapi4j.type.Color
 import org.openbw.bwapi4j.type.Race
-import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.PlayerUnit
 import org.openbw.bwapi4j.unit.Unit
@@ -25,7 +24,7 @@ import java.util.logging.Logger
 object FTTBot : BWEventListener {
 
     private val LOG = LogManager.getLogger()
-    private lateinit var bwemInitializer: Future<BWEM>
+    lateinit var bwemInitializer: Future<BWEM>
     val game = BW(this)
     lateinit var self: Player
     lateinit var enemies: List<Player>
@@ -81,38 +80,14 @@ object FTTBot : BWEventListener {
         MyInfo.reset()
 //        org.fttbot.Map.init()
 
-        val bo = listOf(
-                Train(UnitType.Zerg_Drone),
-                Train(UnitType.Zerg_Drone),
-                Train(UnitType.Zerg_Drone),
-                Train(UnitType.Zerg_Drone),
-                Train(UnitType.Zerg_Drone),
-                Train(UnitType.Zerg_Overlord),
-                Train(UnitType.Zerg_Drone),
-                Train(UnitType.Zerg_Drone),
-                Train(UnitType.Zerg_Drone),
-                Train(UnitType.Zerg_Drone),
-                HaveBuilding(UnitType.Zerg_Spawning_Pool),
-                Build(UnitType.Zerg_Extractor),
-                Train(UnitType.Zerg_Drone),
-                Train(UnitType.Zerg_Drone),
-                Train(UnitType.Zerg_Drone),
-                Expand(),
-                HaveBuilding(UnitType.Zerg_Lair),
-                Train(UnitType.Zerg_Zergling),
-                Train(UnitType.Zerg_Zergling),
-                Train(UnitType.Zerg_Drone),
-                Train(UnitType.Zerg_Drone),
-                Build(UnitType.Zerg_Spire),
-                Train(UnitType.Zerg_Drone)
-        )
+        val bo = Strategies.ZERGLING_MADNESS
 
         bot = MParallelTask {
             listOf(
-                    { bo }, { mutas() + lings() + ovis() + workers() },
+                    { bo }, { /*mutas() + */lings() + ovis() + workers() },
                     Manners,
                     /*Train,*/ GatherMinerals, Build, Scouting, WorkerDefense, Expand, CombatController,
-                    Upgrade, Research, WorkerTransfer, StrayWorkers
+                    /*Upgrade, Research, */WorkerTransfer, StrayWorkers
             ).flatMap { it() }
         }
     }
@@ -126,6 +101,7 @@ object FTTBot : BWEventListener {
 
 //        val result = bwem.GetMap().GetPath(game.bwMap.startPositions[0].toPosition(), game.bwMap.startPositions[1].toPosition())
 
+        MapQuery.reset()
         Eliza.step()
 
         if (game.interactionHandler.frameCount % latency_frames == 0) {
@@ -155,7 +131,7 @@ object FTTBot : BWEventListener {
 //                    game.mapDrawer.drawLineMap(it.position, it.targetPosition, Color.BLUE)
                 }
                 if (it is MobileUnit && it.targetUnit != null) {
-//                    game.mapDrawer.drawLineMap(it.position, it.targetUnit.position, Color.RED)
+                    game.mapDrawer.drawLineMap(it.position, it.targetUnit.position, Color.RED)
                 }
             }
 
@@ -185,11 +161,17 @@ object FTTBot : BWEventListener {
                     game.mapDrawer.drawLineMap(poly.last(), poly.first(), Color.RED)
                 }
                 c.myUnits.forEach { u ->
-                    game.mapDrawer.drawLineMap(u.position, c.position, Color.GREEN )
+                    game.mapDrawer.drawLineMap(u.position, c.position, Color.GREEN)
                 }
                 game.mapDrawer.drawCircleMap(c.position, 5, Color.GREEN, true)
                 game.mapDrawer.drawTextMap(c.position, "${c.attackEval.second}")
             }
+//            MapQuery.polys.forEach {
+//                it.coordinates.map { it.toPosition() }.windowed(2) { p ->
+//                    game.mapDrawer.drawLineMap(p[0], p[1], Color.WHITE)
+//                }
+//            }
+
             game.mapDrawer.drawTextScreen(0, 40, "Expand : %.2f".format(Utilities.expansionUtility))
             game.mapDrawer.drawTextScreen(0, 50, "Trainers : %.2f".format(Utilities.moreTrainersUtility))
             game.mapDrawer.drawTextScreen(0, 60, "Workers : %.2f".format(Utilities.moreWorkersUtility))

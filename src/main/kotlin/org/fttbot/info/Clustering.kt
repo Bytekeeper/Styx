@@ -19,7 +19,6 @@ import kotlin.collections.set
 val PlayerUnit.myCluster get() = Cluster.clusterOf.clusters[this] ?: ClusterSet.NOISE
 
 class Cluster<U : PlayerUnit>(var position: Position, internal val units: MutableList<U>, internal val source: Cluster<U>? = null) {
-    private val geometryFactory = GeometryFactory()
 
     val attackEval by LazyOnFrame {
         val enemies = enemySimUnits.filter {
@@ -39,8 +38,8 @@ class Cluster<U : PlayerUnit>(var position: Position, internal val units: Mutabl
         val enemies = enemySimUnits.filter { (it.userObject as PlayerUnit).isCombatRelevant() }
         val myMob = mySimUnits.filter { (it.userObject as PlayerUnit).isCombatRelevant() }
         simulator.reset()
-        myMob.forEach(simulator::addAgentA)
-        enemies.forEach(simulator::addAgentB)
+        myMob.forEach { simulator.addAgentA(it) }
+        enemies.forEach { simulator.addAgentB(it) }
         simulator.simulate()
         simulator.agentsA to simulator.agentsB
     }
@@ -73,6 +72,8 @@ class Cluster<U : PlayerUnit>(var position: Position, internal val units: Mutabl
     companion object {
         private val factory = BWAPI4JAgentFactory()
         private val simulator = Simulator()
+        private val geometryFactory = GeometryFactory()
+
         var clusterOf = ClusterSet<PlayerUnit>()
         val clusters by LazyOnFrame {
             clusterOf.clusters.values.toSet()
@@ -100,7 +101,7 @@ class ClusterSet<U : PlayerUnit>() {
     private var radius: (U) -> Int = { 0 }
     private var minPts = 10000
     private val processed = mutableSetOf<U>()
-    private var radiusCache: RadiusCache<U> = RadiusCache(emptyList())
+    private var unitFinder: MyUnitFinder<U> = MyUnitFinder(emptyList())
     private var it: Iterator<U> = db.iterator()
     private val noise = Cluster<U>(Position(0, 0), mutableListOf())
 
@@ -110,7 +111,7 @@ class ClusterSet<U : PlayerUnit>() {
 
     fun restart(db: List<U>, radius: (U) -> Int, minPts: Int) {
         this.db = db.sortedByDescending { radius(it) }
-        this.radiusCache = RadiusCache(db)
+        this.unitFinder = MyUnitFinder(db)
         this.radius = radius
         this.minPts = minPts
         processed.clear()
@@ -140,7 +141,7 @@ class ClusterSet<U : PlayerUnit>() {
             val p = it.next()
             if (p.isProcessed())
                 continue
-            val n = radiusCache.inRadius(p, radius(p))
+            val n = unitFinder.inRadius(p, radius(p))
             if (n.size < minPts) {
                 p.setCluster(noise)
                 continue
@@ -157,7 +158,7 @@ class ClusterSet<U : PlayerUnit>() {
                 if (q.cluster() === noise) q.setCluster(c)
                 if (q.isProcessed()) continue
                 q.setCluster(c)
-                val qn = radiusCache.inRadius(q, radius(q))
+                val qn = unitFinder.inRadius(q, radius(q))
                 if (qn.size >= minPts) {
                     s += qn
                 }

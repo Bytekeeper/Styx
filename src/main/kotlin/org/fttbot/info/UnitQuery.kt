@@ -1,6 +1,11 @@
 package org.fttbot.info
 
-import org.fttbot.*
+import org.bk.ass.query.DistanceProvider
+import org.bk.ass.query.PositionAndId
+import org.bk.ass.query.UnitFinder
+import org.fttbot.FTTBot
+import org.fttbot.LazyOnFrame
+import org.fttbot.ResourcesBoard
 import org.fttbot.estimation.MAX_FRAMES_TO_ATTACK
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.UnitType
@@ -8,9 +13,7 @@ import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 import java.util.*
-import kotlin.math.abs
-import kotlin.math.max
-import kotlin.math.min
+import java.util.function.Function
 
 const val MAX_MELEE_RANGE = 64
 
@@ -113,7 +116,7 @@ fun PlayerUnit.canAttack(target: Unit, safety: Int = 0): Boolean {
 }
 
 fun Unit.potentialAttackers(safety: Int = 16): List<PlayerUnit> =
-        (UnitQuery.allUnits.inRadius(position, 400).filterIsInstance<PlayerUnit>() + EnemyInfo.seenUnits.filter { it.getDistance(this) < 400 })
+        (UnitQuery.allUnits.inRadius(position.x, position.y, 400).filterIsInstance<PlayerUnit>() + EnemyInfo.seenUnits.filter { it.getDistance(this) < 400 })
                 .filter {
                     it.isEnemyUnit && it.canAttack(this, safety + (((it as? MobileUnit)?.topSpeed
                             ?: 0.0) * MAX_FRAMES_TO_ATTACK).toInt())
@@ -141,61 +144,27 @@ fun UnitType.whatNeedsToBeBuild(): List<UnitType> {
     return result
 }
 
-class RadiusCache<T : Unit>(val units: Collection<T>) : Collection<T> by units {
-    private val map = TreeMap<PositionAndId, T>()
-
-    init {
-        units.forEach {
-            map[PositionAndId(it.position.x, it.position.y, it.id)] = it
-        }
+class MyUnitFinder<U : Unit>(units: Collection<U>, distanceProvider: DistanceProvider = BW_DISTANCE_APPROXIMATION)
+    : UnitFinder<U>(units, Function<U, PositionAndId> { PositionAndId(it.id, it.x, it.y) }, distanceProvider) {
+    fun inRadius(position: Position, radius: Int): MutableCollection<U> {
+        return inRadius(position.x, position.y, radius)
     }
 
-    fun within(a: Position, b: Position): Collection<T> =
-            map.subMap(PositionAndId(a.x, a.y, -1), true,
-                    PositionAndId(b.x, b.y, -1), true).values
-
-    fun inRadius(unit: Unit, radius: Int): Collection<T> =
-            within(Position(unit.x - radius - 150, unit.y - radius - 150),
-                    Position(unit.x + radius + 150, unit.y + radius + 150))
-                    .filter { it.getDistance(unit) <= radius }
-
-    fun inRadius(position: Position, radius: Int): Collection<T> =
-            within(Position(position.x - radius - 150, position.y - radius - 150),
-                    Position(position.x + radius + 150, position.y + radius + 150))
-                    .filter { it.getDistance(position) <= radius }
-
-    fun closestTo(unit: Unit): T? {
-        val query = PositionAndId(unit.x, unit.y, -1)
-        val lower = map.lowerEntry(query)
-        val higher = map.higherEntry(query)
-        val lbox = if (lower != null) max(abs(lower.value.x - unit.x), abs(lower.value.y - unit.y)) else 30000
-        val hbox = if (higher != null) max(abs(higher.value.x - unit.x), abs(higher.value.y - unit.y)) else 30000
-        val boxSize = min(lbox, hbox)
-        val queryBoxSize = Position(boxSize, boxSize)
-        return within(unit.position - queryBoxSize, unit.position + queryBoxSize)
-                .minBy { it.getDistance(unit) }
-    }
-
-    private class PositionAndId(val x: Int, val y: Int, val id: Int) : Comparable<PositionAndId> {
-        override fun compareTo(other: PositionAndId): Int =
-                if (x < other.x) -1 else if (x > other.x) 1 else
-                    if (y < other.y) -1 else if (y > other.y) 1 else
-                        Integer.compare(id, other.id)
-    }
+    fun inRadius(unit: Unit, radius: Int) = inRadius(unit.x, unit.y, radius)
 }
 
 object UnitQuery {
-    lateinit var allUnits: RadiusCache<Unit> private set
-    lateinit var myUnits: RadiusCache<PlayerUnit> private set
-    lateinit var ownedUnits: RadiusCache<PlayerUnit> private set
-    lateinit var enemyUnits: RadiusCache<PlayerUnit> private set
-    lateinit var myWorkers: RadiusCache<Worker> private set
-    lateinit var minerals: RadiusCache<MineralPatch> private set
-    lateinit var geysers: RadiusCache<VespeneGeyser> private set
-    lateinit var myBuildings: RadiusCache<Building> private set
+    lateinit var allUnits: MyUnitFinder<Unit> private set
+    lateinit var myUnits: MyUnitFinder<PlayerUnit> private set
+    lateinit var ownedUnits: MyUnitFinder<PlayerUnit> private set
+    lateinit var enemyUnits: MyUnitFinder<PlayerUnit> private set
+    lateinit var myWorkers: MyUnitFinder<Worker> private set
+    lateinit var minerals: MyUnitFinder<MineralPatch> private set
+    lateinit var geysers: MyUnitFinder<VespeneGeyser> private set
+    lateinit var myBuildings: MyUnitFinder<Building> private set
     lateinit var myEggs: List<Egg> private set
-    lateinit var myCompletedUnits: RadiusCache<PlayerUnit>
-    private val myUnitByType = mutableMapOf<Any, LazyOnFrame<RadiusCache<PlayerUnit>>>()
+    lateinit var myCompletedUnits: UnitFinder<PlayerUnit>
+    private val myUnitByType = mutableMapOf<Any, LazyOnFrame<UnitFinder<PlayerUnit>>>()
 
     fun reset() {
         andStayDown.clear()
@@ -204,26 +173,26 @@ object UnitQuery {
 
 
     fun update(allUnits: Collection<Unit>) {
-        this.allUnits = RadiusCache(allUnits.filter { it.isVisible && !andStayDown.contains(Pair(it.id, it.type)) })
-        minerals = RadiusCache(allUnits.filterIsInstance<MineralPatch>())
-        geysers = RadiusCache(allUnits.filterIsInstance<VespeneGeyser>())
-        ownedUnits = RadiusCache(this.allUnits.filterIsInstance<PlayerUnit>())
-        myUnits = RadiusCache(ownedUnits.filter { it.player == FTTBot.self && it.exists() })
-        myCompletedUnits = RadiusCache(myUnits.filter { it.isCompleted })
-        enemyUnits = RadiusCache(ownedUnits.filter { it.player in FTTBot.enemies })
-        myWorkers = RadiusCache(myCompletedUnits.filterIsInstance<Worker>())
-        myBuildings = RadiusCache(myCompletedUnits.filterIsInstance<Building>())
+        this.allUnits = MyUnitFinder(allUnits.filter { it.isVisible && !andStayDown.contains(Pair(it.id, it.type)) })
+        minerals = MyUnitFinder(allUnits.filterIsInstance<MineralPatch>())
+        geysers = MyUnitFinder(allUnits.filterIsInstance<VespeneGeyser>())
+        ownedUnits = MyUnitFinder(this.allUnits.filterIsInstance<PlayerUnit>())
+        myUnits = MyUnitFinder(ownedUnits.filter { it.player == FTTBot.self && it.exists() })
+        myCompletedUnits = MyUnitFinder(myUnits.filter { it.isCompleted })
+        enemyUnits = MyUnitFinder(ownedUnits.filter { it.player in FTTBot.enemies })
+        myWorkers = MyUnitFinder(myCompletedUnits.filterIsInstance<Worker>())
+        myBuildings = MyUnitFinder(myCompletedUnits.filterIsInstance<Building>())
         myEggs = myUnits.filterIsInstance(Egg::class.java)
     }
 
     // BWAPI sometimes "provides" units that aren't there - but those are also reported "hidden", so just ignore them
     val andStayDown = mutableSetOf<Pair<Int, UnitType>>()
 
-    fun inRadius(position: Position, radius: Int) = allUnits.inRadius(position, radius)
+    fun inRadius(position: Position, radius: Int) = allUnits.inRadius(position.x, position.y, radius)
 
     inline fun <reified T : PlayerUnit> my() = my(T::class.java)
 
     fun <T : PlayerUnit> my(type: Class<T>) = myUnitByType.computeIfAbsent(type) {
-        LazyOnFrame { RadiusCache(myUnits.filter { u -> type.isInstance(u) }) }
-    }.value as RadiusCache<T>
+        LazyOnFrame { MyUnitFinder(myUnits.filter { u -> type.isInstance(u) }) }
+    }.value as MyUnitFinder<T>
 }

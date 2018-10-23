@@ -2,7 +2,7 @@ package org.fttbot.layer
 
 import org.assertj.core.api.Assertions
 import org.assertj.core.api.Assertions.assertThat
-import org.fttbot.info.RadiusCache
+import org.fttbot.info.MyUnitFinder
 import org.fttbot.info.allRequiredUnits
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
@@ -31,19 +31,19 @@ internal class UnitQueryKtTest {
     fun testRadiusQuery() {
         val rng = SplittableRandom()
         val units = (1..5000).map { PositionedUnit(Position(rng.nextInt(4000), rng.nextInt(4000))) }
-        val radiusCache = RadiusCache(units)
+        val unitFinder = MyUnitFinder(units)
 
         val a = units.first().getUnitsInRadius(300, units)
-        val b = radiusCache.inRadius(units.first(), 300)
+        val b = unitFinder.inRadius(units.first(), 300)
 
         Assertions.assertThat(a).hasSameElementsAs(b)
 
         val resultA = units.sumBy {
-            radiusCache.inRadius(it, 300).size
+            unitFinder.inRadius(it, 300).size
         }
 
         val resultB = units.sumBy {
-            units.filter { u-> it.getDistance(u) <= 300 }.size
+            units.filter { u -> it.getDistance(u) <= 300 }.size
         }
 
         Assertions.assertThat(resultA).isEqualTo(resultB)
@@ -51,7 +51,7 @@ internal class UnitQueryKtTest {
 
         val stopWatch = StopWatch.createStarted()
         units.forEach {
-            radiusCache.inRadius(it, 300)
+            unitFinder.inRadius(it, 300)
         }
         stopWatch.stop()
         val time = stopWatch.nanoTime
@@ -59,7 +59,7 @@ internal class UnitQueryKtTest {
         stopWatch.reset()
         stopWatch.start()
         units.forEach {
-            units.filter { u-> it.getDistance(u) <= 300 }.size
+            units.filter { u -> it.getDistance(u) <= 300 }.size
         }
         stopWatch.stop()
         assertThat(time).isLessThan(stopWatch.nanoTime)
@@ -72,14 +72,20 @@ internal class UnitQueryKtTest {
 
         private val myId: Int = PositionedUnit.id++
 
-        override fun getId(): Int  = myId
+        override fun getId(): Int = myId
 
         override fun getType(): UnitType = UnitType.Zerg_Mutalisk
 
         override fun getPosition(): Position = _position
+        override fun getX(): Int = _position.x
+        override fun getY(): Int = _position.y
+        override fun getLeft(): Int = _position.x
+        override fun getRight(): Int = _position.x - 1
+        override fun getTop(): Int = _position.y
+        override fun getBottom(): Int = _position.y - 1
 
         companion object {
-            var id : Int = 0
+            var id: Int = 0
         }
     }
 }

@@ -45,7 +45,7 @@ object Utilities {
     }
 
     fun needed(type: UnitType) = CombatEval.minAmountOfAdditionalsForProbability(UnitQuery.myUnits.filter { it is MobileUnit && it !is Worker }.map { factory.of(it) },
-            factory.of(type, 0, 0), enemySims, 0.7)
+            factory.of(type), enemySims, 0.7)
 
     fun evalUnit(type: UnitType, base: Double, scaleFactor: Double = 500.0): Double {
         val needed = needed(type)

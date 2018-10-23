@@ -132,8 +132,9 @@ class Build(val type: UnitType, val utilityProvider: UtilityProvider = { 1.0 }, 
         val taskList = listOf(
                 HaveBuilding(UnitType.Zerg_Spawning_Pool, { 0.7 }),
                 Build(UnitType.Zerg_Sunken_Colony, { 0.6 }),
-                Build(UnitType.Zerg_Hatchery, Utilities::moreTrainersUtility).nvr(),
-                Build(UnitType.Zerg_Extractor, Utilities::moreGasUtility).nvr()
+                Build(UnitType.Zerg_Hatchery, Utilities::moreTrainersUtility).nvr()
+//                ,
+//                Build(UnitType.Zerg_Extractor, Utilities::moreGasUtility).nvr()
         )
 
         override fun invoke(): List<Task> = taskList

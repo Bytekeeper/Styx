@@ -48,8 +48,8 @@ object MyInfo {
         if (frameDelta > 0) {
             val mineralDelta = max(0, FTTBot.self.minerals() - lastMinerals).toDouble() / frameDelta
             val gasDelta = max(0, FTTBot.self.gas() - lastGas).toDouble() / frameDelta
-            mineralsPerFrame = 0.995 * mineralsPerFrame + 0.005 * mineralDelta
-            gasPerFrame = 0.995 * gasPerFrame + 0.005 * gasDelta
+            mineralsPerFrame = 0.999 * mineralsPerFrame + 0.001 * mineralDelta
+            gasPerFrame = 0.999 * gasPerFrame + 0.001 * gasDelta
         }
         lastFrame = FTTBot.frameCount
         lastGas = FTTBot.self.gas()

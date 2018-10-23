@@ -19,7 +19,7 @@ application.mainClassName = "org.fttbot.FTTBot"
 
 dependencies {
     compile("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
-    compile(fileTree("lib").include("*.jar"))
+    compile(fileTree("lib").include("*.jar").exclude("*-sources.jar"))
     compile("com.badlogicgames.gdx:gdx:1.9.4")
     compile("io.jenetics:jenetics:4.2.0")
     compile("org.locationtech.jts:jts-core:1.16.0")

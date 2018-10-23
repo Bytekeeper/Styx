@@ -4,8 +4,6 @@ import com.badlogic.gdx.math.Vector2
 import org.fttbot.*
 import org.fttbot.estimation.CombatEval
 import org.fttbot.info.*
-import org.locationtech.jts.algorithm.distance.DistanceToPoint
-import org.locationtech.jts.algorithm.distance.PointPairDistance
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.WeaponType
 import org.openbw.bwapi4j.unit.*
@@ -29,7 +27,7 @@ class ManageAttacker(val attacker: Attacker, val _enemies: List<PlayerUnit>? = n
 
         if (attacker is MobileUnit) {
             if (myCluster.enemyUnits.isNotEmpty()) {
-                if (myCluster.attackEval.second >= 0.6 && myCluster.attackEval.first.any { (it.userObject as PlayerUnit).id == id }) {
+                if (myCluster.attackEval.second >= 0.6) {
 
                     // If we would die in the next 96 frames, don't attack (stupid logic :) )
                     val sim = myCluster.attackSim
@@ -42,8 +40,8 @@ class ManageAttacker(val attacker: Attacker, val _enemies: List<PlayerUnit>? = n
                                 .filter { attacker.hasWeaponAgainst(it) && it.isDetected }
 
                         val target = candidates.mapIndexed { index, candidate ->
-                            candidate to attacker.getDistance(candidate) + 8000 * index / (attacker.maxRange() + attacker.topSpeed * 10) -
-                                    (if (targetUnit == candidate) -60 else 0)
+                            candidate to attacker.getDistance(candidate) / (attacker.maxRange() + attacker.topSpeed * 10) + 5 * index -
+                                    (if (targetUnit == candidate) -8 else 0)
                         }.minBy { it.second }?.first ?: return TaskStatus.RUNNING
                         if (targetUnit != target && target.isVisible) {
                             if (attacker.canAttack(target, 48)) {
@@ -68,39 +66,62 @@ class ManageAttacker(val attacker: Attacker, val _enemies: List<PlayerUnit>? = n
                             attacker.move(goal)
                         }
                         return TaskStatus.RUNNING
+                    } else if (isFlying && myCluster.attackEval.second < 0.6) {
+                        // Shitty position? Find a better one
+                        val relevantPositions = myCluster.enemyHull.coordinates
+                        relevantPositions
+                                .minBy { coord ->
+                                    val coordPosition = coord.toPosition()
+                                    myCluster.myUnits.sumBy { it.position.getDistance(coordPosition) }
+                                }?.toPosition()
+                                ?.let { bestFriendPosition ->
+                                    relevantPositions.minBy {
+                                        val distanceToMe = it.toPosition().getDistance(position)
+                                        distanceToMe * distanceToMe + it.toPosition().getDistance(bestFriendPosition) * position.getDistance(bestFriendPosition)
+                                    }?.toPosition()
+                                            ?.let {
+                                                MyInfo.unitStatus[attacker] = "Flank"
+                                                if (attacker.targetPosition.getDistance(it) > 64) {
+                                                    attacker.move(it)
+                                                }
+                                            }
+                                }
                     }
                 }
             } else {
-                val candidates = Cluster.clusters
-                        .asSequence()
+                val clustersWithEnemies = Cluster.clusters.asSequence()
                         .filter { it.enemyUnits.isNotEmpty() && it != myCluster }
-                        .mapNotNull {
+
+                clustersWithEnemies
+                        .asSequence()
+                        .filter { c ->
+                            val cDistance = c.position.getDistance(position)
+                            val cDir = c.position.minus(position).toVector().nor()
+                            clustersWithEnemies.none { o ->
+                                val otherPosition = o.position
+                                otherPosition.getDistance(position) < cDistance &&
+                                        otherPosition.minus(position).toVector().nor().dot(cDir) > 0.7f
+                            }
+                        }.mapNotNull {
                             val enemies = it.enemySimUnits.filter { (it.userObject as PlayerUnit).isCombatRelevant() }
                             if (enemies.isEmpty() && it.enemyUnits.any { attacker.hasWeaponAgainst(it) })
                                 it to 1.0
                             else {
                                 val eval = CombatEval.probabilityToWin((myCluster.mySimUnits + it.mySimUnits).filter { (it.userObject as PlayerUnit).isCombatRelevant() && it.userObject !is Worker },
                                         enemies)
-                                if (eval < 0.6 && it.myUnits.none { u -> u is Building }) null else it to eval
+                                if (eval < 0.7 && it.myUnits.none { u -> u is Building }) null else it to eval
+                            }
+                        }.minBy { it.second * it.first.position.getDistance(position) }
+                        ?.let { (target, eval) ->
+                            if (eval < myCluster.attackEval.second) {
+                                MyInfo.unitStatus[attacker] = "Seeking Cluster in need"
+                                val targetPosition = target.enemyUnits.minBy { it.getDistance(attacker) }!!.position
+                                if (attacker.targetPosition.getDistance(targetPosition) > 192) {
+                                    attacker.move(targetPosition)
+                                }
+                                return TaskStatus.RUNNING
                             }
                         }
-                candidates.filter { c ->
-                    val cDistance = c.first.position.getDistance(position)
-                    val cDir = c.first.position.minus(position).toVector().nor()
-                    candidates.none { o ->
-                        val otherPosition = o.first.position
-                        otherPosition.getDistance(position) < cDistance && o.second < c.second &&
-                                otherPosition.minus(position).toVector().nor().dot(cDir) > 0.7f
-                    }
-                }.minBy { it.second * it.first.position.getDistance(position) }?.let { (target, _) ->
-                    MyInfo.unitStatus[attacker] = "Seeking Cluster in need"
-                    val targetPosition = target.enemyUnits.minBy { it.getDistance(attacker) }!!.position
-                    if (attacker.targetPosition.getDistance(targetPosition) > 192) {
-                        attacker.move(targetPosition)
-                    }
-                    return TaskStatus.RUNNING
-                }
-
             }
 
             val force = Vector2()
@@ -113,12 +134,14 @@ class ManageAttacker(val attacker: Attacker, val _enemies: List<PlayerUnit>? = n
                                     (myCluster.attackEval.second >= 0.5 || it !is Attacker || it.maxRangeVs(attacker) < attacker.maxRangeVs(it))
                         }.filter { target ->
                             val pos = position.minus(target.position).toVector().setLength(attacker.maxRangeVs(target).toFloat()).toPosition().plus(target.position)
-                            enemies.none { e -> val wpn = e.getWeaponAgainst(attacker)
-                                wpn.type().damageAmount() > 0 && wpn.maxRange() >= e.getDistance(pos) }
+                            enemies.none { e ->
+                                val wpn = e.getWeaponAgainst(attacker)
+                                wpn.type().damageAmount() > 0 && wpn.maxRange() >= e.getDistance(pos)
+                            }
                         }.minBy { it.getDistance(attacker) }
                         ?.let {
                             MyInfo.unitStatus[attacker] = "Kiting"
-                            if (targetUnit != it && it.isDetected) {
+                            if (targetUnit != it && it.isVisible) {
                                 attacker.attack(it)
                             } else if (attacker.targetPosition.getDistance(it.position) > 64) {
                                 attacker.move(it.position)
@@ -149,10 +172,18 @@ class ManageAttacker(val attacker: Attacker, val _enemies: List<PlayerUnit>? = n
                 Potential.addChokeRepulsion(force, attacker)
             }
             if (!myCluster.enemyHullWithBuffer.isEmpty) {
-                val ppd = PointPairDistance()
-                DistanceToPoint.computeDistance(myCluster.enemyHullWithBuffer.boundary, position.toCoordinate(), ppd)
-                val dx = (ppd.getCoordinate(0).toPosition() - position).toVector().setLength(1.8f)
-                force.add(dx)
+                val attackCoords = position.toCoordinate()
+                myCluster.enemyHullWithBuffer.coordinates.asSequence()
+                        .filter {
+                            val coordPosition = it.toPosition()
+                            FTTBot.game.bwMap.isValidPosition(coordPosition) &&
+                                    (isFlying || FTTBot.game.bwMap.isWalkable(coordPosition.toWalkPosition()))
+                        }.minBy {
+                            it.distance(attackCoords)
+                        }?.let {
+                            val dx = (it.toPosition() - position).toVector().setLength(1.8f)
+                            force.add(dx)
+                        }
             }
 
 //            Potential.addThreatRepulsion(force, attacker)

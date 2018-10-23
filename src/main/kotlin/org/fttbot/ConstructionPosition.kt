@@ -21,7 +21,7 @@ object ConstructionPosition {
         }
 
         val target = if (near != null) near.toTilePosition() else
-            if (!MyInfo.myBases.isEmpty()) (MyInfo.myBases.maxBy { UnitQuery.myWorkers.inRadius(it as Unit, 300).size } as Unit).tilePosition
+            if (!MyInfo.myBases.isEmpty()) (MyInfo.myBases.maxBy { UnitQuery.myWorkers.inRadius(it.x, it.y, 300).size } as Unit).tilePosition
             else return null
         var bestBuildPosition: TilePosition? = null
         var bestDistance: Int = Int.MAX_VALUE

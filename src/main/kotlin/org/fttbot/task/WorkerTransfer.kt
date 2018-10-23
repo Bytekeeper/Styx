@@ -2,7 +2,7 @@ package org.fttbot.task
 
 import org.fttbot.ResourcesBoard
 import org.fttbot.info.MyInfo
-import org.fttbot.info.RadiusCache
+import org.fttbot.info.MyUnitFinder
 import org.fttbot.info.UnitQuery
 import org.openbw.bwapi4j.unit.ResourceDepot
 import org.openbw.bwapi4j.unit.Worker
@@ -23,7 +23,7 @@ class WorkerTransfer : Task() {
         workersInTransfer.entries.removeIf {
             it.key.position.getDistance(it.value.position) < 200
         }
-        val potentialWorkers = RadiusCache((UnitQuery.myWorkers - workersInTransfer.keys) intersect ResourcesBoard.units.filterIsInstance<Worker>())
+        val potentialWorkers = MyUnitFinder((UnitQuery.myWorkers - workersInTransfer.keys) intersect ResourcesBoard.units.filterIsInstance<Worker>())
 
         val baseInfos = MyInfo.myBases
                 .filter { it.isCompleted }

@@ -2,6 +2,7 @@ package org.fttbot.task
 
 import org.fttbot.ResourcesBoard
 import org.fttbot.info.UnitQuery
+import org.fttbot.info.closestTo
 import org.openbw.bwapi4j.unit.ResourceDepot
 import org.openbw.bwapi4j.unit.Worker
 
