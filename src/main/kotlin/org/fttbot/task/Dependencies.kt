@@ -56,7 +56,7 @@ class HaveBuilding(val type: UnitType, val utilityProvider: () -> Double = { 1.0
 
 class HaveUnit(val type: UnitType) : Action() {
     private val train by SubTask { Train(type) }
-    private val buildHatch by subtask { HaveBuilding(UnitType.Zerg_Hatchery) }
+    private val buildHatch by SubTask { HaveBuilding(UnitType.Zerg_Hatchery) }
 
     override fun toString() = "Have $type"
 
@@ -73,7 +73,7 @@ class HaveUnit(val type: UnitType) : Action() {
 }
 
 class HaveGas(var amount: Int) : Action() {
-    private val constructGasMine: Build by subtask { Build(FTTBot.self.race.refinery) }
+    private val constructGasMine: Build by SubTask { Build(FTTBot.self.race.refinery) }
     override fun processInternal(): TaskStatus {
         if (ResourcesBoard.gas >= amount || amount <= 0) return TaskStatus.DONE
         if (UnitQuery.my<GasMiningFacilityImpl>().any()) return TaskStatus.RUNNING
@@ -101,7 +101,7 @@ class EnsureTechDependencies(val type: TechType) : Action() {
         HaveBuilding(type.whatResearches())
     }
 
-    private val gasToHave: Task by subtask { HaveGas(type.gasPrice()) }
+    private val gasToHave: Task by SubTask { HaveGas(type.gasPrice()) }
 
     private val dependencyToHave by SubTask {
         HaveBuilding(type.requiredUnit())
@@ -116,14 +116,14 @@ class EnsureTechDependencies(val type: TechType) : Action() {
 
 
 class EnsureUpgradeDependencies(val type: UpgradeType, val level: Int) : Action() {
-    private val upgradeToResearch: Task by subtask { EnsureUpgradeDependencies(type, level - 1) }
-    private val researcherToHave: Task by subtask {
+    private val upgradeToResearch: Task by SubTask { EnsureUpgradeDependencies(type, level - 1) }
+    private val researcherToHave: Task by SubTask {
         HaveBuilding(type.whatUpgrades())
     }
-    private val dependencyToHave: Task by subtask {
+    private val dependencyToHave: Task by SubTask {
         HaveBuilding(type.whatsRequired(level - 1))
     }
-    private val gasToHave: Task by subtask { HaveGas(type.gasPrice(level - 1)) }
+    private val gasToHave: Task by SubTask { HaveGas(type.gasPrice(level - 1)) }
 
     init {
         require(level <= type.maxRepeats())

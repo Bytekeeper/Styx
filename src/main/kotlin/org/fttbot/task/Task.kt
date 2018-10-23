@@ -73,8 +73,6 @@ abstract class Task {
                 ?: TaskStatus.DONE
     }
 
-    fun <T : Task> subtask(initializer: () -> T): SubTask<T> = SubTask(initializer)
-
     fun <T : Task> registerTask(value: T) {
         subtasks += value
     }

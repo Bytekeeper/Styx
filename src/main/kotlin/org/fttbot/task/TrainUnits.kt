@@ -13,7 +13,7 @@ class Train(val type: UnitType, val utilityProvider: () -> Double = { 1.0 }, var
         get() = utilityProvider()
 
     private val trainerLock = UnitLocked<Morphable>(this)
-    private val dependencies: Task by subtask { EnsureUnitDependencies(type) }
+    private val dependencies: Task by SubTask { EnsureUnitDependencies(type) }
 
     init {
         assert(!type.isBuilding) { "Can't train a building!" }

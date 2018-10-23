@@ -28,7 +28,7 @@ class Build(val type: UnitType, val utilityProvider: UtilityProvider = { 1.0 }, 
         Build(type.whatBuilds().unitType, utilityProvider, at)
     }
     private var buildPositionLock = Locked<TilePosition>(this)
-    private val moveToBuildPositionLock = builderLock.map<Move>();
+    private val moveToBuildPositionLock = builderLock.map<Move>()
 
     private val dependencies: Task by SubTask { EnsureUnitDependencies(type) }
     private val haveGas: Task by SubTask { HaveGas(type.gasPrice()) }

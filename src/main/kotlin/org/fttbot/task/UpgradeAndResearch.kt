@@ -10,7 +10,7 @@ import org.openbw.bwapi4j.unit.Mutalisk
 import org.openbw.bwapi4j.unit.ResearchingFacility
 
 class Research(val type: TechType, val utilityProvider: UtilityProvider = { 1.0 }) : Task() {
-    private val dependencies: Task by subtask { EnsureTechDependencies(type) }
+    private val dependencies: Task by SubTask { EnsureTechDependencies(type) }
     private val researcherLock = UnitLocked<ResearchingFacility>(this) { !it.isResearching && !it.isUpgrading }
 
     override val utility: Double
@@ -45,7 +45,7 @@ class Research(val type: TechType, val utilityProvider: UtilityProvider = { 1.0 
 }
 
 class Upgrade(val type: UpgradeType, private val level: Int = 0, val utilityProvider: UtilityProvider = { 1.0 }) : Task() {
-    private val dependencies: Task by subtask { EnsureUpgradeDependencies(type, level) }
+    private val dependencies: Task by SubTask{ EnsureUpgradeDependencies(type, level) }
     private val researcherLock = UnitLocked<ResearchingFacility>(this) { !it.isResearching && !it.isUpgrading }
 
     override val utility: Double
