@@ -14,7 +14,7 @@ class WorkerTransfer : Task() {
         get() = 0.15
 
     private val workersInTransfer = mutableMapOf<Worker, ResourceDepot>()
-    private val transferTasks = MParallelTask(ManagedTaskProvider({ workersInTransfer.entries.toList() }) {
+    private val transferTasks = MTPar(ItemToTaskMapper({ workersInTransfer.entries.toList() }) {
         SafeMove(it.key, it.value.position).neverFail()
     })
 
@@ -38,7 +38,7 @@ class WorkerTransfer : Task() {
 
         baseInfos.filter { it.workers.size / (it.minerals + 2.0 * it.gas) > 1.6 }
                 .forEach {
-                    val workersToMove = (it.workers.size - (it.minerals + 2.0 * it.gas) * 1.2).toInt()
+                    val workersToMove = (it.workers.size - (it.minerals * 1.6 + 3.0 * it.gas)).toInt()
                     it.workers
                             .sortedBy {
                                 (if (it.isGatheringMinerals) 2 else 0) +

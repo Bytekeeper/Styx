@@ -1,10 +1,12 @@
 package org.fttbot
 
+import bwem.area.Area
 import com.badlogic.gdx.math.MathUtils
 import com.badlogic.gdx.math.Vector2
 import org.locationtech.jts.geom.Coordinate
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.TilePosition
+import org.openbw.bwapi4j.WalkPosition
 
 fun TilePosition.translated(x: Int, y: Int) = TilePosition(this.x + x, this.y + y)
 fun Position.translated(x: Int, y: Int) = Position(this.x + x, this.y + y)
@@ -23,6 +25,15 @@ fun Position.asValidPosition() = Position(MathUtils.clamp(x, 0, FTTBot.game.bwMa
 
 fun Coordinate.toPosition() = Position(x.toInt(), y.toInt())
 fun Position.toCoordinate() = Coordinate(x.toDouble(), y.toDouble())
+
+val WalkPosition.isWalkable: Boolean
+    get() = FTTBot.game.bwMap.isWalkable(this)
+val Position.isValidPosition: Boolean
+    get() = FTTBot.game.bwMap.isValidPosition(this)
+val WalkPosition.isValidPosition: Boolean
+    get() = FTTBot.game.bwMap.isValidPosition(this)
+val WalkPosition.area: Area?
+    get() = FTTBot.bwem.getArea(this)
 
 operator fun Position.component1() = x
 operator fun Position.component2() = y

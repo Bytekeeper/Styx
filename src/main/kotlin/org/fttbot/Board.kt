@@ -3,6 +3,8 @@ package org.fttbot
 import org.fttbot.FTTBot.self
 import org.fttbot.info.MyInfo
 import org.fttbot.info.UnitQuery
+import org.fttbot.task.Action
+import org.fttbot.task.TaskStatus
 import org.openbw.bwapi4j.TilePosition
 import org.openbw.bwapi4j.type.TechType
 import org.openbw.bwapi4j.type.UnitType
@@ -87,3 +89,20 @@ object ResourcesBoard {
     fun acquireFor(type: TechType) = acquire(type.mineralPrice(), type.gasPrice())
 }
 
+
+class ReserveUnit(private val unit: PlayerUnit, utility: Double = 1.0) : Action(utility) {
+    override fun processInternal(): TaskStatus {
+        if (ResourcesBoard.units.contains(unit)) {
+            ResourcesBoard.reserveUnit(unit)
+            return TaskStatus.DONE
+        }
+        return TaskStatus.FAILED
+    }
+}
+
+class ReleaseUnit(private val unit: PlayerUnit, utility: Double = 1.0) : Action(utility) {
+    override fun processInternal(): TaskStatus {
+        ResourcesBoard.release(unit)
+        return TaskStatus.DONE
+    }
+}

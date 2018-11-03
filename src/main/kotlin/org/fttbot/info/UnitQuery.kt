@@ -7,6 +7,7 @@ import org.fttbot.FTTBot
 import org.fttbot.LazyOnFrame
 import org.fttbot.ResourcesBoard
 import org.fttbot.estimation.MAX_FRAMES_TO_ATTACK
+import org.fttbot.path
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.type.WeaponType
@@ -14,12 +15,14 @@ import org.openbw.bwapi4j.unit.*
 import org.openbw.bwapi4j.unit.Unit
 import java.util.*
 import java.util.function.Function
+import kotlin.math.ceil
 
 const val MAX_MELEE_RANGE = 64
 
 fun UnitType.isMorphedFromOtherBuilding() = whatBuilds().unitType.isBuilding
 
 val Weapon.onCooldown get () = cooldown() >= FTTBot.latency_frames
+val Attacker.onCooldown get() = this is GroundAttacker && this.groundWeapon.onCooldown || this is AirAttacker && this.airWeapon.onCooldown
 val PlayerUnit.isMyUnit get() = player == FTTBot.self
 val PlayerUnit.isEnemyUnit get() = player in FTTBot.enemies
 fun PlayerUnit.getWeaponAgainst(target: Unit) =
@@ -36,6 +39,11 @@ fun PlayerUnit.maxRange() =
         (if (this is GroundAttacker) player.unitStatCalculator.weaponMaxRange(groundWeapon.type())
         else player.unitStatCalculator.weaponMaxRange((this as AirAttacker).airWeapon.type())) +
                 (if (this is Bunker) player.unitStatCalculator.weaponMaxRange(WeaponType.Gauss_Rifle) + 64 else 0)
+
+fun PlayerUnit.distanceTo(destination: Position): Int = path(this.position, destination).length
+
+fun PlayerUnit.framesToReach(destination: Position) = framesToTravel(distanceTo(destination))
+fun PlayerUnit.framesToTravel(length: Int) = if (type.canMove()) ceil(length / type.topSpeed()).toInt() else Int.MAX_VALUE
 
 fun Weapon.isMelee() = this != WeaponType.None && type().maxRange() <= MAX_MELEE_RANGE
 
@@ -105,22 +113,21 @@ val Attacker.canMoveWithoutBreakingAttack
 fun Attacker.hasWeaponAgainst(target: Unit) =
         WeaponType.None != getWeaponAgainst(target).type()
 
-fun PlayerUnit.isCombatRelevant() = type.groundWeapon().damageAmount() > 0 || type.airWeapon().damageAmount() > 0 || type.canMove() || type == UnitType.Terran_Bunker
+fun PlayerUnit.isCombatRelevant() = isCompleted && (type.groundWeapon().damageAmount() > 0 || type.airWeapon().damageAmount() > 0 || type.canMove() || type == UnitType.Terran_Bunker)
 fun PlayerUnit.canAttack(target: Unit, safety: Int = 0): Boolean {
     if (!isCompleted) return false
     val weaponType = getWeaponAgainst(target).type()
     if (weaponType == WeaponType.None) return false
+    val maxWeaponRange = maxRangeVs(target)
     val distance = getDistance(target)
-    val maxWeaponRange = player.unitStatCalculator.weaponMaxRange(weaponType)
     return distance <= maxWeaponRange + safety && distance >= weaponType.minRange() && target.isVisible && (target !is Cloakable && target !is Burrowable || target is PlayerUnit && target.isDetected)
 }
 
-fun Unit.potentialAttackers(safety: Int = 16): List<PlayerUnit> =
-        (UnitQuery.allUnits.inRadius(position.x, position.y, 400).filterIsInstance<PlayerUnit>() + EnemyInfo.seenUnits.filter { it.getDistance(this) < 400 })
-                .filter {
-                    it.isEnemyUnit && it.canAttack(this, safety + (((it as? MobileUnit)?.topSpeed
-                            ?: 0.0) * MAX_FRAMES_TO_ATTACK).toInt())
-                }
+fun PlayerUnit.potentialAttackers(safety: Int = 16): List<PlayerUnit> =
+        myCluster?.enemyUnits.filter {
+            it.canAttack(this, safety + (((it as? MobileUnit)?.topSpeed
+                    ?: 0.0) * MAX_FRAMES_TO_ATTACK).toInt())
+        }
 
 fun PlayerUnit.canBeAttacked(safety: Int = 16) = !potentialAttackers(safety).isEmpty()
 fun TrainingFacility.trains() = UnitType.values().filter { type == it.whatBuilds().unitType }

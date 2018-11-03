@@ -20,7 +20,7 @@ class Expand(val utilityProvider: () -> Double = { 1.0 }) : Task() {
     override val utility: Double
         get() = utilityProvider()
 
-    private val construct by SubTask {
+    private val construct by LazyTask {
         Build(UnitType.Zerg_Hatchery)
     }
     private var expansionPosition = Locked<TilePosition>(this) { UnitQuery.ownedUnits.inRadius(it.toPosition(), 128).none { it is Building } }

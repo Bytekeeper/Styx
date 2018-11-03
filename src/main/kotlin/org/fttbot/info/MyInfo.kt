@@ -1,12 +1,11 @@
 package org.fttbot.info
 
 import bwem.area.Area
-import org.fttbot.ProductionBoard
 import org.fttbot.FTTBot
 import org.fttbot.LazyOnFrame
+import org.fttbot.ProductionBoard
 import org.fttbot.ResourcesBoard
 import org.openbw.bwapi4j.unit.*
-import java.lang.Double.max
 import kotlin.math.max
 
 object MyInfo {
@@ -46,14 +45,14 @@ object MyInfo {
     fun step() {
         val frameDelta = FTTBot.frameCount - lastFrame
         if (frameDelta > 0) {
-            val mineralDelta = max(0, FTTBot.self.minerals() - lastMinerals).toDouble() / frameDelta
-            val gasDelta = max(0, FTTBot.self.gas() - lastGas).toDouble() / frameDelta
-            mineralsPerFrame = 0.999 * mineralsPerFrame + 0.001 * mineralDelta
-            gasPerFrame = 0.999 * gasPerFrame + 0.001 * gasDelta
+            val mineralDelta = max(0, FTTBot.self.gatheredMinerals() - lastMinerals).toDouble() / frameDelta
+            val gasDelta = max(0, FTTBot.self.gatheredGas() - lastGas).toDouble() / frameDelta
+            mineralsPerFrame = 0.998 * mineralsPerFrame + 0.002 * mineralDelta
+            gasPerFrame = 0.998 * gasPerFrame + 0.002 * gasDelta
         }
         lastFrame = FTTBot.frameCount
-        lastGas = FTTBot.self.gas()
-        lastMinerals = FTTBot.self.minerals()
+        lastGas = FTTBot.self.gatheredGas()
+        lastMinerals = FTTBot.self.gatheredMinerals()
         unitStatus.clear()
     }
 

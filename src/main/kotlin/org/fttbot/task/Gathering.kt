@@ -1,10 +1,16 @@
 package org.fttbot.task
 
+import org.fttbot.ReleaseUnit
+import org.fttbot.ReserveUnit
 import org.fttbot.ResourcesBoard
 import org.fttbot.info.MyInfo
 import org.fttbot.info.UnitQuery
 import org.fttbot.info.isMyUnit
-import org.openbw.bwapi4j.unit.*
+import org.fttbot.task.move.AvoidCombat
+import org.openbw.bwapi4j.unit.GasMiningFacility
+import org.openbw.bwapi4j.unit.MineralPatch
+import org.openbw.bwapi4j.unit.MobileUnit
+import org.openbw.bwapi4j.unit.Worker
 import kotlin.math.max
 import kotlin.math.min
 
@@ -18,8 +24,8 @@ class GatherMinerals : Task() {
 
     override fun processInternal(): TaskStatus {
         val available = ResourcesBoard
-        val myBases = MyInfo.myBases.filterIsInstance<PlayerUnit>()
-                .filter { it as ResourceDepot; it.isReadyForResources }
+        val myBases = MyInfo.myBases
+                .filter { it.isReadyForResources }
         val units = available.completedUnits.filterIsInstance<Worker>()
 
         val workerUnits = myBases.flatMap { base ->
@@ -71,6 +77,10 @@ class GatherMinerals : Task() {
     }
 
     companion object : TaskProvider {
+        private val avoidCombat = ItemToTaskMapper({ ResourcesBoard.units.filter { it is Worker } }) {
+            TSeq(ReserveUnit(it, 0.15), AvoidCombat(it as MobileUnit, 0.15), ReleaseUnit(it, 0.15))
+        }
+
         override fun invoke(): List<Task> = listOf(GatherMinerals())
     }
 }

@@ -3,10 +3,7 @@ package org.fttbot.info
 import bwem.area.Area
 import com.badlogic.gdx.math.Vector2
 import org.fttbot.*
-import org.openbw.bwapi4j.Player
 import org.openbw.bwapi4j.Position
-import org.openbw.bwapi4j.TilePosition
-import org.openbw.bwapi4j.type.UnitType
 import org.openbw.bwapi4j.unit.*
 
 const val DISCARD_HIDDEN_UNITS_AFTER = 800
@@ -17,10 +14,10 @@ object EnemyInfo {
     var hasSeenBase = false
     var hasInvisibleUnits = false
     val occupiedAreas by LazyOnFrame<Map<Area, List<PlayerUnit>>> {
-        (UnitQuery.enemyUnits + seenUnits).filter { it is Attacker && it !is Worker}
+        (UnitQuery.enemyUnits + seenUnits).filter { it is Attacker && it !is Worker }
                 .groupBy { FTTBot.bwem.getArea(it.tilePosition) }
     }
-    var nextFrame : Int = 0
+    var nextFrame: Int = 0
     var currentFramePosition: Map<MobileUnit, Position> = emptyMap()
 
     fun predictedPositionOf(unit: PlayerUnit, deltaFrames: Double): Position {
@@ -61,7 +58,7 @@ object EnemyInfo {
 
     fun step() {
         enemyBases.clear()
-        enemyBases.addAll(Cluster.clusters.filter { it.units.any { it.isEnemyUnit && it is Building } })
+        enemyBases.addAll(Cluster.clusters.map { it.userObject as Cluster<PlayerUnit> }.filter { it.units.any { it.isEnemyUnit && it is Building } })
         hasSeenBase = hasSeenBase || !enemyBases.isEmpty()
         val unexploredLocations = FTTBot.game.bwMap.startPositions.filter { !FTTBot.game.bwMap.isExplored(it) }
         if (!hasSeenBase && unexploredLocations.size == 1) {
@@ -82,9 +79,9 @@ object EnemyInfo {
 //            seenUnits.add(it)
 //        }
         seenUnits.removeIf {
-//            it is MobileUnit && (it !is SiegeTank || !it.isSieged) && (it !is Worker) &&
+            //            it is MobileUnit && (it !is SiegeTank || !it.isSieged) && (it !is Worker) &&
 //                    (FTTBot.frameCount - it.lastSpotted > DISCARD_HIDDEN_UNITS_AFTER) ||
-                    ((it !is Burrowable || !it.isBurrowed) && FTTBot.game.bwMap.isVisible(it.tilePosition))
+            ((it !is Burrowable || !it.isBurrowed) && FTTBot.game.bwMap.isVisible(it.tilePosition))
         }
         nextFrame = FTTBot.frameCount
         currentFramePosition = UnitQuery.enemyUnits.filterIsInstance(MobileUnit::class.java).map { it to it.position }.toMap()

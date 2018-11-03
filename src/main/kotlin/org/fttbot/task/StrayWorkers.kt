@@ -10,7 +10,7 @@ class StrayWorkers : Task() {
     override val utility: Double = 0.12
 
     private val strayWorkers = mutableMapOf<Worker, ResourceDepot>()
-    private val returnTasks = MParallelTask(ManagedTaskProvider({ strayWorkers.entries.toList() }) {
+    private val returnTasks = MTPar(ItemToTaskMapper({ strayWorkers.entries.toList() }) {
         Move(it.key, it.value.position).neverFail()
     })
 

@@ -19,7 +19,7 @@ object Utilities {
     private val factory = BWAPI4JAgentFactory()
 
     val expansionUtility by LazyOnFrame {
-        min(1.0, workerUtilization * (1.15 - fastsig(MyInfo.myBases.count() * 0.05)))
+        min(1.0, workerUtilization * (1.15 - fastsig(MyInfo.myBases.count() * 0.03)))
     }
 
     val workerUtilization by LazyOnFrame {
@@ -37,11 +37,11 @@ object Utilities {
     }
 
     val moreTrainersUtility by LazyOnFrame {
-        MathUtils.clamp((MyInfo.myBases.size * workerUtilization + 0.7) / (UnitQuery.my<ResourceDepot>().size + 1.0), 0.0, 1.0)
+        MathUtils.clamp((MyInfo.myBases.size * workerUtilization + mineralsUtilization * 5) / (UnitQuery.my<ResourceDepot>().size + 1.0), 0.0, 1.0)
     }
 
     val moreWorkersUtility by LazyOnFrame {
-        (1.0 - fastsig(workerUtilization * 0.8)) * max(1.0 - mineralsUtilization * 0.6, 1.0 - gasUtilization * 0.6)
+        (1.0 - fastsig(workerUtilization * 0.7)) * max(1.0 - mineralsUtilization * 0.5, 1.0 - gasUtilization * 0.5)
     }
 
     fun needed(type: UnitType) = CombatEval.minAmountOfAdditionalsForProbability(UnitQuery.myUnits.filter { it is MobileUnit && it !is Worker }.map { factory.of(it) },

@@ -15,12 +15,12 @@ class WorkerDefense(val defensePoint: Position) : Task() {
     override val utility: Double
         get() = 1.0
 
-    private val defenderTask = ManagedTaskProvider({ defendingWorkers }, {
-        ManageAttacker(it)
+    private val defenderTask = ItemToTaskMapper({ defendingWorkers }, {
+        MobileAttacker(it, CombatData())
     })
 
     override fun processInternal(): TaskStatus {
-        val defenseCluster = Cluster.clusters.minBy { it.position.getDistance(defensePoint) }
+        val defenseCluster = Cluster.clusters.map { it.userObject as Cluster<PlayerUnit> }.minBy { it.position.getDistance(defensePoint) }
                 ?: return TaskStatus.DONE
         if (defenseCluster.position.getDistance(defensePoint) > 300) {
             defendingWorkers.clear()
@@ -54,12 +54,12 @@ class WorkerDefense(val defensePoint: Position) : Task() {
         if (defendingWorkers.isEmpty()) return TaskStatus.DONE
         ResourcesBoard.reserveUnits(defendingWorkers)
 
-        return processAll(defenderTask)
+        return processParallel(defenderTask().asSequence())
     }
 
     companion object : TaskProvider {
         private val factory = BWAPI4JAgentFactory()
-        private val bases = ManagedTaskProvider({ MyInfo.myBases }, { WorkerDefense((it as PlayerUnit).position).nvr() })
+        private val bases = ItemToTaskMapper({ MyInfo.myBases }, { WorkerDefense((it as PlayerUnit).position).nvr() })
         override fun invoke(): List<Task> = bases()
     }
 }

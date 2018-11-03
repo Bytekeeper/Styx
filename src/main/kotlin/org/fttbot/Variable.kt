@@ -15,7 +15,7 @@ interface Variable<T> {
 class EachFrame {
     private var lastFrame = -1
 
-    fun whenChanged(execute: () -> Unit) {
+    fun once(execute: () -> Unit) {
         if (lastFrame != FTTBot.frameCount) {
             lastFrame = FTTBot.frameCount
             execute()
@@ -98,7 +98,7 @@ class UnitLocked<T : PlayerUnit> internal constructor(task: Task, invariant: (T)
 
     override fun get(): T {
         val result = super.get()
-        eachFrame.whenChanged {
+        eachFrame.once {
             ResourcesBoard.reserveUnit(result)
         }
         return result

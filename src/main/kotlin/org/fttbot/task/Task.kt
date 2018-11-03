@@ -59,14 +59,21 @@ abstract class Task {
     fun nvr() = Repeating(NeverFailing(this))
     override fun toString(): String = this::class.java.name.substringAfterLast('.')
 
-    fun processInSequence(vararg tasks: Task): TaskStatus {
-        return tasks.asSequence().sortedByDescending { it.utility }.map { it.process() }
+    fun processInSequence(vararg tasks: Task): TaskStatus = processInSequence(tasks.asSequence())
+
+    fun processInSequence(tasks: kotlin.sequences.Sequence<Task>): TaskStatus {
+        return tasks.sortedByDescending { it.utility }.map { it.process() }
                 .firstOrNull { it in arrayOf(TaskStatus.RUNNING, TaskStatus.FAILED) }
                 ?: TaskStatus.DONE
     }
 
-    fun processAll(taskProvider: TaskProvider) = processAll(*taskProvider().toTypedArray())
-    fun processAll(vararg tasks: Task): TaskStatus {
+    fun processAsFallback(vararg tasks: Task): TaskStatus = processAsFallback(tasks.asSequence())
+    fun processAsFallback(tasks: Sequence<Task>): TaskStatus =
+            tasks.map { it.process() }.firstOrNull { it != TaskStatus.FAILED }
+                    ?: TaskStatus.FAILED
+
+    fun processParallel(vararg tasks: Task) = processParallel(tasks.asSequence())
+    fun processParallel(tasks: Sequence<Task>): TaskStatus {
         val result = tasks.sortedByDescending { it.utility }.map(Task::process)
         return result.firstOrNull { it == TaskStatus.FAILED }
                 ?: result.firstOrNull { it == TaskStatus.RUNNING }
@@ -78,7 +85,7 @@ abstract class Task {
     }
 }
 
-class SubTask<out T : Task>(val initializer: () -> T) : ReadOnlyProperty<Task, T> {
+class LazyTask<out T : Task>(val initializer: () -> T) : ReadOnlyProperty<Task, T> {
     private var initialized = false
     private var value: T? = null
 
@@ -159,7 +166,7 @@ abstract class CompoundTask(val provider: TaskProvider) : Task() {
     }
 }
 
-class MParallelTask(provider: TaskProvider) : CompoundTask(provider) {
+class MTPar(provider: TaskProvider) : CompoundTask(provider) {
     val completedTasks = mutableListOf<Task>()
 
     override fun processInternal(): TaskStatus {
@@ -178,36 +185,25 @@ class MParallelTask(provider: TaskProvider) : CompoundTask(provider) {
     }
 }
 
-open class Sequence(provider: TaskProvider) : CompoundTask(provider) {
+open class TSeq(provider: TaskProvider) : CompoundTask(provider) {
     constructor(vararg tasks: Task) : this(tasks.toList()::identity)
 
-    override fun processInternal(): TaskStatus =
-            tasks.asSequence().map { it.process() }.firstOrNull { it != TaskStatus.DONE }
-                    ?: TaskStatus.DONE
+    override fun processInternal(): TaskStatus = processInSequence(provider().asSequence())
 }
 
-open class Fallback(provider: TaskProvider) : CompoundTask(provider) {
+open class TSel(provider: TaskProvider) : CompoundTask(provider) {
     constructor(vararg tasks: Task) : this(tasks.toList()::identity)
 
-    override fun processInternal(): TaskStatus =
-            tasks.asSequence().map { it.process() }.firstOrNull { it != TaskStatus.FAILED }
-                    ?: TaskStatus.FAILED
+    override fun processInternal(): TaskStatus = processAsFallback(provider().asSequence())
 }
 
-class ParallelTask(provider: TaskProvider) : CompoundTask(provider) {
+class TPar(provider: TaskProvider) : CompoundTask(provider) {
     constructor(vararg tasks: Task) : this(tasks.toList()::identity)
 
-    override fun processInternal(): TaskStatus {
-        val result = tasks.map { it.process() }
-        if (result.any { it == TaskStatus.FAILED })
-            return TaskStatus.FAILED
-        if (result.none { it == TaskStatus.RUNNING })
-            return TaskStatus.DONE
-        return TaskStatus.RUNNING
-    }
+    override fun processInternal(): TaskStatus = processParallel(provider().asSequence())
 }
 
-class ManagedTaskProvider<T>(val itemProvider: () -> Collection<T>, val taskProvider: (T) -> Task) : TaskProvider {
+class ItemToTaskMapper<T>(val itemProvider: () -> Collection<T>, val taskProvider: (T) -> Task) : TaskProvider {
     val tasks = mutableMapOf<T, Task>()
 
     override fun invoke(): List<Task> {

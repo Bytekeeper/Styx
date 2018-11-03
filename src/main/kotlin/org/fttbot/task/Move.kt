@@ -1,5 +1,6 @@
 package org.fttbot.task
 
+import org.fttbot.Commands
 import org.fttbot.FTTBot
 import org.fttbot.plus
 import org.openbw.bwapi4j.Position
@@ -26,7 +27,7 @@ class Move(val unit: MobileUnit, var to: Position = unit.position, val tolerance
     override fun processInternal(): TaskStatus {
         if (to.getDistance(unit.position) <= tolerance) {
             if (unit.targetPosition.getDistance(to) > tolerance) {
-                unit.move(to)
+                Commands.move(unit, to)
             }
             return TaskStatus.DONE
         }
@@ -44,10 +45,10 @@ class Move(val unit: MobileUnit, var to: Position = unit.position, val tolerance
             }
             if (orderedPosition == targetPosition) {
                 // Didn't like the order, try a nearby position
-                unit.move(targetPosition.plus(Position(prng.nextInt(-32, 32), prng.nextInt(-32, 32))))
+                Commands.move(unit, targetPosition.plus(Position(prng.nextInt(-32, 32), prng.nextInt(-32, 32))))
                 failedAttempts++
             } else {
-                unit.move(targetPosition)
+                Commands.move(unit, targetPosition)
             }
             orderedPosition = targetPosition
         }

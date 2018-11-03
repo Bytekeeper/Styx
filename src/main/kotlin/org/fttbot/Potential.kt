@@ -117,7 +117,7 @@ object Potential {
         target.add((waypoint - unit.position).toVector().setLength(scale))
     }
 
-    private fun reallySafePlace(): Position? {
+    fun reallySafePlace(): Position? {
         return UnitQuery.my<ResourceDepot>()
                 .filter { UnitQuery.enemyUnits.inRadius(it.position, 300).count { it is Attacker && it !is Worker } < 3 }
                 .maxBy {

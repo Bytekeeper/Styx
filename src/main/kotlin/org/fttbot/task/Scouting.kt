@@ -4,6 +4,7 @@ import org.fttbot.FTTBot
 import org.fttbot.Locked
 import org.fttbot.ResourcesBoard
 import org.fttbot.info.UnitQuery
+import org.fttbot.task.move.AvoidCombat
 import org.openbw.bwapi4j.Position
 import org.openbw.bwapi4j.unit.MobileUnit
 import org.openbw.bwapi4j.unit.Overlord
@@ -12,9 +13,9 @@ import java.util.*
 class Scouting(val unit: MobileUnit) : Task() {
     override val utility: Double = 0.0
 
-    private val move by SubTask { Move(unit, utility = 0.5) }
+    private val move by LazyTask { Move(unit, utility = 0.5) }
 
-    private val avoid by SubTask { AvoidDamage(unit) }
+    private val avoid by LazyTask { AvoidCombat(unit) }
     private val targetPosition = Locked<Position>(this) { UnitQuery.inRadius(it, 100).isEmpty() }
 
     override fun toString(): String = "Scouting with $unit"
@@ -33,7 +34,7 @@ class Scouting(val unit: MobileUnit) : Task() {
 
     companion object : TaskProvider {
         private val rng = SplittableRandom()
-        val ovis = ManagedTaskProvider({ ResourcesBoard.completedUnits.filterIsInstance<Overlord>() }, { Scouting(it).neverFail() })
+        val ovis = ItemToTaskMapper({ ResourcesBoard.completedUnits.filterIsInstance<Overlord>() }, { Scouting(it).nvr() })
         override fun invoke(): List<Task> = ovis()
     }
 }
