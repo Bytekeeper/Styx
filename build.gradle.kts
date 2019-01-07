@@ -3,7 +3,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     application
-    kotlin("jvm") version "1.3.0"
+    kotlin("jvm") version "1.3.11"
     distribution
 }
 
@@ -12,22 +12,25 @@ repositories {
     maven("https://jitpack.io")
 }
 
-group = "'scai"
+group = "sscait"
 version = "1.0-SNAPSHOT"
 
-application.mainClassName = "org.fttbot.FTTBot"
+application.mainClassName = "org.styx.MainKt"
 
 dependencies {
-    compile(kotlin("stdlib-jdk8"))
-    compile(fileTree("lib").include("*.jar").exclude("*-sources.jar"))
-    compile("com.badlogicgames.gdx:gdx:1.9.4")
-    compile("io.jenetics:jenetics:4.2.0")
-    compile("org.locationtech.jts:jts-core:1.16.0")
+    implementation(kotlin("stdlib-jdk8"))
+    implementation("com.badlogicgames.gdx:gdx:1.9.4")
+    implementation("io.jenetics:jenetics:4.2.0")
+    implementation("org.locationtech.jts:jts-core:1.16.0")
+    implementation("org.apache.logging.log4j:log4j-api:2.11.1")
+    implementation("org.apache.logging.log4j:log4j-core:2.11.1")
+    implementation("com.github.JasperGeurtz:JBWAPI:develop-SNAPSHOT")
+    implementation("com.github.Bytekeeper:ass:master-SNAPSHOT")
 
-    testCompile("org.junit.jupiter:junit-jupiter-api:5.0.2")
-    testCompile("org.junit.platform:junit-platform-launcher:1.2.0")
-    testCompile("org.junit.platform:junit-platform-engine:1.2.0")
-    testCompile("org.assertj:assertj-core:3.9.0")
+    testImplementation("org.junit.jupiter:junit-jupiter-api:5.0.2")
+    testImplementation("org.junit.platform:junit-platform-launcher:1.2.0")
+    testImplementation("org.junit.platform:junit-platform-engine:1.2.0")
+    testImplementation("org.assertj:assertj-core:3.9.0")
 }
 
 val compileKotlin: KotlinCompile by tasks
@@ -37,7 +40,7 @@ compileKotlin.kotlinOptions.jvmTarget = "1.8"
 val jar: Jar by tasks
 
 jar.apply {
-    from(configurations.compile.resolve().map { if (it.isDirectory) it else zipTree(it) })
+    from(configurations.runtimeClasspath.get().resolve().map { if (it.isDirectory) it else zipTree(it) })
     manifest {
         attributes += "Implementation-Title" to "Gradle Jar File Example"
         attributes += "Implementation-Version" to version
@@ -55,22 +58,3 @@ distributions {
         }
     }
 }
-
-//tasks {
-//    "fatjar"(Jar::class) {
-//    }
-//}
-
-
-//task fatJar(type: Jar) {
-//    manifest {
-//        attributes 'Implementation-Title': 'Gradle Jar File Example',
-//                'Implementation-Version': version,
-//                'Main-Class': 'org.fttbot.MainKt'
-//    }
-//    baseName = project.name + '-all'
-//    from { configurations.compile.collect { it.isDirectory() ? it : zipTree(it) } }
-//    with jar
-//}
-//tasks.assembleScaitDist.dependsOn(fatJar, sourceJar)
-//
