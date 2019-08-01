@@ -1,4 +1,4 @@
-package org.fttbot
+package org.styx
 
 class LazyOnFrame<T>(val initializer : () -> T) : Lazy<T> {
     private var lastFrame : Int = -1
@@ -6,7 +6,7 @@ class LazyOnFrame<T>(val initializer : () -> T) : Lazy<T> {
 
     override val value: T
         get() {
-            val currentFrame = FTTBot.frameCount
+            val currentFrame = Styx.frame
             if (currentFrame != lastFrame) {
                 _value = initializer()
                 lastFrame = currentFrame
