@@ -23,6 +23,10 @@ object BasicActions {
         unit.train(type)
     }
 
+    fun morph(unit: SUnit, type: UnitType) {
+        unit.morph(type)
+    }
+
     fun build(worker: SUnit, type: UnitType, at: TilePosition) {
         if (worker.distanceTo(at) < 5) {
             worker.build(type, at)

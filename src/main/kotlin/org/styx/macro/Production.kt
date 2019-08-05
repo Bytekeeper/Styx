@@ -125,3 +125,21 @@ class Research(private val tech: TechType) : MemoLeaf() {
     }
 
 }
+
+
+class Morph(private val type: UnitType) : MemoLeaf() {
+    private val morphLock = UnitLock() { Styx.resources.availableUnits.firstOrNull { it.unitType == type.whatBuilds().first } }
+    private val costLock = UnitCostLock(type)
+
+    override fun performTick(): TickResult {
+        if (morphLock.unit?.unitType == type)
+            return TickResult.DONE
+        costLock.acquire()
+        if (costLock.satisfied) {
+            morphLock.acquire()
+            val unitToMorph = morphLock.unit ?: return TickResult.RUNNING
+            BasicActions.morph(unitToMorph, type)
+        }
+        return TickResult.RUNNING
+    }
+}

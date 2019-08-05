@@ -103,6 +103,12 @@ class SUnit private constructor(val unit: Unit) {
         sleep()
     }
 
+    fun morph(type: UnitType) {
+        if (sleeping) return
+        unit.morph(type)
+        sleep()
+    }
+
     private fun sleep(minFrames: Int = 2) {
         readyOnFrame = Styx.frame + Styx.latencyFrames + max(minFrames, Styx.turnSize)
     }
@@ -110,6 +116,7 @@ class SUnit private constructor(val unit: Unit) {
     fun train(type: UnitType) {
         unit.train(type)
     }
+
     fun weaponAgainst(other: SUnit): WeaponType = if (other.flying) unitType.airWeapon() else unitType.groundWeapon()
     override fun toString(): String = "$unitType $position [${unit.player.name}]"
 
