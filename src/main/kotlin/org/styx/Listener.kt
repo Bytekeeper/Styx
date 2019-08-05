@@ -3,14 +3,21 @@ package org.styx
 import bwapi.BWClient
 import bwapi.DefaultBWListener
 import bwapi.Game
+import bwapi.Unit
 import bwem.BWEM
+import org.styx.task.SquadDispatch
+import org.styx.task.FollowBO
 import org.styx.task.Gathering
 
 class Listener : DefaultBWListener() {
     private lateinit var game: Game
     private val client = BWClient(this)
 
-    private val tasks = listOf(Gathering)
+    private val aiTree = BehaviorTree(Par("Main AI Tree",
+            SquadDispatch,
+            FollowBO,
+            Gathering
+    ))
 
     override fun onStart() {
         game = client.game
@@ -23,7 +30,11 @@ class Listener : DefaultBWListener() {
     override fun onFrame() {
         Styx.update()
 
-        tasks.sortedByDescending { it.utility }.forEach { it.execute() }
+        aiTree.tick()
+    }
+
+    override fun onUnitDestroy(unit: Unit) {
+        Styx.units.onUnitDestroy(unit)
     }
 
     fun start() {

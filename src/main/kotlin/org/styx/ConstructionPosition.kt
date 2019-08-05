@@ -9,7 +9,7 @@ object ConstructionPosition {
 
     fun findPositionFor(unitType: UnitType, near: Position? = null): TilePosition? {
         if (unitType.isRefinery) {
-            return findPositionForGas(unitType);
+            return findPositionForGas();
         }
 
         val target = near?.toTilePosition() ?: Styx.bases.myBases.mapNotNull { it.mainResourceDepot }
@@ -85,7 +85,7 @@ object ConstructionPosition {
 //        return true
 //    }
 //
-    private fun findPositionForGas(unitType: UnitType): TilePosition? {
+    private fun findPositionForGas(): TilePosition? {
         val geysers = Styx.units.geysers
         // TODO BASES!
         return Styx.units.mine.filter { it.unitType.isResourceDepot }.asSequence()

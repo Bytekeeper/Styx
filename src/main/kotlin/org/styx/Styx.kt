@@ -1,21 +1,34 @@
 package org.styx
 
 import bwapi.*
+import bwapi.Unit
 import bwem.BWMap
+import org.bk.ass.cluster.Cluster
+import org.bk.ass.cluster.StableDBScanner
 import org.bk.ass.query.PositionAndId
 import org.bk.ass.query.UnitFinder
 import java.util.*
+
+val positionAndIdExtractor: (SUnit) -> PositionAndId = { PositionAndId(it.id, it.x, it.y) }
 
 object Styx {
     lateinit var game: Game
     lateinit var map: BWMap
 
     var turnSize = 0
+        private set
     var frame = 0
+        private set
     var latencyFrames = 2
+        private set
     var units = Units()
+        private set
     var resources = Resources()
+        private set
     var bases = Bases()
+        private set
+    var clusters = Clusters()
+        private set
     lateinit var self: Player
         private set
 
@@ -26,29 +39,62 @@ object Styx {
         units.update()
         resources.update()
         bases.update()
+        clusters.update()
+    }
+}
+
+class Clusters {
+    private val dbScanner = StableDBScanner<SUnit>(3)
+
+    var clusters: Collection<Cluster<SUnit>> = emptyList()
+        private set
+
+    fun update() {
+        dbScanner.updateDB(Styx.units.ownedUnits, 400)
+                .scan(-1)
+        clusters = dbScanner.clusters
     }
 }
 
 
 class Units {
-    private val extractor: (SUnit) -> PositionAndId = { PositionAndId(it.id, it.x, it.y) }
-    var mine = UnitFinder(extractor)
+    var ownedUnits = UnitFinder(positionAndIdExtractor)
         private set
-    var workers = UnitFinder(extractor)
+    var allunits = UnitFinder(positionAndIdExtractor)
         private set
-    var resourceDepots = UnitFinder(extractor)
+    var mine = UnitFinder(positionAndIdExtractor)
         private set
-    var minerals = UnitFinder(extractor)
+    var enemy = UnitFinder(positionAndIdExtractor)
         private set
-    var geysers = UnitFinder(extractor)
+    var workers = UnitFinder(positionAndIdExtractor)
         private set
+    var resourceDepots = UnitFinder(positionAndIdExtractor)
+        private set
+    var minerals = UnitFinder(positionAndIdExtractor)
+        private set
+    var geysers = UnitFinder(positionAndIdExtractor)
+        private set
+    private val myX = mutableMapOf<UnitType, LazyOnFrame<UnitFinder<SUnit>>>()
 
     fun update() {
-        mine = UnitFinder(Styx.game.self().units.map { SUnit.forUnit(it) }, extractor)
-        resourceDepots = UnitFinder(mine.filter { it.unitType.isResourceDepot }, extractor)
-        workers = UnitFinder(mine.filter { it.unitType.isWorker }, extractor)
-        minerals = UnitFinder(Styx.game.minerals.map { SUnit.forUnit(it) }, extractor)
-        geysers = UnitFinder(Styx.game.geysers.map { SUnit.forUnit(it) }, extractor)
+        allunits = UnitFinder(Styx.game.allUnits.map { SUnit.forUnit(it) }, positionAndIdExtractor)
+        allunits.forEach { it.update() }
+        ownedUnits = UnitFinder(allunits.filter { it.owned }, positionAndIdExtractor)
+        minerals = UnitFinder(Styx.game.minerals.map { SUnit.forUnit(it) }, positionAndIdExtractor)
+        geysers = UnitFinder(Styx.game.geysers.map { SUnit.forUnit(it) }, positionAndIdExtractor)
+
+        mine = UnitFinder(Styx.game.self().units.map { SUnit.forUnit(it) }, positionAndIdExtractor)
+        resourceDepots = UnitFinder(mine.filter { it.unitType.isResourceDepot }, positionAndIdExtractor)
+        workers = UnitFinder(mine.filter { it.unitType.isWorker }, positionAndIdExtractor)
+
+        enemy = UnitFinder(Styx.game.enemy().units.map { SUnit.forUnit(it) }, positionAndIdExtractor)
+    }
+
+    fun my(type: UnitType): UnitFinder<SUnit> =
+            myX.computeIfAbsent(type) { LazyOnFrame { UnitFinder(mine.filter { it.unitType == type }, positionAndIdExtractor) } }.value
+
+    fun onUnitDestroy(unit: Unit) {
+
     }
 }
 

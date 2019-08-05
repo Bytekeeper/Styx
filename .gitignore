@@ -30,3 +30,7 @@ bwapi_bridge.dll
 libgmp-10.dll
 libmpfr-4.dll
 out/
+
+.whisk
+whisk-out
+.gradle

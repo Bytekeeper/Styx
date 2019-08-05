@@ -1,0 +1,12 @@
+import whisk
+
+maven_deps = maven_library(
+    artifacts=['com.github.JavaBWAPI:JBWAPI:0.7',
+           'com.github.Bytekeeper:ass:master-SNAPSHOT',
+           'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.3.41'],
+    repository_urls=['https://jitpack.io/', 'https://repo.maven.apache.org/maven2/']
+)
+
+fatjar=build_jar(name='StyxZ.jar', files= [main, rglob(pattern='**', root='src/main/resources')], main_class='org.styx.ListenerKt')
+
+main = kotlin_compile(srcs = glob('src/main/kotlin/**.kt'), exported_deps=maven_deps)
