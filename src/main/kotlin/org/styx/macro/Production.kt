@@ -63,7 +63,7 @@ class Train(private val type: UnitType) : MemoLeaf() {
         if (!costLock.satisfied)
             return TickResult.RUNNING
         val trainer = trainerLock.unit ?: return TickResult.RUNNING
-        if (trainer.unitType == type) return TickResult.DONE
+        if (trainer.unitType == type || trainer.buildType == type) return TickResult.DONE
         BasicActions.train(trainer, type)
         return TickResult.RUNNING
     }

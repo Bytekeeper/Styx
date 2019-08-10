@@ -3,6 +3,10 @@ package org.styx
 import bwapi.*
 import bwapi.Unit
 import org.bk.ass.info.BWMirrorUnitInfo
+import org.locationtech.jts.geom.Coordinate
+import org.locationtech.jts.geom.Envelope
+import org.locationtech.jts.geom.Geometry
+import org.locationtech.jts.geom.GeometryFactory
 import org.styx.Styx.self
 import kotlin.math.max
 
@@ -14,6 +18,8 @@ class SUnit private constructor(val unit: Unit) {
         private set
     var visible = true
         private set
+    var completed = false
+        private set
     var detected = unit.isDetected
         private set
     val initialTilePosition = unit.initialTilePosition
@@ -23,6 +29,8 @@ class SUnit private constructor(val unit: Unit) {
         private set
     val id: Int = unit.id
     var myUnit = unit.player == Styx.self
+        private set
+    var buildType: UnitType = unit.buildType
         private set
     var unitType = unit.type
         private set
@@ -61,11 +69,20 @@ class SUnit private constructor(val unit: Unit) {
         position = unit.position
         myUnit = unit.player == self
         gatheringGas = unit.isGatheringGas
+        completed = unit.isCompleted
+        buildType = unit.buildType
     }
 
     fun distanceTo(other: SUnit) = if (other.visible) unit.getDistance(other.unit) else position.getApproxDistance(other.position)
     fun distanceTo(pos: Position) = position.getDistance(pos)
     fun distanceTo(pos: TilePosition) = tilePosition.getDistance(pos)
+
+    val tileGeometry: Geometry
+        get() {
+            val endpos = tilePosition + unitType.tileSize()
+            return geometryFactory.toGeometry(Envelope(Coordinate(tilePosition.x.toDouble(), tilePosition.y.toDouble()),
+                    Coordinate(endpos.x.toDouble(), endpos.y.toDouble())))
+        }
 
     fun moveTo(target: Position) {
         if (sleeping) return
@@ -122,6 +139,7 @@ class SUnit private constructor(val unit: Unit) {
 
     companion object {
         private val units = mutableMapOf<Unit, SUnit>()
+        private val geometryFactory = GeometryFactory()
         fun forUnit(unit: Unit) = units.computeIfAbsent(unit) { SUnit(it) }
     }
 }

@@ -5,6 +5,7 @@ import bwapi.DefaultBWListener
 import bwapi.Game
 import bwapi.Unit
 import bwem.BWEM
+import org.styx.Styx.bases
 import org.styx.task.SquadDispatch
 import org.styx.task.FollowBO
 import org.styx.task.Gathering
@@ -31,6 +32,8 @@ class Listener : DefaultBWListener() {
         Styx.update()
 
         aiTree.tick()
+        ConstructionPosition.drawBlockedAreas()
+        game.drawTextScreen(10, 10, "${bases.myBases.size}")
     }
 
     override fun onUnitDestroy(unit: Unit) {

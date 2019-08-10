@@ -75,6 +75,7 @@ class Units {
     var geysers = UnitFinder(positionAndIdExtractor)
         private set
     private val myX = mutableMapOf<UnitType, LazyOnFrame<UnitFinder<SUnit>>>()
+    private val myCompleted = mutableMapOf<UnitType, LazyOnFrame<UnitFinder<SUnit>>>()
 
     fun update() {
         allunits = UnitFinder(Styx.game.allUnits.map { SUnit.forUnit(it) }, positionAndIdExtractor)
@@ -93,20 +94,28 @@ class Units {
     fun my(type: UnitType): UnitFinder<SUnit> =
             myX.computeIfAbsent(type) { LazyOnFrame { UnitFinder(mine.filter { it.unitType == type }, positionAndIdExtractor) } }.value
 
+    fun myCompleted(type: UnitType): UnitFinder<SUnit> =
+            myCompleted.computeIfAbsent(type) { LazyOnFrame { UnitFinder(mine.filter { it.unitType == type && it.completed }, positionAndIdExtractor) } }.value
+
     fun onUnitDestroy(unit: Unit) {
 
     }
 }
 
-class Base(val mainResourceDepot: SUnit?)
+class Base(val mainResourceDepot: SUnit) {
+    val center get() = mainResourceDepot.position
+    val centerTile get() = mainResourceDepot.tilePosition
+}
 
 class Bases {
     lateinit var myBases: List<Base>
         private set
 
     fun update() {
-        myBases = Styx.map.bases.mapNotNull { Styx.units.resourceDepots.closestTo(it.center.x, it.center.y).orNull() }
-                .map { Base(it) }
+        myBases = Styx.map.bases.mapNotNull {
+            val base = Styx.units.resourceDepots.closestTo(it.center.x, it.center.y).orNull() ?: return@mapNotNull null
+            if (base.distanceTo(it.center) < 80) base else null
+        }.map { Base(it) }
     }
 }
 
@@ -118,3 +127,5 @@ operator fun Position.plus(other: Position) = add(other)
 operator fun TilePosition.plus(other: TilePosition) = add(other)
 
 fun <T> Optional<T>.orNull(): T? = orElse(null)
+
+fun <T> UnitFinder<T>.inRadius(pos: Position, radius: Int) = inRadius(pos.x, pos.y, radius)

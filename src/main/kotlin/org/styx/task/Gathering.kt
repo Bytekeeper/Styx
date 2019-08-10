@@ -12,8 +12,8 @@ object Gathering : BTNode() {
         if (workers.units.isEmpty()) // No workers left? We have serious problems
             return TickResult.RUNNING
         val pending = workers.units.toMutableList()
-        val extractors = Styx.units.my(UnitType.Zerg_Extractor)
-        val missingGasWorkers = extractors.size  * 3 - pending.count { it.gatheringGas }
+        val extractors = Styx.units.myCompleted(UnitType.Zerg_Extractor)
+        val missingGasWorkers = extractors.size * 3 - pending.count { it.gatheringGas }
         pending.take(missingGasWorkers)
                 .forEach { worker ->
                     val target = extractors.closestTo(worker.x, worker.y).orNull()

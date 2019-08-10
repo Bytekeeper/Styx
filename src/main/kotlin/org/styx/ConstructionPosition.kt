@@ -1,11 +1,19 @@
 package org.styx
 
+import bwapi.Color
 import bwapi.Position
 import bwapi.TilePosition
 import bwapi.UnitType
+import org.locationtech.jts.algorithm.ConvexHull
+import org.locationtech.jts.geom.*
+import org.styx.Styx.bases
+import org.styx.Styx.game
+import org.styx.Styx.units
 
 
 object ConstructionPosition {
+    private val resourceBlockedGeometry = mutableMapOf<Base, Polygonal>()
+    private val geometryFactory = GeometryFactory()
 
     fun findPositionFor(unitType: UnitType, near: Position? = null): TilePosition? {
         if (unitType.isRefinery) {
@@ -27,9 +35,9 @@ object ConstructionPosition {
                     continue
                 if (dist < bestDistance
                         && Styx.game.canBuildHere(pos, unitType)
-//                        && outsideOfResourceLines(pos, unitType)
-//                        && hasNoAddonOrEnoughSpace(unitType, pos)
-//                        && willNotBlockOtherAddon(unitType, pos)
+                        && outsideOfResourceLines(pos, unitType)
+                        && hasNoAddonOrEnoughSpace(unitType, pos)
+                        && willNotBlockOtherAddon(unitType, pos)
                 ) {
                     bestDistance = dist
                     bestBuildPosition = pos
@@ -39,58 +47,69 @@ object ConstructionPosition {
         return bestBuildPosition
     }
 
-    //    private fun willNotBlockOtherAddon(unitType: UnitType, pos: TilePosition): Boolean {
-//        val building = Rectangle(pos.x.toFloat(), pos.y.toFloat(), unitType.tileWidth().toFloat(), unitType.tileHeight().toFloat())
-//        return !UnitQuery.inRadius(pos.toPosition() + Position(0, unitType.height()), 100)
-//                .any {
-//                    it is ExtendibleByAddon && building.overlaps(
-//                            Rectangle(it.tilePosition.x.toFloat() + it.tileWidth().toFloat(), it.tilePosition.y.toFloat(), 2f, it.tileHeight().toFloat()))
-//                }
-//    }
-//
-//    private fun hasNoAddonOrEnoughSpace(unitType: UnitType, pos: TilePosition): Boolean {
-//        if (!unitType.canBuildAddon()) return true
-//        val addonRect = Rectangle((pos.x + unitType.tileWidth()).toFloat(), pos.y.toFloat(), 2f, unitType.tileHeight().toFloat())
-//
-//        return FTTBot.game.bwMap.canBuildHere(TilePosition(pos.x + unitType.tileWidth(), pos.y + 1), unitType)
-//                && !UnitQuery.inRadius(pos.toPosition() + Position(unitType.width(), unitType.height()), 100)
-//                .any { it is Building && addonRect.overlaps(Rectangle(it.tilePosition.x.toFloat(), it.tilePosition.y.toFloat(), it.tileWidth().toFloat(), it.tileHeight().toFloat())) }
-//    }
-//
-//    private fun outsideOfResourceLines(pos: TilePosition, unitType: UnitType): Boolean {
-//        val base = UnitQuery.myBases.minBy { it.tilePosition.getDistance(pos) } ?: return true
-//        val poly = resourcePolygons.computeIfAbsent(base) {
-//            val relevantUnits = UnitQuery.inRadius(base.position, RESOURCE_RANGE)
-//                    .filter { it is MineralPatch || it is VespeneGeyser || it is Refinery }
-//                    .toMutableList()
-//            relevantUnits.add(base)
-//            val points = FloatArray(relevantUnits.size * 8)
-//            relevantUnits.forEachIndexed() { index, unit ->
-//                val idx = index * 8
-//                points[idx] = unit.tilePosition.x.toFloat()
-//                points[idx + 1] = unit.tilePosition.y.toFloat()
-//                points[idx + 2] = unit.tilePosition.x.toFloat() + unit.tileWidth()
-//                points[idx + 3] = unit.tilePosition.y.toFloat()
-//                points[idx + 4] = unit.tilePosition.x.toFloat() + unit.tileWidth()
-//                points[idx + 5] = unit.tilePosition.y.toFloat() + unit.tileHeight()
-//                points[idx + 6] = unit.tilePosition.x.toFloat()
-//                points[idx + 7] = unit.tilePosition.y.toFloat() + unit.tileHeight()
-//            }
-//            return@computeIfAbsent Polygon(convexHull.computePolygon(points, false).toArray())
-//        }
-//        if (poly.contains(pos.toVector())) return false
-//        if (poly.contains(pos.toVector().add(unitType.tileWidth().toFloat(), 0f))) return false
-//        if (poly.contains(pos.toVector().add(unitType.tileWidth().toFloat(), unitType.tileHeight().toFloat()))) return false
-//        if (poly.contains(pos.toVector().add(0f, unitType.tileHeight().toFloat()))) return false
-//        return true
-//    }
-//
+    private fun willNotBlockOtherAddon(unitType: UnitType, pos: TilePosition): Boolean {
+        val building = Envelope(pos.x.toDouble(), pos.y.toDouble(), unitType.tileWidth().toDouble(), unitType.tileHeight().toDouble())
+        return !units.mine.inRadius(pos.toPosition() + Position(0, unitType.height()), 100)
+                .any {
+                    val type = it.unitType
+                    type.canBuildAddon() && building.intersects(
+                            Envelope(it.tilePosition.x.toDouble() + type.tileWidth().toDouble(),
+                                    it.tilePosition.y.toDouble(), 2.0, type.tileHeight().toDouble()))
+                }
+    }
+
+    private fun hasNoAddonOrEnoughSpace(unitType: UnitType, pos: TilePosition): Boolean {
+        if (!unitType.canBuildAddon()) return true
+        val addonRect = Envelope((pos.x + unitType.tileWidth()).toDouble(), pos.y.toDouble(), 2.0, unitType.tileHeight().toDouble())
+
+        return game.canBuildHere(TilePosition(pos.x + unitType.tileWidth(), pos.y + 1), unitType)
+                && !units.allunits.inRadius(pos.toPosition() + Position(unitType.width(), unitType.height()), 100)
+                .any {
+                    it.unitType.isBuilding &&
+                            addonRect.intersects(Envelope(it.tilePosition.x.toDouble(),
+                                    it.tilePosition.y.toDouble(),
+                                    it.unitType.tileWidth().toDouble(),
+                                    it.unitType.tileHeight().toDouble()))
+                }
+    }
+
+    private fun outsideOfResourceLines(pos: TilePosition, unitType: UnitType): Boolean {
+        val base = bases.myBases.minBy { it.centerTile.getDistance(pos) } ?: return true
+        val poly = resourceBlockedGeometry.computeIfAbsent(base) {
+            val relevantUnits = units.allunits.inRadius(base.center, 400)
+                    .filter { it.unitType.isResourceContainer || it.unitType.isRefinery }
+                    .toMutableList()
+            val blockedGeometry = relevantUnits.map {
+                ConvexHull(geometryFactory.createGeometryCollection(arrayOf(it.tileGeometry, base.mainResourceDepot.tileGeometry)))
+                        .convexHull
+            }.toTypedArray()
+            return@computeIfAbsent geometryFactory.createGeometryCollection(blockedGeometry).union() as Polygonal
+        }
+        val endpos = pos + unitType.tileSize()
+        val toTest = geometryFactory.toGeometry(Envelope(Coordinate(pos.x.toDouble(), pos.y.toDouble()), Coordinate(endpos.x.toDouble(), endpos.y.toDouble())))
+        return poly is Geometry && !poly.intersects(toTest)
+    }
+
+    fun drawBlockedAreas() {
+        resourceBlockedGeometry.values.forEach { g ->
+            if (g is Polygon) {
+                val coordinateSequence = g.exteriorRing.coordinateSequence
+                for (i in 0 until coordinateSequence.size() - 1) {
+                    val a = coordinateSequence.getCoordinate(i)
+                    val b = coordinateSequence.getCoordinate(i + 1)
+                    Styx.game.drawLineMap(TilePosition(a.x.toInt(), a.y.toInt()).toPosition(),
+                            TilePosition(b.x.toInt(), b.y.toInt()).toPosition(), Color.Blue)
+                }
+            }
+        }
+    }
+
     private fun findPositionForGas(): TilePosition? {
         val geysers = Styx.units.geysers
         // TODO BASES!
-        return Styx.units.mine.filter { it.unitType.isResourceDepot }.asSequence()
+        return bases.myBases.asSequence()
                 .mapNotNull { base ->
-                    geysers.inRadius(base, 300).minBy { it.distanceTo(base) }?.initialTilePosition
+                    geysers.closestTo(base.mainResourceDepot.x, base.mainResourceDepot.y).orNull()?.tilePosition
                 }.firstOrNull()
     }
 }
