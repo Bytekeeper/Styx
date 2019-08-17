@@ -16,17 +16,22 @@ repositories {
     }
 }
 
+configurations.all {
+    resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+    resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
+}
+
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
-    implementation "com.github.JavaBWAPI:JBWAPI:0.7.1"
-    implementation 'com.github.Bytekeeper:ass:master-SNAPSHOT'
+    implementation "com.github.JavaBWAPI:JBWAPI:0.7.2"
+    implementation('com.github.Bytekeeper:ass:-SNAPSHOT').changing = true
     implementation 'org.locationtech.jts:jts-core:1.16.1'
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.5.1'
     testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.5.1'
 //    testImplementation 'org.junit.platform:junit-platform-launcher:1.5.1'
 //    testImplementation 'org.junit.platform:junit-platform-engine:1.5.1'
-    testImplementation 'org.assertj:assertj-core:3.13.1'
+    testImplementation 'org.assertj:assertj-core:3.13.2'
     test.useJUnitPlatform()
 }
 

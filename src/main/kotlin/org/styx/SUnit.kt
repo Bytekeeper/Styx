@@ -28,7 +28,9 @@ class SUnit private constructor(val unit: Unit) {
     var position = unit.position
         private set
     val id: Int = unit.id
-    var myUnit = unit.player == Styx.self
+    var myUnit = unit.player == self
+        private set
+    var enemyUnit = unit.player.isEnemy(self)
         private set
     var buildType: UnitType = unit.buildType
         private set
@@ -68,6 +70,7 @@ class SUnit private constructor(val unit: Unit) {
         owned = !unit.player.isNeutral
         position = unit.position
         myUnit = unit.player == self
+        enemyUnit = unit.player.isEnemy(self)
         gatheringGas = unit.isGatheringGas
         completed = unit.isCompleted
         buildType = unit.buildType
@@ -132,6 +135,12 @@ class SUnit private constructor(val unit: Unit) {
 
     fun train(type: UnitType) {
         unit.train(type)
+    }
+
+    fun rightClick(target: SUnit) {
+        if (sleeping) return
+        unit.rightClick(target.unit)
+        sleep()
     }
 
     fun weaponAgainst(other: SUnit): WeaponType = if (other.flying) unitType.airWeapon() else unitType.groundWeapon()

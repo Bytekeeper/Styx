@@ -74,13 +74,14 @@ object ConstructionPosition {
     }
 
     private fun outsideOfResourceLines(pos: TilePosition, unitType: UnitType): Boolean {
-        val base = bases.myBases.minBy { it.centerTile.getDistance(pos) } ?: return true
+        val base = bases.myBases.filter { it.mainResourceDepot != null }.minBy { it.centerTile.getDistance(pos) }
+                ?: return true
         val poly = resourceBlockedGeometry.computeIfAbsent(base) {
             val relevantUnits = units.allunits.inRadius(base.center, 400)
                     .filter { it.unitType.isResourceContainer || it.unitType.isRefinery }
                     .toMutableList()
             val blockedGeometry = relevantUnits.map {
-                ConvexHull(geometryFactory.createGeometryCollection(arrayOf(it.tileGeometry, base.mainResourceDepot.tileGeometry)))
+                ConvexHull(geometryFactory.createGeometryCollection(arrayOf(it.tileGeometry, base.mainResourceDepot!!.tileGeometry)))
                         .convexHull
             }.toTypedArray()
             return@computeIfAbsent geometryFactory.createGeometryCollection(blockedGeometry).union() as Polygonal
@@ -106,10 +107,11 @@ object ConstructionPosition {
 
     private fun findPositionForGas(): TilePosition? {
         val geysers = Styx.units.geysers
-        // TODO BASES!
         return bases.myBases.asSequence()
                 .mapNotNull { base ->
-                    geysers.closestTo(base.mainResourceDepot.x, base.mainResourceDepot.y).orNull()?.tilePosition
+                    val candidate = geysers.nearest(base.center.x, base.center.y)?.tilePosition
+                            ?: return@mapNotNull null
+                    if (candidate.getDistance(base.centerTile) < 8) candidate else null
                 }.firstOrNull()
     }
 }

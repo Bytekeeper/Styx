@@ -1,23 +1,27 @@
 package org.styx.task
 
 import bwapi.UnitType
-import org.styx.*
+import org.styx.BTNode
+import org.styx.NodeStatus
+import org.styx.Styx
+import org.styx.UnitLocks
 import org.styx.action.BasicActions
+import kotlin.math.min
 
 object Gathering : BTNode() {
     private val workers = UnitLocks { Styx.resources.availableUnits.filter { it.unitType.isWorker } }
 
-    override fun tick(): TickResult {
+    override fun tick(): NodeStatus {
         workers.reacquire()
         if (workers.units.isEmpty()) // No workers left? We have serious problems
-            return TickResult.RUNNING
+            return NodeStatus.RUNNING
+
         val pending = workers.units.toMutableList()
         val extractors = Styx.units.myCompleted(UnitType.Zerg_Extractor)
-        val missingGasWorkers = extractors.size * 3 - pending.count { it.gatheringGas }
+        val missingGasWorkers = min(extractors.size * 3 - pending.count { it.gatheringGas }, pending.size)
         pending.take(missingGasWorkers)
                 .forEach { worker ->
-                    val target = extractors.closestTo(worker.x, worker.y).orNull()
-                            ?: return@forEach
+                    val target = extractors.nearest(worker.x, worker.y) ?: return@forEach
                     if (worker.target != target && worker.target?.unitType?.isResourceDepot != true) {
                         BasicActions.gather(worker, target)
                     }
@@ -25,11 +29,10 @@ object Gathering : BTNode() {
 
         workers.units.forEach { worker ->
             if (worker.target?.unitType?.isResourceContainer != true && worker.target?.unitType?.isResourceDepot != true) {
-                val target = Styx.units.minerals.closestTo(worker.x, worker.y) { !it.beingGathered }.orNull()
-                        ?: return@forEach
+                val target = Styx.units.minerals.nearest(worker.x, worker.y) { !it.beingGathered } ?: return@forEach
                 BasicActions.gather(worker, target)
             }
         }
-        return TickResult.RUNNING
+        return NodeStatus.RUNNING
     }
 }

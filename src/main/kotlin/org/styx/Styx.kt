@@ -5,11 +5,12 @@ import bwapi.Unit
 import bwem.BWMap
 import org.bk.ass.cluster.Cluster
 import org.bk.ass.cluster.StableDBScanner
-import org.bk.ass.query.PositionAndId
-import org.bk.ass.query.UnitFinder
+import org.bk.ass.manage.GMS
+import org.bk.ass.query.PositionQueries
+import org.styx.Styx.units
 import java.util.*
 
-val positionAndIdExtractor: (SUnit) -> PositionAndId = { PositionAndId(it.id, it.x, it.y) }
+val positionExtractor: (SUnit) -> org.bk.ass.path.Position = { org.bk.ass.path.Position(it.x, it.y) }
 
 object Styx {
     lateinit var game: Game
@@ -29,6 +30,8 @@ object Styx {
         private set
     var clusters = Clusters()
         private set
+    var buildPlan = BuildPlan()
+        private set
     lateinit var self: Player
         private set
 
@@ -40,6 +43,7 @@ object Styx {
         resources.update()
         bases.update()
         clusters.update()
+        buildPlan.update()
     }
 }
 
@@ -56,66 +60,81 @@ class Clusters {
     }
 }
 
-
-class Units {
-    var ownedUnits = UnitFinder(positionAndIdExtractor)
-        private set
-    var allunits = UnitFinder(positionAndIdExtractor)
-        private set
-    var mine = UnitFinder(positionAndIdExtractor)
-        private set
-    var enemy = UnitFinder(positionAndIdExtractor)
-        private set
-    var workers = UnitFinder(positionAndIdExtractor)
-        private set
-    var resourceDepots = UnitFinder(positionAndIdExtractor)
-        private set
-    var minerals = UnitFinder(positionAndIdExtractor)
-        private set
-    var geysers = UnitFinder(positionAndIdExtractor)
-        private set
-    private val myX = mutableMapOf<UnitType, LazyOnFrame<UnitFinder<SUnit>>>()
-    private val myCompleted = mutableMapOf<UnitType, LazyOnFrame<UnitFinder<SUnit>>>()
+class BuildPlan {
+    val pendingUnits = mutableListOf<UnitType>()
 
     fun update() {
-        allunits = UnitFinder(Styx.game.allUnits.map { SUnit.forUnit(it) }, positionAndIdExtractor)
-        allunits.forEach { it.update() }
-        ownedUnits = UnitFinder(allunits.filter { it.owned }, positionAndIdExtractor)
-        minerals = UnitFinder(Styx.game.minerals.map { SUnit.forUnit(it) }, positionAndIdExtractor)
-        geysers = UnitFinder(Styx.game.geysers.map { SUnit.forUnit(it) }, positionAndIdExtractor)
+        pendingUnits.clear()
+    }
+}
 
-        mine = UnitFinder(Styx.game.self().units.map { SUnit.forUnit(it) }, positionAndIdExtractor)
-        resourceDepots = UnitFinder(mine.filter { it.unitType.isResourceDepot }, positionAndIdExtractor)
-        workers = UnitFinder(mine.filter { it.unitType.isWorker }, positionAndIdExtractor)
+class Units {
+    lateinit var ownedUnits: PositionQueries<SUnit>
+        private set
+    lateinit var allunits: PositionQueries<SUnit>
+        private set
+    lateinit var mine: PositionQueries<SUnit>
+        private set
+    lateinit var enemy: PositionQueries<SUnit>
+        private set
+    lateinit var workers: PositionQueries<SUnit>
+        private set
+    lateinit var resourceDepots: PositionQueries<SUnit>
+        private set
+    lateinit var minerals: PositionQueries<SUnit>
+        private set
+    lateinit var geysers: PositionQueries<SUnit>
+        private set
+    private val myX = mutableMapOf<UnitType, LazyOnFrame<PositionQueries<SUnit>>>()
+    private val myCompleted = mutableMapOf<UnitType, LazyOnFrame<PositionQueries<SUnit>>>()
 
-        enemy = UnitFinder(Styx.game.enemy().units.map { SUnit.forUnit(it) }, positionAndIdExtractor)
+    fun update() {
+        val allSUnits = Styx.game.allUnits.map { SUnit.forUnit(it) }
+        allSUnits.forEach { it.update() }
+        allunits = PositionQueries(allSUnits, positionExtractor)
+        ownedUnits = PositionQueries(allSUnits.filter { it.owned }, positionExtractor)
+        minerals = PositionQueries(allSUnits.filter { it.unitType.isMineralField }, positionExtractor)
+        geysers = PositionQueries(allSUnits.filter { it.unitType == UnitType.Resource_Vespene_Geyser }, positionExtractor)
+
+        mine = PositionQueries(allSUnits.filter { it.myUnit }, positionExtractor)
+        resourceDepots = PositionQueries(mine.filter { it.unitType.isResourceDepot }, positionExtractor)
+        workers = PositionQueries(mine.filter { it.unitType.isWorker }, positionExtractor)
+
+        enemy = PositionQueries(allSUnits.filter { it.enemyUnit }, positionExtractor)
     }
 
-    fun my(type: UnitType): UnitFinder<SUnit> =
-            myX.computeIfAbsent(type) { LazyOnFrame { UnitFinder(mine.filter { it.unitType == type }, positionAndIdExtractor) } }.value
+    fun my(type: UnitType): PositionQueries<SUnit> =
+            myX.computeIfAbsent(type) { LazyOnFrame { PositionQueries(mine.filter { it.unitType == type }, positionExtractor) } }.value
 
-    fun myCompleted(type: UnitType): UnitFinder<SUnit> =
-            myCompleted.computeIfAbsent(type) { LazyOnFrame { UnitFinder(mine.filter { it.unitType == type && it.completed }, positionAndIdExtractor) } }.value
+    fun myCompleted(type: UnitType): PositionQueries<SUnit> =
+            myCompleted.computeIfAbsent(type) { LazyOnFrame { PositionQueries(mine.filter { it.unitType == type && it.completed }, positionExtractor) } }.value
 
     fun onUnitDestroy(unit: Unit) {
 
     }
 }
 
-class Base(val mainResourceDepot: SUnit) {
-    val center get() = mainResourceDepot.position
-    val centerTile get() = mainResourceDepot.tilePosition
-}
+class Base(val centerTile: TilePosition,
+           val center: Position,
+           var mainResourceDepot: SUnit? = null)
 
 class Bases {
+    lateinit var bases: List<Base>
+        private set
     lateinit var myBases: List<Base>
         private set
 
     fun update() {
-        myBases = Styx.map.bases.mapNotNull {
-            val base = Styx.units.resourceDepots.closestTo(it.center.x, it.center.y).orNull() ?: return@mapNotNull null
-            if (base.distanceTo(it.center) < 80) base else null
-        }.map { Base(it) }
+        if (!this::bases.isInitialized) {
+            bases = Styx.map.bases.map {
+                Base(it.location, it.center)
+            }
+        }
+        bases.forEach {
+            val resourceDepot = units.resourceDepots.nearest(it.center.x, it.center.y)
+            it.mainResourceDepot = if (resourceDepot.distanceTo(it.center) < 80) resourceDepot else null
+        }
+        myBases = bases.filter { it.mainResourceDepot?.myUnit == true }
     }
 }
 
@@ -128,4 +147,6 @@ operator fun TilePosition.plus(other: TilePosition) = add(other)
 
 fun <T> Optional<T>.orNull(): T? = orElse(null)
 
-fun <T> UnitFinder<T>.inRadius(pos: Position, radius: Int) = inRadius(pos.x, pos.y, radius)
+fun <T> PositionQueries<T>.inRadius(pos: Position, radius: Int) = inRadius(pos.x, pos.y, radius)
+
+operator fun GMS.minus(value: GMS) = subtract(value)

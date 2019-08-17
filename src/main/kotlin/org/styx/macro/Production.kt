@@ -5,6 +5,7 @@ import bwapi.TilePosition
 import bwapi.UnitType
 import bwapi.UpgradeType
 import org.styx.*
+import org.styx.Styx.buildPlan
 import org.styx.Styx.game
 import org.styx.action.BasicActions
 import java.util.*
@@ -21,30 +22,32 @@ class Build(val type: UnitType) : MemoLeaf() {
     }
     private val costLock = UnitCostLock(type)
 
-    override fun performTick(): TickResult {
+    override fun performTick(): NodeStatus {
         at?.let {
             val targetPos = it.toPosition() + type.dimensions / 2
-            val candidate = Styx.units.my(type).closestTo(targetPos.x, targetPos.y).orNull()
+            val candidate = Styx.units.my(type).nearest(targetPos.x, targetPos.y)
             if (candidate?.tilePosition == it)
-                return TickResult.DONE
+                return NodeStatus.DONE
             if (!game.canBuildHere(it, type, workerLock.unit?.unit))
                 at = null
         }
-        val buildAt = at ?: ConstructionPosition.findPositionFor(type) ?: return TickResult.RUNNING
+        buildPlan.pendingUnits += type
+        val buildAt = at ?: ConstructionPosition.findPositionFor(type) ?: return NodeStatus.RUNNING
         at = buildAt
         costLock.acquire()
         workerLock.acquire()
-        val worker = workerLock.unit ?: return TickResult.RUNNING
+        val worker = workerLock.unit ?: return NodeStatus.RUNNING
         if (costLock.willBeSatisfied)
             BasicActions.build(worker, type, buildAt)
         else
             workerLock.release()
-        return TickResult.RUNNING
+        return NodeStatus.RUNNING
     }
 
     override fun reset() {
         super.reset()
         workerLock.reset()
+        at = null
     }
 }
 
@@ -52,20 +55,22 @@ class Build(val type: UnitType) : MemoLeaf() {
  * Trigger training of unit, don't wait for completion
  */
 class Train(private val type: UnitType) : MemoLeaf() {
-    private val trainerLock = UnitLock { Styx.resources.availableUnits.firstOrNull { it.unitType == type.whatBuilds().first } }
+    private val trainerLock = UnitLock({ it.unitType == type.whatBuilds().first || it.buildType == type}) { Styx.resources.availableUnits.firstOrNull { it.unitType == type.whatBuilds().first } }
     private val costLock = UnitCostLock(type)
 
-    override fun performTick(): TickResult {
+    override fun performTick(): NodeStatus {
         if (trainerLock.unit?.unitType == type)
-            return TickResult.DONE
+            return NodeStatus.DONE
+        buildPlan.pendingUnits += type
+        if (trainerLock.unit?.buildType == type)
+            return NodeStatus.RUNNING
         trainerLock.acquire()
         costLock.acquire()
         if (!costLock.satisfied)
-            return TickResult.RUNNING
-        val trainer = trainerLock.unit ?: return TickResult.RUNNING
-        if (trainer.unitType == type || trainer.buildType == type) return TickResult.DONE
+            return NodeStatus.RUNNING
+        val trainer = trainerLock.unit ?: return NodeStatus.RUNNING
         BasicActions.train(trainer, type)
-        return TickResult.RUNNING
+        return NodeStatus.RUNNING
     }
 
     override fun reset() {
@@ -77,10 +82,10 @@ class Train(private val type: UnitType) : MemoLeaf() {
 class Get(private val amount: Int, val type: UnitType) : MemoLeaf() {
     private val children = ArrayDeque<BTNode>()
 
-    override fun performTick(): TickResult {
+    override fun performTick(): NodeStatus {
         val remaining = max(0, amount - Styx.units.my(type).size)
         if (remaining == 0)
-            return TickResult.DONE
+            return NodeStatus.DONE
         val expectedChildCount = if (type.isTwoUnitsInOneEgg) (remaining + 1) / 2 else remaining
         repeat(expectedChildCount - children.size) {
             children += if (type.isBuilding) Build(type) else Train(type)
@@ -96,15 +101,15 @@ class Upgrade(private val upgrade: UpgradeType, private val level: Int) : MemoLe
     private val costLock = UpgradeCostLock(upgrade, level)
     private val researcherLock = UnitLock() { Styx.resources.availableUnits.firstOrNull { it.unitType == upgrade.whatUpgrades() } }
 
-    override fun performTick(): TickResult {
-        if (Styx.self.getUpgradeLevel(upgrade) == level) return TickResult.DONE
+    override fun performTick(): NodeStatus {
+        if (Styx.self.getUpgradeLevel(upgrade) == level) return NodeStatus.DONE
         costLock.acquire()
         if (costLock.satisfied) {
             researcherLock.acquire()
-            val researcher = researcherLock.unit ?: return TickResult.RUNNING
+            val researcher = researcherLock.unit ?: return NodeStatus.RUNNING
             researcher.upgrade(upgrade)
         }
-        return TickResult.RUNNING
+        return NodeStatus.RUNNING
     }
 }
 
@@ -113,15 +118,15 @@ class Research(private val tech: TechType) : MemoLeaf() {
     private val costLock = TechCostLock(tech)
     private val researcherLock = UnitLock() { Styx.resources.availableUnits.firstOrNull { it.unitType == tech.whatResearches() } }
 
-    override fun performTick(): TickResult {
-        if (Styx.self.hasResearched(tech)) return TickResult.DONE
+    override fun performTick(): NodeStatus {
+        if (Styx.self.hasResearched(tech)) return NodeStatus.DONE
         costLock.acquire()
         if (costLock.satisfied) {
             researcherLock.acquire()
-            val researcher = researcherLock.unit ?: return TickResult.RUNNING
+            val researcher = researcherLock.unit ?: return NodeStatus.RUNNING
             researcher.research(tech)
         }
-        return TickResult.RUNNING
+        return NodeStatus.RUNNING
     }
 
 }
@@ -131,15 +136,15 @@ class Morph(private val type: UnitType) : MemoLeaf() {
     private val morphLock = UnitLock() { Styx.resources.availableUnits.firstOrNull { it.unitType == type.whatBuilds().first } }
     private val costLock = UnitCostLock(type)
 
-    override fun performTick(): TickResult {
+    override fun performTick(): NodeStatus {
         if (morphLock.unit?.unitType == type)
-            return TickResult.DONE
+            return NodeStatus.DONE
         costLock.acquire()
         if (costLock.satisfied) {
             morphLock.acquire()
-            val unitToMorph = morphLock.unit ?: return TickResult.RUNNING
+            val unitToMorph = morphLock.unit ?: return NodeStatus.RUNNING
             BasicActions.morph(unitToMorph, type)
         }
-        return TickResult.RUNNING
+        return NodeStatus.RUNNING
     }
 }

@@ -1,11 +1,10 @@
 package org.styx
 
 import bwapi.TechType
-import bwapi.UnitFilter
 import bwapi.UnitType
 import bwapi.UpgradeType
-import org.bk.ass.query.UnitFinder
-import kotlin.math.max
+import org.bk.ass.manage.GMS
+import org.bk.ass.query.PositionQueries
 
 abstract class Lock<T : Any>(val criteria: (T) -> Boolean = { true }, val selector: () -> T?) {
     protected var item: T? = null
@@ -45,6 +44,7 @@ abstract class Lock<T : Any>(val criteria: (T) -> Boolean = { true }, val select
             require(reserved)
         }
     }
+
     abstract fun releaseItem(item: T)
     abstract fun tryReserve(item: T): Boolean
 }
@@ -99,29 +99,24 @@ class UnitCostLock(type: UnitType, futureFrames: Int = 0) : GMSLock(GMS(type.gas
 class UpgradeCostLock(type: UpgradeType, level: Int, futureFrames: Int = 0) : GMSLock(GMS(type.gasPrice(level), type.mineralPrice(level), 0), futureFrames)
 class TechCostLock(type: TechType, futureFrames: Int = 0) : GMSLock(GMS(type.gasPrice(), type.mineralPrice(), 0), futureFrames)
 
-class GMS(val gas: Int, val minerals: Int, val supply: Int) {
-    operator fun minus(sub: GMS) = GMS(gas - sub.gas, minerals - sub.minerals, supply - sub.supply)
-    fun gtOrEq(other: GMS) = max(gas, 0) >= other.gas && max(minerals, 0) >= other.minerals && max(supply, 0) >= other.supply
-}
-
 class Resources {
-    val availableUnits = UnitFinder(positionAndIdExtractor)
-    private var availableGMS = GMS(0, 0, 0)
+    lateinit var availableUnits: PositionQueries<SUnit>
+    var availableGMS = GMS(0, 0, 0)
+        private set
 
     fun update() {
         availableGMS = GMS(Styx.self.gas(), Styx.self.minerals(), Styx.self.supplyTotal() - Styx.self.supplyUsed())
-        availableUnits.clear()
-        availableUnits.addAll(Styx.units.mine)
+        availableUnits = PositionQueries(Styx.units.mine, positionExtractor)
     }
 
     fun tryReserveUnits(units: Collection<SUnit>): Boolean =
             if (availableUnits.containsAll(units)) {
-                availableUnits -= units
+                availableUnits.removeAll(units)
                 true
             } else false
 
     fun tryReserveGMS(gms: GMS): Boolean =
-            if (availableGMS.gtOrEq(gms)) {
+            if (availableGMS.greaterOrEqual(gms)) {
                 availableGMS -= gms
                 true
             } else false
@@ -133,10 +128,10 @@ class Resources {
     fun tryReserveUnit(unit: SUnit): Boolean = availableUnits.remove(unit)
 
     fun releaseUnits(units: Collection<SUnit>) {
-        availableUnits += units
+        availableUnits.addAll(units)
     }
 
     fun releaseUnit(unit: SUnit) {
-        availableUnits += unit
+        availableUnits.add(unit)
     }
 }

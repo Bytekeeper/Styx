@@ -1,6 +1,6 @@
 package org.styx
 
-enum class TickResult {
+enum class NodeStatus {
     RUNNING,
     DONE,
     FAILED
@@ -11,7 +11,7 @@ abstract class BTNode {
         private set
     fun <T> board() = tree!!.board<T>()
     open val priority: Double = 0.0
-    abstract fun tick(): TickResult
+    abstract fun tick(): NodeStatus
     open fun setTree(tree: BehaviorTree) {
         this.tree = tree
     }
@@ -19,13 +19,13 @@ abstract class BTNode {
     open fun reset() {}
 
     companion object {
-        fun tickPar(childResults: Sequence<TickResult>): TickResult {
-            val results = childResults.takeWhile { it != TickResult.FAILED }.toList()
-            if (results.last() == TickResult.FAILED)
-                return TickResult.FAILED
-            if (results.any { it == TickResult.RUNNING })
-                return TickResult.RUNNING
-            return TickResult.DONE
+        fun tickPar(childResults: Sequence<NodeStatus>): NodeStatus {
+            val results = childResults.takeWhile { it != NodeStatus.FAILED }.toList()
+            if (results.last() == NodeStatus.FAILED)
+                return NodeStatus.FAILED
+            if (results.any { it == NodeStatus.RUNNING })
+                return NodeStatus.RUNNING
+            return NodeStatus.DONE
         }
     }
 }
@@ -46,35 +46,35 @@ abstract class CompoundNode(val name: String, private vararg val children: BTNod
     protected val tickedChilds get() = children.sortedByDescending { it.priority }.asSequence().map { it.tick() }
     override fun setTree(tree: BehaviorTree) = children.forEach { it.setTree((tree)) }
     override fun reset() = children.forEach { it.reset() }
-    final override fun tick(): TickResult {
+    final override fun tick(): NodeStatus {
         val result = performTick()
-        if (result != TickResult.RUNNING) reset()
+        if (result != NodeStatus.RUNNING) reset()
         return result
     }
 
-    abstract fun performTick(): TickResult
+    abstract fun performTick(): NodeStatus
 }
 
 open class Sel(name: String, vararg children: BTNode) : CompoundNode(name, *children) {
-    override fun performTick(): TickResult =
-            tickedChilds.firstOrNull { it != TickResult.FAILED }
-                    ?: TickResult.FAILED
+    override fun performTick(): NodeStatus =
+            tickedChilds.firstOrNull { it != NodeStatus.FAILED }
+                    ?: NodeStatus.FAILED
 }
 
 open class Seq(name: String, vararg children: BTNode) : CompoundNode(name, *children) {
-    override fun performTick(): TickResult = tickedChilds
-            .takeWhile { it == TickResult.DONE }.lastOrNull()
-            ?: TickResult.DONE
+    override fun performTick(): NodeStatus = tickedChilds
+            .takeWhile { it == NodeStatus.DONE }.lastOrNull()
+            ?: NodeStatus.DONE
 }
 
 open class Par(name: String, vararg children: BTNode) : CompoundNode(name, *children) {
-    override fun performTick(): TickResult = BTNode.tickPar(tickedChilds)
+    override fun performTick(): NodeStatus = BTNode.tickPar(tickedChilds)
 }
 
 class Memo(private val delegate: BTNode) : BTNode() {
-    var result: TickResult? = null
+    var result: NodeStatus? = null
 
-    override fun tick(): TickResult = result ?: run {
+    override fun tick(): NodeStatus = result ?: run {
         val childResult = delegate.tick()
         result = childResult
         childResult
@@ -87,11 +87,11 @@ class Memo(private val delegate: BTNode) : BTNode() {
 }
 
 abstract class MemoLeaf : BTNode() {
-    var result: TickResult? = null
+    var result: NodeStatus? = null
 
-    override fun tick(): TickResult = result ?: run {
+    override fun tick(): NodeStatus = result ?: run {
         val childResult = performTick()
-        if (childResult != TickResult.RUNNING) result = childResult
+        if (childResult != NodeStatus.RUNNING) result = childResult
         childResult
     }
 
@@ -99,26 +99,26 @@ abstract class MemoLeaf : BTNode() {
         result = null
     }
 
-    abstract fun performTick(): TickResult
+    abstract fun performTick(): NodeStatus
 }
 
 class Condition(private val condition: () -> Boolean) : BTNode() {
-    override fun tick(): TickResult = if (condition()) TickResult.DONE else TickResult.RUNNING
+    override fun tick(): NodeStatus = if (condition()) NodeStatus.DONE else NodeStatus.RUNNING
 }
 
 class Repeat(private val amount: Int = -1, private val delegate: BTNode) : BTNode() {
     private var remaining = amount
 
-    override fun tick(): TickResult {
-        if (remaining == 0) return TickResult.DONE
+    override fun tick(): NodeStatus {
+        if (remaining == 0) return NodeStatus.DONE
         val result = delegate.tick()
-        if (result != TickResult.DONE) return result
+        if (result != NodeStatus.DONE) return result
         if (remaining > 0) {
             remaining--
-            if (remaining == 0) return TickResult.DONE
+            if (remaining == 0) return NodeStatus.DONE
         }
         delegate.reset()
-        return TickResult.RUNNING
+        return NodeStatus.RUNNING
     }
 
     override fun reset() {
@@ -134,14 +134,14 @@ class Repeat(private val amount: Int = -1, private val delegate: BTNode) : BTNod
 class ChildTrees<T>(private val source: () -> List<T>, private val treeProducer: (T) -> BehaviorTree) : BTNode() {
     private val currentTrees = mutableMapOf<T, BehaviorTree>()
 
-    override fun tick(): TickResult {
+    override fun tick(): NodeStatus {
         val list = source()
         currentTrees.keys.retainAll(list)
         list.forEach { s ->
             val result = currentTrees.computeIfAbsent(s, treeProducer).tick()
-            if (result != TickResult.RUNNING) currentTrees.remove(s)
+            if (result != NodeStatus.RUNNING) currentTrees.remove(s)
         }
-        return TickResult.RUNNING
+        return NodeStatus.RUNNING
     }
 
     override fun reset() {
