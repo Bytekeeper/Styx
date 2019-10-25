@@ -7,14 +7,8 @@ enum class NodeStatus {
 }
 
 abstract class BTNode {
-    var tree: BehaviorTree? = null
-        private set
-    fun <T> board() = tree!!.board<T>()
     open val priority: Double = 0.0
     abstract fun tick(): NodeStatus
-    open fun setTree(tree: BehaviorTree) {
-        this.tree = tree
-    }
 
     open fun reset() {}
 
@@ -30,21 +24,8 @@ abstract class BTNode {
     }
 }
 
-class BehaviorTree(private val root: BTNode, private val board: Any? = null) {
-    init {
-        root.setTree(this)
-    }
-
-    fun tick() = root.tick()
-
-    fun reset() = root.reset()
-
-    fun <T> board() = board as T
-}
-
 abstract class CompoundNode(val name: String, private vararg val children: BTNode) : BTNode() {
     protected val tickedChilds get() = children.sortedByDescending { it.priority }.asSequence().map { it.tick() }
-    override fun setTree(tree: BehaviorTree) = children.forEach { it.setTree((tree)) }
     override fun reset() = children.forEach { it.reset() }
     final override fun tick(): NodeStatus {
         val result = performTick()
@@ -125,27 +106,5 @@ class Repeat(private val amount: Int = -1, private val delegate: BTNode) : BTNod
         remaining = amount
         delegate.reset()
     }
-
-    override fun setTree(tree: BehaviorTree) {
-        delegate.setTree(tree)
-    }
 }
 
-class ChildTrees<T>(private val source: () -> List<T>, private val treeProducer: (T) -> BehaviorTree) : BTNode() {
-    private val currentTrees = mutableMapOf<T, BehaviorTree>()
-
-    override fun tick(): NodeStatus {
-        val list = source()
-        currentTrees.keys.retainAll(list)
-        list.forEach { s ->
-            val result = currentTrees.computeIfAbsent(s, treeProducer).tick()
-            if (result != NodeStatus.RUNNING) currentTrees.remove(s)
-        }
-        return NodeStatus.RUNNING
-    }
-
-    override fun reset() {
-        super.reset()
-        currentTrees.values.forEach { it.reset() }
-    }
-}

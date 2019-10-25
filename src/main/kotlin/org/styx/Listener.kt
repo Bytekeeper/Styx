@@ -1,24 +1,26 @@
 package org.styx
 
-import bwapi.BWClient
-import bwapi.DefaultBWListener
-import bwapi.Game
+import bwapi.*
 import bwapi.Unit
 import bwem.BWEM
 import org.styx.Styx.bases
-import org.styx.task.SquadDispatch
+import org.styx.Styx.buildPlan
 import org.styx.task.FollowBO
 import org.styx.task.Gathering
+import org.styx.task.Scouting
+import org.styx.task.SquadDispatch
 
 class Listener : DefaultBWListener() {
     private lateinit var game: Game
     private val client = BWClient(this)
+    private var maxFrameTime = 0L;
 
-    private val aiTree = BehaviorTree(Par("Main AI Tree",
+    private val aiTree = Par("Main AI Tree",
             SquadDispatch,
             FollowBO,
-            Gathering
-    ))
+            Gathering,
+            Scouting
+    )
 
     override fun onStart() {
         game = client.game
@@ -29,15 +31,29 @@ class Listener : DefaultBWListener() {
     }
 
     override fun onFrame() {
+        val timed = Timed()
         Styx.update()
 
         aiTree.tick()
         ConstructionPosition.drawBlockedAreas()
         game.drawTextScreen(10, 10, "${bases.myBases.size}")
+        buildPlan.showPlanned(Position(10, 20))
+        val frameTime = timed.ms()
+        if (frameTime > maxFrameTime && game.frameCount > 0) {
+            System.err.println("frame ${game.frameCount} - max frame time: ${frameTime}ms")
+            Styx.frameTimes.forEach {
+                System.err.println("${it.name} : ${it.ms()}ms")
+            }
+            maxFrameTime = frameTime
+        }
     }
 
     override fun onUnitDestroy(unit: Unit) {
         Styx.units.onUnitDestroy(unit)
+    }
+
+    override fun onUnitHide(unit: Unit?) {
+        super.onUnitHide(unit)
     }
 
     fun start() {

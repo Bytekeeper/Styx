@@ -4,6 +4,7 @@ import bwapi.TechType
 import bwapi.UnitType
 import bwapi.UpgradeType
 import org.bk.ass.manage.GMS
+import org.bk.ass.manage.Reservation
 import org.bk.ass.query.PositionQueries
 
 abstract class Lock<T : Any>(val criteria: (T) -> Boolean = { true }, val selector: () -> T?) {
@@ -20,7 +21,7 @@ abstract class Lock<T : Any>(val criteria: (T) -> Boolean = { true }, val select
     }
 
     fun release() {
-        item?.let { releaseItem(it) }
+        releaseItem()
         item = null
     }
 
@@ -45,7 +46,7 @@ abstract class Lock<T : Any>(val criteria: (T) -> Boolean = { true }, val select
         }
     }
 
-    abstract fun releaseItem(item: T)
+    abstract fun releaseItem()
     abstract fun tryReserve(item: T): Boolean
 }
 
@@ -60,7 +61,9 @@ class UnitLocks(criteria: (Collection<SUnit>) -> Boolean = { true }, selector: (
         return false
     }
 
-    override fun releaseItem(item: Collection<SUnit>) = Styx.resources.releaseUnits(item)
+    override fun releaseItem() {
+        item?.let { Styx.resources.releaseUnits(it) }
+    }
 }
 
 class UnitLock(criteria: (SUnit) -> Boolean = { true }, selector: () -> SUnit?) : Lock<SUnit>(criteria, selector) {
@@ -74,10 +77,12 @@ class UnitLock(criteria: (SUnit) -> Boolean = { true }, selector: () -> SUnit?) 
         return false
     }
 
-    override fun releaseItem(item: SUnit) = Styx.resources.releaseUnit(item)
+    override fun releaseItem(){
+        item?.let { Styx.resources.releaseUnit(it) }
+    }
 }
 
-open class GMSLock(val gms: GMS, val futureFrames: Int = 0) {
+open class GMSLock(val gms: GMS) {
     var satisfied = false
         private set
     var willBeSatisfied = false
@@ -95,9 +100,9 @@ open class GMSLock(val gms: GMS, val futureFrames: Int = 0) {
     }
 }
 
-class UnitCostLock(type: UnitType, futureFrames: Int = 0) : GMSLock(GMS(type.gasPrice(), type.mineralPrice(), type.supplyRequired()), futureFrames)
-class UpgradeCostLock(type: UpgradeType, level: Int, futureFrames: Int = 0) : GMSLock(GMS(type.gasPrice(level), type.mineralPrice(level), 0), futureFrames)
-class TechCostLock(type: TechType, futureFrames: Int = 0) : GMSLock(GMS(type.gasPrice(), type.mineralPrice(), 0), futureFrames)
+class UnitCostLock(type: UnitType) : GMSLock(GMS(type.gasPrice(), type.mineralPrice(), type.supplyRequired()))
+class UpgradeCostLock(type: UpgradeType, level: Int) : GMSLock(GMS(type.gasPrice(level), type.mineralPrice(level), 0))
+class TechCostLock(type: TechType) : GMSLock(GMS(type.gasPrice(), type.mineralPrice(), 0))
 
 class Resources {
     lateinit var availableUnits: PositionQueries<SUnit>
@@ -123,6 +128,10 @@ class Resources {
 
     fun reserveGMS(gms: GMS) {
         availableGMS -= gms
+    }
+
+    fun releaseGMS(gms: GMS) {
+        availableGMS += gms
     }
 
     fun tryReserveUnit(unit: SUnit): Boolean = availableUnits.remove(unit)

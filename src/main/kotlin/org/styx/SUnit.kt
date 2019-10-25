@@ -3,60 +3,90 @@ package org.styx
 import bwapi.*
 import bwapi.Unit
 import org.bk.ass.info.BWMirrorUnitInfo
+import org.bk.ass.sim.Agent
+import org.bk.ass.sim.BWMirrorAgentFactory
 import org.locationtech.jts.geom.Coordinate
 import org.locationtech.jts.geom.Envelope
 import org.locationtech.jts.geom.Geometry
 import org.locationtech.jts.geom.GeometryFactory
+import org.locationtech.jts.math.Vector2D
+import org.styx.Styx.game
 import org.styx.Styx.self
 import kotlin.math.max
 
 class SUnit private constructor(val unit: Unit) {
     private var readyOnFrame = 0
-    var x = unit.x
+    private var stimTimer: Int = 0
+    var shields: Int = 0
         private set
-    var y = unit.y
+    var hitPoints: Int = 0
         private set
-    var visible = true
+    var x = 0
+        private set
+    var y = 0
+        private set
+    var moving = false
+        private set
+    var visible = false
+        private set
+    var exists = false
         private set
     var completed = false
         private set
-    var detected = unit.isDetected
+    var detected = false
         private set
     val initialTilePosition = unit.initialTilePosition
-    var tilePosition = unit.tilePosition
+    lateinit var tilePosition: TilePosition
         private set
-    var position = unit.position
+    lateinit var position: Position
         private set
     val id: Int = unit.id
-    var myUnit = unit.player == self
+    var myUnit = false
+    var enemyUnit: Boolean = false
+    lateinit var buildType: UnitType
         private set
-    var enemyUnit = unit.player.isEnemy(self)
+    var unitType: UnitType = unit.type
         private set
-    var buildType: UnitType = unit.buildType
+    var flying = false
         private set
-    var unitType = unit.type
+    var carryingGas = false
         private set
-    var flying = unit.isFlying
+    var carryingMinerals = false
         private set
-    var carryingGas = unit.isCarryingGas
+    var gatheringGas = false
         private set
-    var carryingMinerals = unit.isCarryingMinerals
+    var gatheringMinerals = false
         private set
-    var gatheringGas = unit.isGatheringGas
-        private set
-    var owned = !unit.player.isNeutral
-        private set
+    val gathering get() = gatheringGas || gatheringMinerals
+    val carrying: Boolean get() = carryingGas || carryingMinerals
+    val owned get() = !player.isNeutral
     val ready get() = readyOnFrame < Styx.frame
     val sleeping get() = readyOnFrame >= Styx.frame
-    var target: SUnit? = unit.target?.let { forUnit(it) }
+    var target: SUnit? = null
     val returningMinerals get() = unit.isCarrying && unit.target?.type?.isResourceDepot == true
-    var beingGathered = unit.isBeingGathered
+    var beingGathered = false
         private set
+
     val controller = Controller()
+    private lateinit var lastAgent: Agent
+    private var lastSeenFrame = 0
+    private var lastDamageFrame: Int? = null
+    lateinit var player: Player
+        private set
+    lateinit var velocity: Vector2D
+        private set
+    var topSpeed: Double = 0.0
+        private set
+    val stopFrames = BWMirrorUnitInfo.stopFrames(unitType)
+    var remainingBuildTime = 0
+        private set
 
     fun update() {
         visible = unit.isVisible
-        if (!unit.isVisible) return
+        if (!unit.isVisible && Styx.frame > 0) return
+        lastAgent = agentFactory.of(unit).setUserObject(this)
+        lastSeenFrame = game.frameCount
+        exists = unit.exists()
         unitType = unit.type
         tilePosition = unit.tilePosition
         x = unit.x
@@ -67,16 +97,27 @@ class SUnit private constructor(val unit: Unit) {
         carryingMinerals = unit.isCarryingMinerals
         beingGathered = unit.isBeingGathered
         detected = unit.isDetected
-        owned = !unit.player.isNeutral
         position = unit.position
-        myUnit = unit.player == self
-        enemyUnit = unit.player.isEnemy(self)
         gatheringGas = unit.isGatheringGas
+        gatheringMinerals = unit.isGatheringMinerals
         completed = unit.isCompleted
         buildType = unit.buildType
+        if (unit.hitPoints < hitPoints) {
+            lastDamageFrame = game.frameCount
+        }
+        hitPoints = unit.hitPoints
+        shields = unit.shields
+        moving = unit.isMoving
+        player = unit.player
+        velocity = Vector2D(unit.velocityX, unit.velocityY)
+        topSpeed = player.topSpeed(unitType)
+        remainingBuildTime = unit.remainingBuildTime
+        enemyUnit = player.isEnemy(self)
+        myUnit = player == self
+        stimTimer = unit.stimTimer
     }
 
-    fun distanceTo(other: SUnit) = if (other.visible) unit.getDistance(other.unit) else position.getApproxDistance(other.position)
+    fun distanceTo(other: SUnit) = if (other.visible) unit.getDistance(other.unit) else position.getDistance(other.position).toInt()
     fun distanceTo(pos: Position) = position.getDistance(pos)
     fun distanceTo(pos: TilePosition) = tilePosition.getDistance(pos)
 
@@ -101,6 +142,7 @@ class SUnit private constructor(val unit: Unit) {
 
     fun attack(other: SUnit) {
         if (sleeping) return
+        if (target == other) return
         unit.attack(other.unit)
         sleep(BWMirrorUnitInfo.stopFrames(unitType))
     }
@@ -134,7 +176,9 @@ class SUnit private constructor(val unit: Unit) {
     }
 
     fun train(type: UnitType) {
+        if (sleeping) return
         unit.train(type)
+        sleep()
     }
 
     fun rightClick(target: SUnit) {
@@ -143,12 +187,38 @@ class SUnit private constructor(val unit: Unit) {
         sleep()
     }
 
+    fun stop() {
+        unit.stop();
+    }
+
+    fun inAttackRange(other: SUnit, allowance: Float = 0f) = maxRangeVs(other) + allowance >= distanceTo(other)
+    fun maxRangeVs(other: SUnit) = weaponAgainst(other).maxRange()
     fun weaponAgainst(other: SUnit): WeaponType = if (other.flying) unitType.airWeapon() else unitType.groundWeapon()
-    override fun toString(): String = "$unitType $position [${unit.player.name}]"
+    fun damagePerFrameVs(other: SUnit) =
+            (if (other.flying)
+                (unitType.airWeapon().damageAmount() * unitType.maxAirHits()) / unitType.airWeapon().damageCooldown().toDouble()
+            else
+                (unitType.groundWeapon().damageAmount() * unitType.maxGroundHits()) / unitType.groundWeapon().damageCooldown().toDouble()).orZero()
+
+    fun isOnCooldown() = unit.groundWeaponCooldown > 0 && unitType.groundWeapon().damageCooldown() - unit.groundWeaponCooldown < stopFrames
+            || unit.airWeaponCooldown > 0 && unitType.airWeapon().damageCooldown() - unit.airWeaponCooldown < stopFrames
+
+    override fun toString(): String = "$unitType $position [${player.name}]"
+
+    fun canBuildHere(at: TilePosition, type: UnitType) = game.canBuildHere(at, type, unit)
+
+    fun agent() = Agent(lastAgent)
+            .setCooldown(remainingBuildTime) // Trick to prevent incomplete units from attacking
+
+    fun dispose() {
+        units.remove(unit)
+    }
 
     companion object {
         private val units = mutableMapOf<Unit, SUnit>()
         private val geometryFactory = GeometryFactory()
+        private val agentFactory = BWMirrorAgentFactory()
+
         fun forUnit(unit: Unit) = units.computeIfAbsent(unit) { SUnit(it) }
     }
 }

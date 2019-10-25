@@ -7,9 +7,11 @@ import bwapi.UpgradeType
 import org.styx.*
 import org.styx.Styx.buildPlan
 import org.styx.Styx.game
+import org.styx.Styx.units
 import org.styx.action.BasicActions
 import java.util.*
 import kotlin.math.max
+import kotlin.math.min
 
 /**
  * Trigger build of unit, don't wait for completion
@@ -25,19 +27,19 @@ class Build(val type: UnitType) : MemoLeaf() {
     override fun performTick(): NodeStatus {
         at?.let {
             val targetPos = it.toPosition() + type.dimensions / 2
-            val candidate = Styx.units.my(type).nearest(targetPos.x, targetPos.y)
+            val candidate = units.my(type).nearest(targetPos.x, targetPos.y)
             if (candidate?.tilePosition == it)
-                return NodeStatus.DONE
-            if (!game.canBuildHere(it, type, workerLock.unit?.unit))
+                return if (candidate.completed) NodeStatus.DONE else NodeStatus.RUNNING
+            if (workerLock.unit?.canBuildHere(it, type) == false)
                 at = null
         }
-        buildPlan.pendingUnits += type
+        buildPlan.plannedUnits += type
         val buildAt = at ?: ConstructionPosition.findPositionFor(type) ?: return NodeStatus.RUNNING
         at = buildAt
         costLock.acquire()
         workerLock.acquire()
         val worker = workerLock.unit ?: return NodeStatus.RUNNING
-        if (costLock.willBeSatisfied)
+        if (costLock.satisfied)
             BasicActions.build(worker, type, buildAt)
         else
             workerLock.release()
@@ -55,18 +57,20 @@ class Build(val type: UnitType) : MemoLeaf() {
  * Trigger training of unit, don't wait for completion
  */
 class Train(private val type: UnitType) : MemoLeaf() {
-    private val trainerLock = UnitLock({ it.unitType == type.whatBuilds().first || it.buildType == type}) { Styx.resources.availableUnits.firstOrNull { it.unitType == type.whatBuilds().first } }
+    private val trainerLock = UnitLock({ it.unitType == type.whatBuilds().first || it.buildType == type }) { Styx.resources.availableUnits.firstOrNull { it.unitType == type.whatBuilds().first } }
     private val costLock = UnitCostLock(type)
 
     override fun performTick(): NodeStatus {
         if (trainerLock.unit?.unitType == type)
             return NodeStatus.DONE
-        buildPlan.pendingUnits += type
+        trainerLock.acquire()
         if (trainerLock.unit?.buildType == type)
             return NodeStatus.RUNNING
-        trainerLock.acquire()
+        buildPlan.plannedUnits += type
         costLock.acquire()
         if (!costLock.satisfied)
+            return NodeStatus.RUNNING
+        if (type.requiredUnits().keys.any { reqType -> units.mine.none { it.unitType == reqType && it.completed } })
             return NodeStatus.RUNNING
         val trainer = trainerLock.unit ?: return NodeStatus.RUNNING
         BasicActions.train(trainer, type)
@@ -83,17 +87,24 @@ class Get(private val amount: Int, val type: UnitType) : MemoLeaf() {
     private val children = ArrayDeque<BTNode>()
 
     override fun performTick(): NodeStatus {
-        val remaining = max(0, amount - Styx.units.my(type).size)
-        if (remaining == 0)
+        val remaining = max(0, amount - units.my(type).count { it.completed })
+        if (remaining == 0) {
+            children.clear()
             return NodeStatus.DONE
-        val expectedChildCount = if (type.isTwoUnitsInOneEgg) (remaining + 1) / 2 else remaining
+        }
+        val expectedChildCount = min(
+                units.my(type.whatBuilds().first).count(), if (type.isTwoUnitsInOneEgg) (remaining + 1) / 2 else remaining)
+        if (expectedChildCount == 0) return NodeStatus.RUNNING
         repeat(expectedChildCount - children.size) {
             children += if (type.isBuilding) Build(type) else Train(type)
         }
         repeat(children.size - expectedChildCount) {
             children.removeFirst()
         }
-        return tickPar(children.asSequence().map { it.tick() })
+        children.removeIf {
+            it.tick() != NodeStatus.RUNNING
+        }
+        return NodeStatus.RUNNING
     }
 }
 
