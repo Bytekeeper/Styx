@@ -18,7 +18,6 @@ class Listener : DefaultBWListener() {
     private val aiTree = Par("Main AI Tree",
             SquadDispatch,
             FollowBO,
-            Gathering,
             Scouting
     )
 

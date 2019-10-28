@@ -4,8 +4,8 @@ import bwapi.TechType
 import bwapi.UnitType
 import bwapi.UpgradeType
 import org.bk.ass.manage.GMS
-import org.bk.ass.manage.Reservation
 import org.bk.ass.query.PositionQueries
+import org.styx.Styx.economy
 
 abstract class Lock<T : Any>(val criteria: (T) -> Boolean = { true }, val selector: () -> T?) {
     protected var item: T? = null
@@ -87,6 +87,7 @@ open class GMSLock(val gms: GMS) {
         private set
     var willBeSatisfied = false
         private set
+    var futureFrames = 0
 
     fun acquire() {
         if (Styx.resources.tryReserveGMS(gms)) {
@@ -94,9 +95,9 @@ open class GMSLock(val gms: GMS) {
             willBeSatisfied = true
             return
         }
+        willBeSatisfied = Styx.resources.availableGMS.plus(economy.estimatedAdditionalGMIn(futureFrames)).greaterOrEqual(gms)
         Styx.resources.reserveGMS(gms)
         satisfied = false
-        willBeSatisfied = false
     }
 }
 

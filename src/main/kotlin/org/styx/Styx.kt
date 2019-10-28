@@ -9,6 +9,7 @@ import org.bk.ass.manage.GMS
 import org.bk.ass.query.PositionQueries
 import org.bk.ass.sim.*
 import org.locationtech.jts.math.Vector2D
+import org.styx.Styx.frame
 import org.styx.Styx.game
 import org.styx.Styx.units
 import org.styx.Timed.Companion.time
@@ -73,15 +74,21 @@ object Styx {
 }
 
 class Economy {
+    // "Stolen" from PurpleWave
+    private val perWorkerPerFrameMinerals = 0.046
+    private val perWorkerPerFrameGas = 0.069
+
     private val supplyWithPending: Int by LazyOnFrame {
         Styx.self.supplyTotal() - Styx.self.supplyUsed() +
-                units.pending.filter { it.trainer.myUnit }
-                        .sumBy { it.unitType.supplyProvided() - it.unitType.supplyRequired() }
+                units.myPending.sumBy { it.unitType.supplyProvided() - it.unitType.supplyRequired() }
     }
 
-    val supplyWithPlanned: Int by LazyOnFrame {
+    val supplyWithPlanned: Int
+        get() =
         supplyWithPending + Styx.buildPlan.plannedUnits.sumBy { it.supplyProvided() - it.supplyRequired() }
-    }
+
+    fun estimatedAdditionalGMIn(frames: Int): GMS =
+            GMS((perWorkerPerFrameGas * frames * units.workers.count { it.gatheringGas }).toInt(), (perWorkerPerFrameMinerals * frames * units.workers.count { it.gatheringMinerals }).toInt(), 0)
 
     fun update() {
     }
@@ -158,13 +165,18 @@ class Units {
         private set
     private val myX = mutableMapOf<UnitType, LazyOnFrame<PositionQueries<SUnit>>>()
     private val myCompleted = mutableMapOf<UnitType, LazyOnFrame<PositionQueries<SUnit>>>()
-    lateinit var pending: List<PendingUnit>
+    lateinit var myPending: List<PendingUnit>
         private set
 
     fun update() {
         val knownUnits = (Styx.game.allUnits.map { SUnit.forUnit(it) } + enemy).distinct()
         knownUnits.forEach { it.update() }
-        val relevantUnits = knownUnits.filter { it.visible || !game.isVisible(it.tilePosition) }
+        val relevantUnits = knownUnits
+                .filter {
+                    it.visible ||
+                            !game.isVisible(it.tilePosition) ||
+                            (frame - 240 <= it.lastSeenFrame && !it.detected)
+                }
         allunits = PositionQueries(relevantUnits, positionExtractor)
         ownedUnits = PositionQueries(relevantUnits.filter { it.owned }, positionExtractor)
         minerals = PositionQueries(relevantUnits.filter { it.unitType.isMineralField }, positionExtractor)
@@ -174,9 +186,14 @@ class Units {
         resourceDepots = PositionQueries(mine.filter { it.unitType.isResourceDepot }, positionExtractor)
         workers = PositionQueries(mine.filter { it.unitType.isWorker }, positionExtractor)
         enemy = PositionQueries((relevantUnits.filter { it.enemyUnit }), positionExtractor)
-        pending = ownedUnits
-                .filter { it.remainingBuildTime > 0 }
-                .map { PendingUnit(it, it.position, it.buildType, it.remainingBuildTime) }
+        myPending = mine
+                .filter { !it.completed }
+                .map {
+                    if (it.remainingBuildTime == 0 && it.unitType != UnitType.Zerg_Larva && it.unitType != UnitType.Zerg_Egg)
+                        PendingUnit(it, it.position, it.unitType, 0)
+                    else
+                        PendingUnit(it, it.position, it.buildType, it.remainingBuildTime)
+                }
     }
 
     fun my(type: UnitType): PositionQueries<SUnit> =

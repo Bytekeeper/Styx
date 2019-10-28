@@ -7,7 +7,6 @@ group 'scai'
 version '1.0-SNAPSHOT'
 
 apply plugin: 'kotlin'
-apply plugin: 'distribution'
 
 repositories {
     mavenCentral()
@@ -33,11 +32,6 @@ dependencies {
     test.useJUnitPlatform()
 }
 
-distributions {
-    scait {
-    }
-}
-
 compileKotlin {
     kotlinOptions {
         languageVersion = "1.3"
@@ -60,7 +54,6 @@ task fatJar(type: Jar) {
     dependsOn(tasks.assemble)
 }
 
-
 task sourceJar(type: Jar) {
     manifest {
         attributes 'Implementation-Title': 'Gradle Jar File Example',
@@ -71,6 +64,4 @@ task sourceJar(type: Jar) {
     from sourceSets.main.allSource
     with jar
 }
-
-tasks.assembleScaitDist.dependsOn(fatJar, sourceJar)
 

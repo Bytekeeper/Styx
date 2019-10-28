@@ -2,10 +2,10 @@ package org.styx.task
 
 import bwapi.UnitType
 import org.styx.*
+import org.styx.Styx.resources
 import org.styx.action.BasicActions
-import kotlin.math.min
 
-object Gathering : BTNode() {
+class Gathering(private val onlyRequiredGas: Boolean = false) : BTNode() {
     private val workers = UnitLocks { Styx.resources.availableUnits.filter { it.unitType.isWorker } }
     private val assignment = mutableMapOf<SUnit, SUnit>()
 
@@ -14,20 +14,24 @@ object Gathering : BTNode() {
         if (workers.units.isEmpty()) // No workers left? We have serious problems
             return NodeStatus.RUNNING
 
-        val pending = workers.units.toMutableList()
-        val extractors = Styx.units.myCompleted(UnitType.Zerg_Extractor)
-        val missingGasWorkers = clamp(extractors.size * 3 - pending.count { it.gatheringGas }, 0, pending.size)
-        pending.take(missingGasWorkers)
-                .forEach { worker ->
-                    val target = extractors.nearest(worker.x, worker.y) ?: return@forEach
-                    if (worker.target != target && worker.target?.unitType?.isResourceDepot != true) {
-                        BasicActions.gather(worker, target)
+        val gatherGas = resources.availableGMS.gas < 0 || !onlyRequiredGas
+        if (gatherGas) {
+            val pending = workers.units.toMutableList()
+            val extractors = Styx.units.myCompleted(UnitType.Zerg_Extractor)
+            val missingGasWorkers = clamp(extractors.size * 3 - pending.count { it.gatheringGas }, 0, pending.size)
+            pending.take(missingGasWorkers)
+                    .forEach { worker ->
+                        val target = extractors.nearest(worker.x, worker.y) ?: return@forEach
+                        if (worker.target != target && worker.target?.unitType?.isResourceDepot != true) {
+                            BasicActions.gather(worker, target)
+                        }
                     }
-                }
-
+        }
         workers.units.forEach { worker ->
             if (worker.carrying) {
                 assignment.remove(worker)
+            } else if (worker.gatheringGas && !gatherGas) {
+                worker.stop()
             }
         }
         assignment.entries.removeIf { (u, m) -> !workers.units.contains(u) || !m.exists }

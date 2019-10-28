@@ -16,22 +16,26 @@ import kotlin.math.min
 
 object FollowBO : Par("Follow Build Order",
         Get(9, UnitType.Zerg_Drone),
-        Build(UnitType.Zerg_Spawning_Pool),
+        Repeat(delegate = Get(1, UnitType.Zerg_Spawning_Pool)),
         Train(UnitType.Zerg_Drone),
         Train(UnitType.Zerg_Overlord),
-        Repeat(delegate = Get(6, UnitType.Zerg_Zergling)),
-        Upgrade(UpgradeType.Metabolic_Boost, 1),
+        Train(UnitType.Zerg_Drone),
         Repeat(delegate = Seq("Supply", Condition {
-             economy.supplyWithPlanned  < 4
+            economy.supplyWithPlanned  < 4
         }, Train(UnitType.Zerg_Overlord))),
-        Repeat(delegate = Seq("Train workers", Condition {
-            min(units.mine.count() / 5, bases.myBases.sumBy { b ->
-                units.minerals.inRadius(b.center, 400).size * 3 / 2 + units.resourceDepots.inRadius(b.center, 400).size * 4
-            }) > units.workers.size + buildPlan.plannedUnits.count { it.isWorker }
-        }, Train(UnitType.Zerg_Drone))),
+        Repeat(delegate = Get(200, UnitType.Zerg_Zergling)),
+//        Repeat(delegate = Seq("Train workers", Condition {
+//            min(FollowBO.workerAmountBaseOnSupply(), FollowBO.workerAmountRequiredToFullyUtilize()) > units.workers.size + buildPlan.plannedUnits.count { it.isWorker }
+//        }, Train(UnitType.Zerg_Drone))),
         Get(2, UnitType.Zerg_Hatchery),
-        Repeat(delegate = Seq("Macrohatch", Condition {
-            resources.availableGMS.minerals > 300 + (buildPlan.plannedUnits.count { it.isResourceDepot } + units.resourceDepots.count { it.completed }) * 100
-        }, Build(UnitType.Zerg_Hatchery))),
-        Get(200, UnitType.Zerg_Zergling)
-)
+        Build(UnitType.Zerg_Extractor),
+        Upgrade(UpgradeType.Metabolic_Boost, 1),
+        Gathering(true)
+) {
+    fun workerAmountBaseOnSupply() =
+            units.mine.sumBy { it.unitType.supplyRequired() } / 6 + 5
+    fun workerAmountRequiredToFullyUtilize() =
+            bases.myBases.sumBy { b ->
+                units.minerals.inRadius(b.center, 400).size * 3 / 2 + units.resourceDepots.inRadius(b.center, 400).size * 4
+            }
+}

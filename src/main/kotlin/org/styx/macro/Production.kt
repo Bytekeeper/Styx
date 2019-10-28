@@ -6,7 +6,6 @@ import bwapi.UnitType
 import bwapi.UpgradeType
 import org.styx.*
 import org.styx.Styx.buildPlan
-import org.styx.Styx.game
 import org.styx.Styx.units
 import org.styx.action.BasicActions
 import java.util.*
@@ -19,10 +18,11 @@ import kotlin.math.min
 class Build(val type: UnitType) : MemoLeaf() {
     private var at: TilePosition? = null
     private val workerLock = UnitLock {
-        val pos = at!!.toPosition()
-        Styx.resources.availableUnits.filter { it.unitType.isWorker }.minBy { it.distanceTo(pos) }
+        val eval = closeTo(at!!.toPosition())
+        Styx.resources.availableUnits.filter { it.unitType.isWorker }.minBy { eval(it) }
     }
     private val costLock = UnitCostLock(type)
+    private var waitFrames = 0
 
     override fun performTick(): NodeStatus {
         at?.let {
@@ -36,12 +36,18 @@ class Build(val type: UnitType) : MemoLeaf() {
         buildPlan.plannedUnits += type
         val buildAt = at ?: ConstructionPosition.findPositionFor(type) ?: return NodeStatus.RUNNING
         at = buildAt
-        costLock.acquire()
         workerLock.acquire()
+        val buildPosition = buildAt.toPosition() + type.dimensions / 2
+        costLock.futureFrames = workerLock.unit?.framesToTravelTo(buildPosition) ?: 0
+        costLock.acquire()
         val worker = workerLock.unit ?: return NodeStatus.RUNNING
         if (costLock.satisfied)
             BasicActions.build(worker, type, buildAt)
-        else
+        else if (costLock.willBeSatisfied || waitFrames > 0) {
+            waitFrames--;
+            BasicActions.move(worker, buildPosition)
+            if (costLock.willBeSatisfied) waitFrames = 48;
+        } else
             workerLock.release()
         return NodeStatus.RUNNING
     }
@@ -93,7 +99,7 @@ class Get(private val amount: Int, val type: UnitType) : MemoLeaf() {
             return NodeStatus.DONE
         }
         val expectedChildCount = min(
-                units.my(type.whatBuilds().first).count(), if (type.isTwoUnitsInOneEgg) (remaining + 1) / 2 else remaining)
+                units.my(type.whatBuilds().first).count() + units.myPending.count { it.unitType == type }, if (type.isTwoUnitsInOneEgg) (remaining + 1) / 2 else remaining)
         if (expectedChildCount == 0) return NodeStatus.RUNNING
         repeat(expectedChildCount - children.size) {
             children += if (type.isBuilding) Build(type) else Train(type)
@@ -113,7 +119,10 @@ class Upgrade(private val upgrade: UpgradeType, private val level: Int) : MemoLe
     private val researcherLock = UnitLock() { Styx.resources.availableUnits.firstOrNull { it.unitType == upgrade.whatUpgrades() } }
 
     override fun performTick(): NodeStatus {
-        if (Styx.self.getUpgradeLevel(upgrade) == level) return NodeStatus.DONE
+        if (upgradeIsDone())
+            return NodeStatus.DONE
+        if (isAlreadyUpgrading())
+            return NodeStatus.RUNNING
         costLock.acquire()
         if (costLock.satisfied) {
             researcherLock.acquire()
@@ -122,6 +131,10 @@ class Upgrade(private val upgrade: UpgradeType, private val level: Int) : MemoLe
         }
         return NodeStatus.RUNNING
     }
+
+    private fun upgradeIsDone() = Styx.self.getUpgradeLevel(upgrade) == level
+
+    private fun isAlreadyUpgrading() = Styx.self.isUpgrading(upgrade) && Styx.self.getUpgradeLevel(upgrade) == level - 1
 }
 
 
@@ -130,7 +143,10 @@ class Research(private val tech: TechType) : MemoLeaf() {
     private val researcherLock = UnitLock() { Styx.resources.availableUnits.firstOrNull { it.unitType == tech.whatResearches() } }
 
     override fun performTick(): NodeStatus {
-        if (Styx.self.hasResearched(tech)) return NodeStatus.DONE
+        if (Styx.self.hasResearched(tech))
+            return NodeStatus.DONE
+        if (Styx.self.isResearching(tech))
+            return NodeStatus.RUNNING;
         costLock.acquire()
         if (costLock.satisfied) {
             researcherLock.acquire()

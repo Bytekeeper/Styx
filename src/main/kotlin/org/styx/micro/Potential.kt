@@ -1,6 +1,7 @@
 package org.styx.micro
 
 import bwapi.Position
+import bwapi.UnitType
 import bwapi.WeaponType
 import org.locationtech.jts.math.DD
 import org.locationtech.jts.math.Vector2D
@@ -41,8 +42,8 @@ object Potential {
 
     fun avoidDanger(u: SUnit, safety: Int): Vector2D {
         val enemy = units.enemy.inRadius(u.x, u.y, safety + 384) {
-            it.weaponAgainst(u) != WeaponType.None
-        }?.minBy { it.distanceTo(u) - it.weaponAgainst(u).maxRange() } ?: return Vector2D()
+            it.weaponAgainst(u) != WeaponType.None || it.unitType == UnitType.Terran_Bunker
+        }?.minBy { it.distanceTo(u) - it.maxRangeVs(u) } ?: return Vector2D()
         return (u.position - enemy.position).toVector2D().normalize()
     }
 

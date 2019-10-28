@@ -1,11 +1,15 @@
 package org.styx
 
+import bwapi.Position
 import bwapi.UnitType
 import bwapi.WeaponType
 import java.util.*
 import kotlin.math.max
 
 typealias TargetScorer = (a: SUnit, e: SUnit) -> Double
+
+interface CombatMove
+data class AttackMove(val enemy: SUnit) : CombatMove
 
 object TargetEvaluator {
     private val byEnemyType: TargetScorer = { _, e ->
@@ -17,17 +21,17 @@ object TargetEvaluator {
         }
     }
 
-    private val byAttackerRange: TargetScorer = { a, e ->
-        -a.distanceTo(e) / 30.0 / max(5.0, (a.maxRangeVs(e) + 3 * a.topSpeed))
+    private val byTimeToAttack: TargetScorer = { a, e ->
+        -a.distanceTo(e) / 20.0 / max(5.0, (a.maxRangeVs(e) + 3 * a.topSpeed))
     }
 
     private val byEnemyStatus: TargetScorer = { _, e ->
-        -e.hitPoints / 600.0 - e.shields / 900.0
+        -e.hitPoints / 400.0 - e.shields / 600.0
     }
 
     private val byEnemyRange: TargetScorer = { _, e ->
-        e.unitType.groundWeapon().maxRange() / 200.0 +
-                e.unitType.airWeapon().maxRange() / 300.0
+        e.unitType.groundWeapon().maxRange() / 300.0 +
+                e.unitType.airWeapon().maxRange() / 400.0
     }
 
     private val byDamageToEnemy: TargetScorer = { a, e ->
@@ -35,10 +39,10 @@ object TargetEvaluator {
     }
 
     private val byEnemyDamageCapabilities: TargetScorer = { a, e ->
-        e.damagePerFrameVs(a) * 0.06
+        e.damagePerFrameVs(a) * 0.04
     }
 
-    private val scorers = listOf(byEnemyType, byAttackerRange, byEnemyStatus, byEnemyRange, byDamageToEnemy, byEnemyDamageCapabilities)
+    private val scorers = listOf(byEnemyType, byTimeToAttack, byEnemyStatus, byEnemyRange, byDamageToEnemy, byEnemyDamageCapabilities)
 
     fun bestCombatMoves(attackers: Collection<SUnit>, targets: Collection<SUnit>): Map<SUnit, CombatMove?> {
         val relevantTargets = targets
@@ -51,7 +55,7 @@ object TargetEvaluator {
         while (remaining.isNotEmpty()) {
             val best = remaining.mapNotNull { a ->
                 relevantTargets.filter { a.weaponAgainst(it) != WeaponType.None }.map { e ->
-                    e to scorers.sumByDouble { it(a, e) } - (attackedByCount[e] ?: 0) * 0.1
+                    e to scorers.sumByDouble { it(a, e) } - (attackedByCount[e] ?: 0) * 0.06
                 }.maxBy { it.second }?.let { a to it }
             }.maxBy { it.second.second } ?: break
             remaining.remove(best.first)
@@ -80,5 +84,9 @@ object TargetEvaluator {
     }
 }
 
-interface CombatMove
-data class AttackMove(val enemy: SUnit) : CombatMove
+typealias UnitEvaluator = (SUnit) -> Double
+
+fun closeTo(position: Position): UnitEvaluator = { u ->
+    u.framesToTravelTo(position) +
+            (if (u.carrying) 80.0 else 0.0)
+}

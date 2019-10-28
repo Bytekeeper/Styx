@@ -1,13 +1,13 @@
 package org.styx.squad
 
 import bwapi.Position
+import bwapi.UnitType
 import org.bk.ass.collection.UnorderedCollection
 import org.bk.ass.sim.Agent
 import org.bk.ass.sim.AttackerBehavior
 import org.bk.ass.sim.Evaluator
 import org.bk.ass.sim.Simulator
 import org.styx.*
-import org.styx.Styx.bases
 import org.styx.Styx.fleeSim
 import org.styx.Styx.resources
 import org.styx.Styx.sim
@@ -37,7 +37,7 @@ class SquadFightLocal(private val board: SquadBoard) : BTNode() {
         val unitType = (agent.userObject as SUnit).unitType
         val airDPF = ((unitType.airWeapon().damageAmount() * unitType.maxAirHits()) / unitType.airWeapon().damageCooldown().toDouble()).orZero()
         val groundDPF = ((unitType.groundWeapon().damageAmount() * unitType.maxGroundHits()) / unitType.groundWeapon().damageCooldown().toDouble()).orZero()
-        (max(airDPF, groundDPF) * 15 +
+        (max(airDPF, groundDPF) * 3 +
                 Simulator.HEALTH_AND_HALFED_SHIELD.applyAsInt(agent) / 3).toInt()
     }
 
@@ -70,12 +70,12 @@ class SquadFightLocal(private val board: SquadBoard) : BTNode() {
 
         val scoreAfterCombat = hsAfter.evalA - hsAfter.evalB
         val scoreAfterFleeing = hsAfterFlee.evalA - hsAfterFlee.evalB
-        if (scoreAfterFleeing > scoreAfterCombat + board.attackBias) {
+        if (scoreAfterFleeing > scoreAfterCombat + board.attackBias + attackers.size * 2) {
             board.attackBias = 0
             attackerLock.release()
             return NodeStatus.RUNNING
         }
-        board.attackBias = attackers.size * 2
+        board.attackBias = attackers.size * 3
 
         val combatMoves = TargetEvaluator.bestCombatMoves(attackers, enemies)
         attackers.forEach { a ->
@@ -92,7 +92,7 @@ class SquadFightLocal(private val board: SquadBoard) : BTNode() {
 
 class NoAttackIfGatheringBehavior : AttackerBehavior() {
     override fun simUnit(frameSkip: Int, agent: Agent, allies: UnorderedCollection<Agent>, enemies: UnorderedCollection<Agent>): Boolean =
-            !(agent.userObject as SUnit).gathering && super.simUnit(frameSkip, agent, allies, enemies)
+            (agent.userObject as? SUnit)?.gathering != true && super.simUnit(frameSkip, agent, allies, enemies)
 }
 
 class SquadAttack(private val board: SquadBoard) : BTNode() {
@@ -106,16 +106,15 @@ class SquadAttack(private val board: SquadBoard) : BTNode() {
         if (attackerLock.units.isEmpty()) return NodeStatus.RUNNING
         val attackers = attackerLock.units
         val targetSquad = enemySquads.map {
-            val myAgents = (attackers + it.mine).distinct().filter { it.unitType.canAttack() }.map { it.agent() }
-            val enemies = (board.enemies + it.enemies).distinct().filter { it.unitType.canAttack() }.map { it.agent() }
+            val myAgents = (attackers + it.mine).distinct().filter { it.unitType.canAttack() && it.unitType.canMove() }.map { it.agent() }
+            val enemies = (board.enemies + it.enemies).distinct().map { it.agent() }
             it to evaluator.evaluate(myAgents, enemies)
-        }.filter { it.second > 0.6 }
-                .minBy { it.second }?.first
+        }.filter { it.second > 0.6 }.minBy { it.second }?.first
         if (targetSquad != null) {
             val targetPosition = targetSquad.mine.filter { !it.flying }.minBy { it.distanceTo(targetSquad.center) }?.position
                     ?: targetSquad.enemies.filter { !it.flying }.minBy { it.distanceTo(targetSquad.center) }?.position
             attackers.forEach { attacker ->
-                if (!attacker.flying && targetPosition != null) {
+                if (targetPosition != null) {
 //                    val force = Potential.groundAttract(attacker, targetPosition) +
 //                            Potential.keepGroundCompany(attacker, 32) * 0.2
 //                    Potential.apply(attacker, force)
@@ -137,7 +136,7 @@ class SquadBackOff(private val board: SquadBoard) : BTNode() {
         if (attackerLock.units.isEmpty()) return NodeStatus.RUNNING
         val targetSquad = squads.squads
                 .filterNot { it == board }
-                .minBy { it.enemies.size * 2 - it.mine.size } ?: return NodeStatus.RUNNING
+                .minBy { it.enemies.size * 2 - it.mine.count { it.unitType.canAttack() } } ?: return NodeStatus.RUNNING
         if (targetSquad.mine.isEmpty()) {
             attackerLock.units.forEach { attacker ->
                 val target = TargetEvaluator.bestTarget(attacker, units.enemy) ?: return@forEach

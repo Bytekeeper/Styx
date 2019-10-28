@@ -63,13 +63,15 @@ class SUnit private constructor(val unit: Unit) {
     val ready get() = readyOnFrame < Styx.frame
     val sleeping get() = readyOnFrame >= Styx.frame
     var target: SUnit? = null
+        private set
     val returningMinerals get() = unit.isCarrying && unit.target?.type?.isResourceDepot == true
     var beingGathered = false
         private set
 
     val controller = Controller()
     private lateinit var lastAgent: Agent
-    private var lastSeenFrame = 0
+    var lastSeenFrame = 0
+        private set
     private var lastDamageFrame: Int? = null
     lateinit var player: Player
         private set
@@ -120,6 +122,9 @@ class SUnit private constructor(val unit: Unit) {
     fun distanceTo(other: SUnit) = if (other.visible) unit.getDistance(other.unit) else position.getDistance(other.position).toInt()
     fun distanceTo(pos: Position) = position.getDistance(pos)
     fun distanceTo(pos: TilePosition) = tilePosition.getDistance(pos)
+    fun framesToTravelTo(pos: Position) =
+            (if (flying) (distanceTo(pos) / topSpeed).toInt()
+            else (Styx.map.getPathLength(position, pos) / topSpeed).toInt()) + 12
 
     val tileGeometry: Geometry
         get() {
@@ -192,8 +197,14 @@ class SUnit private constructor(val unit: Unit) {
     }
 
     fun inAttackRange(other: SUnit, allowance: Float = 0f) = maxRangeVs(other) + allowance >= distanceTo(other)
-    fun maxRangeVs(other: SUnit) = weaponAgainst(other).maxRange()
-    fun weaponAgainst(other: SUnit): WeaponType = if (other.flying) unitType.airWeapon() else unitType.groundWeapon()
+    fun maxRangeVs(other: SUnit) =
+            player.weaponMaxRange(weaponAgainst(other)) +
+                    if (unitType == UnitType.Terran_Bunker) 64 else 0
+
+    fun weaponAgainst(other: SUnit): WeaponType =
+            if (unitType == UnitType.Terran_Bunker)
+                UnitType.Terran_Marine.groundWeapon()
+            else if (other.flying) unitType.airWeapon() else unitType.groundWeapon()
     fun damagePerFrameVs(other: SUnit) =
             (if (other.flying)
                 (unitType.airWeapon().damageAmount() * unitType.maxAirHits()) / unitType.airWeapon().damageCooldown().toDouble()
