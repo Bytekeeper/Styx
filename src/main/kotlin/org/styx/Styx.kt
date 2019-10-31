@@ -17,6 +17,7 @@ import org.styx.Timed.Companion.time
 import org.styx.squad.NoAttackIfGatheringBehavior
 import org.styx.squad.SquadBoard
 import java.util.*
+import kotlin.math.PI
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -32,7 +33,7 @@ object Styx {
         private set
     var frame = 0
         private set
-    var latencyFrames = 2
+    private var minRemainingLatencyFrames = 42
         private set
     var units = Units()
         private set
@@ -68,9 +69,12 @@ object Styx {
 
     fun update() {
         frameTimes.clear()
-        latencyFrames = game.latencyFrames
+        minRemainingLatencyFrames = min(minRemainingLatencyFrames, game.remainingLatencyFrames)
+        turnSize = game.latencyFrames - minRemainingLatencyFrames + 1
         frame = game.frameCount
         self = game.self()
+        if (frame > 0 && game.remainingLatencyFrames > minRemainingLatencyFrames || game.isPaused)
+            return
         ft("units") { units.update() }
         ft("resources") { resources.update() }
         ft("bases") { bases.update() }
@@ -100,7 +104,11 @@ class Economy {
 
     val supplyWithPlanned: Int
         get() =
-        supplyWithPending + Styx.buildPlan.plannedUnits.sumBy { it.supplyProvided() - it.supplyRequired() }
+            supplyWithPending + Styx.buildPlan.plannedUnits.sumBy {
+                it.supplyProvided() +
+                        -it.supplyRequired() +
+                        (if (it.whatBuilds().first == UnitType.Zerg_Drone) 1 else 0)
+            }
 
     fun estimatedAdditionalGMIn(frames: Int): GMS =
             GMS((perWorkerPerFrameGas * frames * units.workers.count { it.gatheringGas }).toInt(), (perWorkerPerFrameMinerals * frames * units.workers.count { it.gatheringMinerals }).toInt(), 0)
@@ -296,3 +304,5 @@ operator fun Vector2D.times(scl: Double) = multiply(scl)
 
 fun Double.orZero() = if (isNaN()) 0.0 else this
 fun clamp(x: Int, l: Int, h: Int) = min(h, max(l, x))
+val PI2 = Math.PI * 2
+val Double.normalizedRadians get() = ((this % PI2) + PI2) % PI2 - PI

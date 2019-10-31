@@ -65,8 +65,16 @@ class Build(val type: UnitType) : MemoLeaf() {
 class Train(private val type: UnitType) : MemoLeaf() {
     private val trainerLock = UnitLock({ it.unitType == type.whatBuilds().first || it.buildType == type }) { Styx.resources.availableUnits.firstOrNull { it.unitType == type.whatBuilds().first } }
     private val costLock = UnitCostLock(type)
+    private val dependency = Par("Dependencies for ${type}",
+            *type.requiredUnits()
+                    .filter { (type, _) -> type != UnitType.Zerg_Larva }
+                    .map { (type, amount) ->
+                        Get(amount, type)
+                    }.toTypedArray())
 
     override fun performTick(): NodeStatus {
+        if (dependency.tick() != NodeStatus.DONE)
+            return NodeStatus.RUNNING
         if (trainerLock.unit?.unitType == type)
             return NodeStatus.DONE
         trainerLock.acquire()
@@ -85,6 +93,7 @@ class Train(private val type: UnitType) : MemoLeaf() {
 
     override fun reset() {
         super.reset()
+        dependency.reset()
         trainerLock.reset()
     }
 }
@@ -93,10 +102,14 @@ class Get(private val amount: Int, val type: UnitType) : MemoLeaf() {
     private val children = ArrayDeque<BTNode>()
 
     override fun performTick(): NodeStatus {
-        val remaining = max(0, amount - units.my(type).count { it.isCompleted })
-        if (remaining == 0) {
+        val missingOrIncompleteAnnotation = max(0, amount - units.my(type).count { it.isCompleted })
+        if (missingOrIncompleteAnnotation == 0) {
             children.clear()
             return NodeStatus.DONE
+        }
+        val remaining = max(0, amount - units.my(type).size - buildPlan.plannedUnits.count { it == type })
+        if (remaining == 0) {
+            return NodeStatus.RUNNING
         }
         val expectedChildCount = min(
                 units.my(type.whatBuilds().first).count() + units.myPending.count { it.unitType == type }, if (type.isTwoUnitsInOneEgg) (remaining + 1) / 2 else remaining)

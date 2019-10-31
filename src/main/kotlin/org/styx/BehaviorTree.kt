@@ -15,7 +15,8 @@ abstract class BTNode {
     companion object {
         fun tickPar(childResults: Sequence<NodeStatus>): NodeStatus {
             val results = childResults.takeWhile { it != NodeStatus.FAILED }.toList()
-            if (results.last() == NodeStatus.FAILED)
+            val last = results.lastOrNull() ?: return NodeStatus.DONE
+            if (last == NodeStatus.FAILED)
                 return NodeStatus.FAILED
             if (results.any { it == NodeStatus.RUNNING })
                 return NodeStatus.RUNNING
@@ -49,7 +50,7 @@ open class Seq(name: String, vararg children: BTNode) : CompoundNode(name, *chil
 }
 
 open class Par(name: String, vararg children: BTNode) : CompoundNode(name, *children) {
-    override fun performTick(): NodeStatus = BTNode.tickPar(tickedChilds)
+    override fun performTick(): NodeStatus = tickPar(tickedChilds)
 }
 
 class Memo(private val delegate: BTNode) : BTNode() {

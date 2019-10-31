@@ -13,17 +13,20 @@ import org.styx.macro.Upgrade
 
 object FollowBO : Par("Follow Build Order",
         Get(9, UnitType.Zerg_Drone),
-        Repeat(delegate = Get(1, UnitType.Zerg_Spawning_Pool)),
+        Build(UnitType.Zerg_Spawning_Pool),
         Train(UnitType.Zerg_Drone),
         Train(UnitType.Zerg_Overlord),
         Repeat(delegate = Seq("Supply", Condition {
-            economy.supplyWithPlanned  < 4
+            economy.supplyWithPlanned  < 3
         }, Train(UnitType.Zerg_Overlord))),
+        Repeat(delegate = Get(6, UnitType.Zerg_Zergling)),
+        Repeat(delegate = Get(8, UnitType.Zerg_Drone)),
         Repeat(delegate = Get(200, UnitType.Zerg_Zergling)),
 //        Repeat(delegate = Seq("Train workers", Condition {
 //            min(FollowBO.workerAmountBaseOnSupply(), FollowBO.workerAmountRequiredToFullyUtilize()) > units.workers.size + buildPlan.plannedUnits.count { it.isWorker }
 //        }, Train(UnitType.Zerg_Drone))),
         Get(2, UnitType.Zerg_Hatchery),
+        Repeat(delegate = Get(7, UnitType.Zerg_Drone)),
         Build(UnitType.Zerg_Extractor),
         Upgrade(UpgradeType.Metabolic_Boost, 1),
         Gathering(true)

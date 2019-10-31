@@ -51,7 +51,7 @@ abstract class Lock<T : Any>(val criteria: (T) -> Boolean = { true }, val select
 }
 
 class UnitLocks(criteria: (Collection<SUnit>) -> Boolean = { true }, selector: () -> Collection<SUnit>) : Lock<Collection<SUnit>>(criteria, selector) {
-    val units get() = item!!
+    val units get() = item ?: emptyList()
 
     override fun tryReserve(item: Collection<SUnit>): Boolean {
         if (Styx.resources.tryReserveUnits(item)) {

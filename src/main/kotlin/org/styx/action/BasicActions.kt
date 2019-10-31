@@ -39,6 +39,10 @@ object BasicActions {
         unit.attack(target)
     }
 
+    fun attack(unit: SUnit, target: Position) {
+        unit.attack(target)
+    }
+
     fun returnCargo(unit: SUnit, base: SUnit) {
         unit.rightClick(base)
     }

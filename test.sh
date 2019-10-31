@@ -10,6 +10,7 @@ cp build/libs/FFT_TER-all-1.0-SNAPSHOT.jar ~/.scbw/bots/StyxZ/AI/
 # nohup scbw.play --headless --bots StyxZ "Simon Prins" --timeout_at_frame 43200 --game_name blub&
 # nohup scbw.play --headless --bots StyxZ Locutus --timeout_at_frame 43200 --game_name blub&
 # nohup scbw.play --headless --bots StyxZ Antiga --timeout_at_frame 43200 --game_name blub&
-#nohup scbw.play --headless --bots StyxZ 'Chris Coxe' --timeout_at_frame 43200 --game_name blub&
-nohup scbw.play --headless --bots StyxZ "Stone" --timeout_at_frame 43200 --game_name blub&
+nohup scbw.play --headless --bots StyxZ 'Chris Coxe' --timeout_at_frame 43200 --game_name blub&
+#nohup scbw.play --headless --bots StyxZ "Stone" --timeout_at_frame 43200 --game_name blub&
+#nohup scbw.play --headless --bots StyxZ "CUBOT" --timeout_at_frame 43200 --game_name blub&
 sleep 5

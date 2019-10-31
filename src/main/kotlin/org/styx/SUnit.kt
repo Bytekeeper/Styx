@@ -12,6 +12,7 @@ import org.locationtech.jts.geom.GeometryFactory
 import org.locationtech.jts.math.Vector2D
 import org.styx.Styx.game
 import org.styx.Styx.self
+import kotlin.math.abs
 import kotlin.math.max
 
 class SUnit private constructor(val unit: Unit) {
@@ -24,6 +25,8 @@ class SUnit private constructor(val unit: Unit) {
     var x = 0
         private set
     var y = 0
+        private set
+    var angle = 0.0
         private set
     var moving = false
         private set
@@ -64,6 +67,8 @@ class SUnit private constructor(val unit: Unit) {
     val sleeping get() = readyOnFrame >= Styx.frame
     var target: SUnit? = null
         private set
+    var orderTarget: SUnit? = null
+        private set
     val returningMinerals get() = unit.isCarrying && unit.target?.type?.isResourceDepot == true
     var beingGathered = false
         private set
@@ -93,7 +98,9 @@ class SUnit private constructor(val unit: Unit) {
         tilePosition = unit.tilePosition
         x = unit.x
         y = unit.y
+        angle = unit.angle
         target = unit.target?.let { forUnit(it) }
+        orderTarget = unit.orderTarget?.let { forUnit(it) }
         flying = unit.isFlying
         carryingGas = unit.isCarryingGas
         carryingMinerals = unit.isCarryingMinerals
@@ -152,6 +159,14 @@ class SUnit private constructor(val unit: Unit) {
         sleep(BWMirrorUnitInfo.stopFrames(unitType))
     }
 
+    fun attack(target: Position) {
+        if (sleeping) return
+        if (this.orderTarget?.enemyUnit == true)
+            return
+        unit.attack(target)
+        sleep(BWMirrorUnitInfo.stopFrames(unitType))
+    }
+
     fun gather(resource: SUnit) {
         if (sleeping) return
         unit.gather(resource.unit)
@@ -177,7 +192,7 @@ class SUnit private constructor(val unit: Unit) {
     }
 
     private fun sleep(minFrames: Int = 2) {
-        readyOnFrame = Styx.frame + Styx.latencyFrames + max(minFrames, Styx.turnSize)
+        readyOnFrame = Styx.frame + max(minFrames, Styx.turnSize)
     }
 
     fun train(type: UnitType) {
@@ -224,6 +239,9 @@ class SUnit private constructor(val unit: Unit) {
     fun dispose() {
         units.remove(unit)
     }
+
+    fun radiansTo(other: SUnit): Double = position.toVector2D().angleTo(other.position.toVector2D())
+    fun framesToTurnTo(other: SUnit) = (abs((radiansTo(other) - angle).normalizedRadians) * 256.0 / PI2 / unitType.turnRadius()).toInt()
 
     companion object {
         private val units = mutableMapOf<Unit, SUnit>()

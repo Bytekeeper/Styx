@@ -25,7 +25,9 @@ object TargetEvaluator {
     }
 
     private val byTimeToAttack: TargetScorer = { a, e ->
-        -a.distanceTo(e) / 17.0 / max(5.0, (a.maxRangeVs(e) + 3 * a.topSpeed))
+        val framesToTurnTo = a.framesToTurnTo(e)
+        -max(0, a.distanceTo(e) - a.maxRangeVs(e)) / 5.0 / max(1.0, a.topSpeed) -
+                framesToTurnTo / 3.0
     }
 
     private val byEnemyStatus: TargetScorer = { _, e ->
@@ -45,9 +47,7 @@ object TargetEvaluator {
         e.damagePerFrameVs(a) * 0.04
     }
 
-    private val stickToTarget: TargetScorer = { a, e -> if (a.target == e) 0.3 else 0.0 }
-
-    private val scorers = listOf(byEnemyType, byTimeToAttack, byEnemyStatus, byEnemyRange, byDamageToEnemy, byEnemyDamageCapabilities, stickToTarget)
+    private val scorers = listOf(byEnemyType, byTimeToAttack, byEnemyStatus, byEnemyRange, byDamageToEnemy, byEnemyDamageCapabilities)
 
     fun bestCombatMoves(attackers: Collection<SUnit>, targets: Collection<SUnit>): Map<SUnit, CombatMove?> {
         val relevantTargets = targets
@@ -66,9 +66,6 @@ object TargetEvaluator {
             remaining.remove(best.first)
             result[best.first] = AttackMove(best.second.first)
             attackedByCount.compute(best.second.first) { _, v -> (v ?: 0) + 1 }
-        }
-        if (targets.any { it.unitType.isBuilding} && result.values.any { (it as? AttackMove)?.enemy?.unitType == UnitType.Zerg_Egg }) {
-            println("!")
         }
         return result
     }
