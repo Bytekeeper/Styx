@@ -29,7 +29,7 @@ class Build(val type: UnitType) : MemoLeaf() {
             val targetPos = it.toPosition() + type.dimensions / 2
             val candidate = units.my(type).nearest(targetPos.x, targetPos.y)
             if (candidate?.tilePosition == it)
-                return if (candidate.completed) NodeStatus.DONE else NodeStatus.RUNNING
+                return if (candidate.isCompleted) NodeStatus.DONE else NodeStatus.RUNNING
             if (workerLock.unit?.canBuildHere(it, type) == false)
                 at = null
         }
@@ -76,7 +76,7 @@ class Train(private val type: UnitType) : MemoLeaf() {
         costLock.acquire()
         if (!costLock.satisfied)
             return NodeStatus.RUNNING
-        if (type.requiredUnits().keys.any { reqType -> units.mine.none { it.unitType == reqType && it.completed } })
+        if (type.requiredUnits().keys.any { reqType -> units.mine.none { it.unitType == reqType && it.isCompleted } })
             return NodeStatus.RUNNING
         val trainer = trainerLock.unit ?: return NodeStatus.RUNNING
         BasicActions.train(trainer, type)
@@ -93,7 +93,7 @@ class Get(private val amount: Int, val type: UnitType) : MemoLeaf() {
     private val children = ArrayDeque<BTNode>()
 
     override fun performTick(): NodeStatus {
-        val remaining = max(0, amount - units.my(type).count { it.completed })
+        val remaining = max(0, amount - units.my(type).count { it.isCompleted })
         if (remaining == 0) {
             children.clear()
             return NodeStatus.DONE

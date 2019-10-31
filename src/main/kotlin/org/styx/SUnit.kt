@@ -31,7 +31,7 @@ class SUnit private constructor(val unit: Unit) {
         private set
     var exists = false
         private set
-    var completed = false
+    var isCompleted = false
         private set
     var detected = false
         private set
@@ -102,7 +102,7 @@ class SUnit private constructor(val unit: Unit) {
         position = unit.position
         gatheringGas = unit.isGatheringGas
         gatheringMinerals = unit.isGatheringMinerals
-        completed = unit.isCompleted
+        isCompleted = unit.isCompleted
         buildType = unit.buildType
         if (unit.hitPoints < hitPoints) {
             lastDamageFrame = game.frameCount

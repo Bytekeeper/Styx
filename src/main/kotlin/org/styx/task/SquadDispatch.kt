@@ -4,10 +4,7 @@ import org.styx.BTNode
 import org.styx.NodeStatus
 import org.styx.Par
 import org.styx.Styx
-import org.styx.squad.SquadAttack
-import org.styx.squad.SquadBackOff
-import org.styx.squad.SquadBoard
-import org.styx.squad.SquadFightLocal
+import org.styx.squad.*
 
 object SquadDispatch : BTNode() {
     private val squads = mutableMapOf<SquadBoard, BTNode>()
@@ -16,7 +13,11 @@ object SquadDispatch : BTNode() {
         squads.keys.retainAll(Styx.squads.squads)
         Styx.squads.squads.forEach { squad ->
             squads.computeIfAbsent(squad) { squadBoard ->
-                Par("Squad", SquadFightLocal(squadBoard), SquadAttack(squadBoard), SquadBackOff(squadBoard))
+                Par("Squad",
+                        SquadFightLocal(squadBoard),
+                        SquadAttack(squadBoard),
+                        SquadBackOff(squadBoard),
+                        SquadScout(squadBoard))
             }
         }
         squads.values.forEach { it.tick() }

@@ -3,7 +3,10 @@ package org.styx
 import bwapi.Position
 import bwapi.UnitType
 import bwapi.WeaponType
+import org.bk.ass.sim.Agent
+import org.bk.ass.sim.Simulator
 import java.util.*
+import java.util.function.ToIntFunction
 import kotlin.math.max
 
 typealias TargetScorer = (a: SUnit, e: SUnit) -> Double
@@ -22,11 +25,11 @@ object TargetEvaluator {
     }
 
     private val byTimeToAttack: TargetScorer = { a, e ->
-        -a.distanceTo(e) / 20.0 / max(5.0, (a.maxRangeVs(e) + 3 * a.topSpeed))
+        -a.distanceTo(e) / 17.0 / max(5.0, (a.maxRangeVs(e) + 3 * a.topSpeed))
     }
 
     private val byEnemyStatus: TargetScorer = { _, e ->
-        -e.hitPoints / 400.0 - e.shields / 600.0
+        -e.hitPoints / 500.0 - e.shields / 700.0
     }
 
     private val byEnemyRange: TargetScorer = { _, e ->
@@ -42,7 +45,9 @@ object TargetEvaluator {
         e.damagePerFrameVs(a) * 0.04
     }
 
-    private val scorers = listOf(byEnemyType, byTimeToAttack, byEnemyStatus, byEnemyRange, byDamageToEnemy, byEnemyDamageCapabilities)
+    private val stickToTarget: TargetScorer = { a, e -> if (a.target == e) 0.3 else 0.0 }
+
+    private val scorers = listOf(byEnemyType, byTimeToAttack, byEnemyStatus, byEnemyRange, byDamageToEnemy, byEnemyDamageCapabilities, stickToTarget)
 
     fun bestCombatMoves(attackers: Collection<SUnit>, targets: Collection<SUnit>): Map<SUnit, CombatMove?> {
         val relevantTargets = targets
@@ -55,7 +60,7 @@ object TargetEvaluator {
         while (remaining.isNotEmpty()) {
             val best = remaining.mapNotNull { a ->
                 relevantTargets.filter { a.weaponAgainst(it) != WeaponType.None }.map { e ->
-                    e to scorers.sumByDouble { it(a, e) } - (attackedByCount[e] ?: 0) * 0.06
+                    e to scorers.sumByDouble { it(a, e) } - (attackedByCount[e] ?: 0) * 0.05
                 }.maxBy { it.second }?.let { a to it }
             }.maxBy { it.second.second } ?: break
             remaining.remove(best.first)
@@ -89,4 +94,14 @@ typealias UnitEvaluator = (SUnit) -> Double
 fun closeTo(position: Position): UnitEvaluator = { u ->
     u.framesToTravelTo(position) +
             (if (u.carrying) 80.0 else 0.0)
+}
+
+// Simplified, but should take more stuff into account:
+// Basic idea: We might want to sacrifice units in order to gain global value. Ie. lose lings but kill workers in early game
+val agentValueForPlayer = ToIntFunction<Agent> { agent ->
+    val unitType = (agent.userObject as? SUnit)?.unitType ?: return@ToIntFunction 0
+    val airDPF = ((unitType.airWeapon().damageAmount() * unitType.maxAirHits()) / unitType.airWeapon().damageCooldown().toDouble()).orZero()
+    val groundDPF = ((unitType.groundWeapon().damageAmount() * unitType.maxGroundHits()) / unitType.groundWeapon().damageCooldown().toDouble()).orZero()
+    (max(airDPF, groundDPF) * 3 +
+            Simulator.HEALTH_AND_HALFED_SHIELD.applyAsInt(agent) / 3).toInt()
 }

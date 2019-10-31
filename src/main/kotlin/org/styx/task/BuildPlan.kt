@@ -4,22 +4,18 @@ import bwapi.UnitType
 import bwapi.UpgradeType
 import org.styx.*
 import org.styx.Styx.bases
-import org.styx.Styx.buildPlan
 import org.styx.Styx.economy
-import org.styx.Styx.resources
 import org.styx.Styx.units
 import org.styx.macro.Build
 import org.styx.macro.Get
 import org.styx.macro.Train
 import org.styx.macro.Upgrade
-import kotlin.math.min
 
 object FollowBO : Par("Follow Build Order",
         Get(9, UnitType.Zerg_Drone),
         Repeat(delegate = Get(1, UnitType.Zerg_Spawning_Pool)),
         Train(UnitType.Zerg_Drone),
         Train(UnitType.Zerg_Overlord),
-        Train(UnitType.Zerg_Drone),
         Repeat(delegate = Seq("Supply", Condition {
             economy.supplyWithPlanned  < 4
         }, Train(UnitType.Zerg_Overlord))),
@@ -36,6 +32,6 @@ object FollowBO : Par("Follow Build Order",
             units.mine.sumBy { it.unitType.supplyRequired() } / 6 + 5
     fun workerAmountRequiredToFullyUtilize() =
             bases.myBases.sumBy { b ->
-                units.minerals.inRadius(b.center, 400).size * 3 / 2 + units.resourceDepots.inRadius(b.center, 400).size * 4
+                units.minerals.inRadius(b.center, 400).size * 3 / 2 + units.myResourceDepots.inRadius(b.center, 400).size * 4
             }
 }

@@ -1,21 +1,25 @@
 package org.styx.squad
 
 import bwapi.Position
-import bwapi.UnitType
 import org.bk.ass.collection.UnorderedCollection
 import org.bk.ass.sim.Agent
 import org.bk.ass.sim.AttackerBehavior
-import org.bk.ass.sim.Evaluator
-import org.bk.ass.sim.Simulator
+import org.bk.ass.sim.IntEvaluation
 import org.styx.*
+import org.styx.Styx.balance
+import org.styx.Styx.bases
+import org.styx.Styx.diag
+import org.styx.Styx.evaluator
 import org.styx.Styx.fleeSim
+import org.styx.Styx.pendingUpgrades
 import org.styx.Styx.resources
 import org.styx.Styx.sim
+import org.styx.Styx.simFS3
 import org.styx.Styx.squads
 import org.styx.Styx.units
 import org.styx.action.BasicActions
-import java.util.function.ToIntFunction
 import kotlin.math.max
+import kotlin.math.min
 
 class SquadBoard {
     var fastEval: Double = 0.5
@@ -27,55 +31,88 @@ class SquadBoard {
         mine.fold(Position(0, 0)) { agg, p -> agg + p.position } / max(1, mine.size)
     }
     val center by LazyOnFrame {
-        all.fold(Position(0, 0)) { agg, p -> agg + p.position } / max(1, mine.size)
+        all.fold(Position(0, 0)) { agg, p -> agg + p.position } / max(1, all.size)
     }
+    val myWorkers by lazy { mine.filter { it.unitType.isWorker } }
+
+    override fun toString(): String = "[$fastEval, $mine, $enemies, $attackBias, $myCenter, $center]"
 }
 
 class SquadFightLocal(private val board: SquadBoard) : BTNode() {
-    private val attackerLock = UnitLocks { Styx.resources.availableUnits.filter { board.mine.contains(it) && !it.unitType.isWorker && !it.unitType.isBuilding && it.unitType.canAttack() } }
-    private val ATTACK_POWER = ToIntFunction<Agent> { agent ->
-        val unitType = (agent.userObject as SUnit).unitType
-        val airDPF = ((unitType.airWeapon().damageAmount() * unitType.maxAirHits()) / unitType.airWeapon().damageCooldown().toDouble()).orZero()
-        val groundDPF = ((unitType.groundWeapon().damageAmount() * unitType.maxGroundHits()) / unitType.groundWeapon().damageCooldown().toDouble()).orZero()
-        (max(airDPF, groundDPF) * 3 +
-                Simulator.HEALTH_AND_HALFED_SHIELD.applyAsInt(agent) / 3).toInt()
+    private var workersToUse = 0
+    private val attackerLock = UnitLocks {
+        resources.availableUnits
+                .filter {
+                    board.mine.contains(it) &&
+                            !it.unitType.isWorker &&
+                            !it.unitType.isBuilding &&
+                            it.unitType.canAttack()
+                }
+    }
+    private val workerAttackerLock = UnitLocks {
+        resources.availableUnits.filter {
+            board.mine.contains(it) &&
+                    it.unitType.isWorker
+        }.sortedByDescending { it.hitPoints * (if (it.gathering) 0.7 else 1.0) }
+                .take(workersToUse)
     }
 
     override fun tick(): NodeStatus {
         val enemies = board.enemies
-        if (enemies.isEmpty()) return NodeStatus.RUNNING
+        val attackBias = board.attackBias
+        board.attackBias = 0
+        if (enemies.isEmpty()) {
+            return NodeStatus.RUNNING
+        }
         if (board.mine.none { it.unitType.isBuilding } && board.fastEval < 0.2)
             return NodeStatus.RUNNING
         attackerLock.reacquire()
-        if (attackerLock.units.isEmpty()) return NodeStatus.RUNNING
-        val attackers = attackerLock.units
-
-        sim.reset()
-        attackers.filter { !it.gathering && it.completed }.forEach { sim.addAgentA(it.agent()) }
-        enemies.forEach {
-            val a = it.agent()
-            sim.addAgentB(a)
-            if (!it.unitType.canAttack())
-                a.setAttackTargetPriority(Agent.TargetingPriority.MEDIUM)
-        }
-
-        sim.simulate(192)
-        val hsAfter = sim.evalToInt(ATTACK_POWER)
-
-        fleeSim.reset()
-        attackers.filter { !it.gathering && it.completed }.forEach { fleeSim.addAgentA(it.agent()) }
-        enemies.map { it.agent() }.forEach { fleeSim.addAgentB(it) }
-        fleeSim.simulate(192)
-        val hsAfterFlee = fleeSim.evalToInt(ATTACK_POWER)
-
-        val scoreAfterCombat = hsAfter.evalA - hsAfter.evalB
-        val scoreAfterFleeing = hsAfterFlee.evalA - hsAfterFlee.evalB
-        if (scoreAfterFleeing > scoreAfterCombat + board.attackBias + attackers.size * 2) {
-            board.attackBias = 0
-            attackerLock.release()
+        val maxUseableWorkers = board.myWorkers.size
+        if (attackerLock.units.isEmpty() && maxUseableWorkers == 0)
             return NodeStatus.RUNNING
+        workerAttackerLock.reacquire()
+        val attackers = attackerLock.units + workerAttackerLock.units.take(workersToUse)
+
+        if (!balance.direSituation) {
+            val afterCombatEval = simulateCombat(attackers, enemies)
+            val afterFleeEval = simulateFleeing(attackers, enemies)
+
+            val scoreAfterCombat = afterCombatEval.delta()
+            val scoreAfterFleeing = afterFleeEval.delta()
+            val bias = attackers.size * 4
+            val shouldFlee = scoreAfterFleeing > scoreAfterCombat + attackBias + bias + maxUseableWorkers * 3
+            val scoreAfterWaitingForUpgrades = if (!shouldFlee && scoreAfterFleeing > scoreAfterCombat + maxUseableWorkers * 3)
+                simulateWithUpgradesDone(attackers, enemies).delta()
+            else
+                Int.MIN_VALUE
+
+            val waitForUpgrade = scoreAfterWaitingForUpgrades > scoreAfterCombat + bias
+
+            if (waitForUpgrade || shouldFlee) {
+                if (attackBias != 0) {
+                    diag.log("SquadFightLocal - RETREAT - $board - shouldFlee: $shouldFlee, " +
+                            "waitForUpgrade: $waitForUpgrade, after-combat-score: $scoreAfterCombat, " +
+                            "after-fleeing-score: $scoreAfterFleeing, after-upgrade-score: $scoreAfterWaitingForUpgrades, bias: $bias " +
+                    "workers-to-use: $workersToUse")
+                }
+                workersToUse = min(maxUseableWorkers, workersToUse + 1)
+                board.attackBias = 0
+                attackerLock.release()
+                workerAttackerLock.release()
+                return NodeStatus.RUNNING
+            }
+            if (attackBias == 0) {
+                diag.log("SquadFightLocal - ATTACK - $board - shouldFlee: $shouldFlee, " +
+                        "waitForUpgrade: $waitForUpgrade, after-combat-score: $scoreAfterCombat, " +
+                        "after-fleeing-score: $scoreAfterFleeing, after-upgrade-score: $scoreAfterWaitingForUpgrades, bias: $bias, " +
+                        "workers-to-use: $workersToUse")
+            }
+            board.attackBias = bias
+            if (scoreAfterCombat > scoreAfterFleeing + bias)
+                workersToUse = max(0, workersToUse - 1)
+        } else {
+            workersToUse = maxUseableWorkers
         }
-        board.attackBias = attackers.size * 3
 
         val combatMoves = TargetEvaluator.bestCombatMoves(attackers, enemies)
         attackers.forEach { a ->
@@ -88,6 +125,49 @@ class SquadFightLocal(private val board: SquadBoard) : BTNode() {
 
         return NodeStatus.RUNNING
     }
+
+    private fun simulateCombat(attackers: List<SUnit>, enemies: List<SUnit>): IntEvaluation {
+        sim.reset()
+        attackers.filter { !it.gathering && it.isCompleted }.forEach { sim.addAgentA(it.agent()) }
+        enemies.forEach {
+            val a = it.agent()
+            sim.addAgentB(a)
+            if (!it.unitType.canAttack())
+                a.setAttackTargetPriority(Agent.TargetingPriority.MEDIUM)
+        }
+
+        sim.simulate(192)
+        return sim.evalToInt(agentValueForPlayer)
+    }
+
+    private fun simulateWithUpgradesDone(attackers: List<SUnit>, enemies: List<SUnit>): IntEvaluation {
+        simFS3.reset()
+        attackers.filter { !it.gathering && it.isCompleted }
+                .forEach {
+                    simFS3.addAgentA(pendingUpgrades.agentWithPendingUpgradesApplied(it.agent()))
+                }
+        enemies.forEach {
+            val a = pendingUpgrades.agentWithPendingUpgradesApplied(it.agent())
+            simFS3.addAgentB(a)
+            if (!it.unitType.canAttack())
+                a.setAttackTargetPriority(Agent.TargetingPriority.MEDIUM)
+        }
+
+        simFS3.simulate(192)
+        return simFS3.evalToInt(agentValueForPlayer)
+    }
+
+    private fun simulateFleeing(attackers: List<SUnit>, enemies: List<SUnit>): IntEvaluation {
+        fleeSim.reset()
+        attackers.filter { !it.gathering && it.isCompleted }.forEach { fleeSim.addAgentA(it.agent()) }
+        enemies.map { it.agent() }.forEach { fleeSim.addAgentB(it) }
+        fleeSim.simulate(192)
+        return fleeSim.evalToInt(agentValueForPlayer)
+    }
+
+    override fun reset() {
+        workersToUse = 0
+    }
 }
 
 class NoAttackIfGatheringBehavior : AttackerBehavior() {
@@ -96,20 +176,20 @@ class NoAttackIfGatheringBehavior : AttackerBehavior() {
 }
 
 class SquadAttack(private val board: SquadBoard) : BTNode() {
-    private val attackerLock = UnitLocks { Styx.resources.availableUnits.filter { board.mine.contains(it) && !it.unitType.isWorker && !it.unitType.isBuilding && it.unitType.canAttack() } }
-
-    private val evaluator = Evaluator()
+    private val attackerLock = UnitLocks { resources.availableUnits.filter { board.mine.contains(it) && !it.unitType.isWorker && !it.unitType.isBuilding && it.unitType.canAttack() } }
 
     override fun tick(): NodeStatus {
         val enemySquads = squads.squads.filter { it.enemies.isNotEmpty() }
         attackerLock.reacquire()
         if (attackerLock.units.isEmpty()) return NodeStatus.RUNNING
         val attackers = attackerLock.units
-        val targetSquad = enemySquads.map {
+        val candidates = enemySquads.map {
             val myAgents = (attackers + it.mine).distinct().filter { it.unitType.canAttack() && it.unitType.canMove() }.map { it.agent() }
             val enemies = (board.enemies + it.enemies).distinct().map { it.agent() }
             it to evaluator.evaluate(myAgents, enemies)
-        }.filter { it.second > 0.6 }.minBy { it.second }?.first
+        }
+        val targetSquad = bestSquadToSupport(candidates)
+                ?: desperateAttemptToWinSquad(candidates)
         if (targetSquad != null) {
             val targetPosition = targetSquad.mine.filter { !it.flying }.minBy { it.distanceTo(targetSquad.center) }?.position
                     ?: targetSquad.enemies.filter { !it.flying }.minBy { it.distanceTo(targetSquad.center) }?.position
@@ -126,17 +206,37 @@ class SquadAttack(private val board: SquadBoard) : BTNode() {
         }
         return NodeStatus.RUNNING
     }
+
+    private fun desperateAttemptToWinSquad(candidates: List<Pair<SquadBoard, Double>>) =
+            if (balance.direSituation)
+                candidates.maxBy { it.second }?.let { if (it.second > 0.3) it.first else null }
+            else
+                null
+
+    private fun bestSquadToSupport(candidates: List<Pair<SquadBoard, Double>>) =
+            candidates.filter { it.second > 0.55 }.minBy { it.second }?.first
 }
 
 class SquadBackOff(private val board: SquadBoard) : BTNode() {
-    private val attackerLock = UnitLocks { Styx.resources.availableUnits.filter { board.mine.contains(it) && !it.unitType.isWorker && !it.unitType.isBuilding && it.unitType.canAttack() } }
+    private val attackerLock = UnitLocks {
+        resources.availableUnits.filter {
+            board.mine.contains(it) &&
+                    !it.unitType.isWorker &&
+                    it.unitType.canMove() &&
+                    it.unitType.canAttack()
+        }
+    }
 
     override fun tick(): NodeStatus {
+        if (board.fastEval >= 0.5)
+            return NodeStatus.RUNNING
         attackerLock.reacquire()
-        if (attackerLock.units.isEmpty()) return NodeStatus.RUNNING
+        if (attackerLock.units.isEmpty())
+            return NodeStatus.RUNNING
         val targetSquad = squads.squads
                 .filterNot { it == board }
-                .minBy { it.enemies.size * 2 - it.mine.count { it.unitType.canAttack() } } ?: return NodeStatus.RUNNING
+                .minBy { it.enemies.size * 2 - it.mine.count { it.unitType.canAttack() } }
+                ?: return NodeStatus.RUNNING
         if (targetSquad.mine.isEmpty()) {
             attackerLock.units.forEach { attacker ->
                 val target = TargetEvaluator.bestTarget(attacker, units.enemy) ?: return@forEach
@@ -155,5 +255,28 @@ class SquadBackOff(private val board: SquadBoard) : BTNode() {
         }
         return NodeStatus.RUNNING
     }
+}
 
+class SquadScout(private val board: SquadBoard) : BTNode() {
+    private val attackerLock = UnitLocks {
+        resources.availableUnits.filter {
+            board.mine.contains(it) &&
+                    !it.unitType.isWorker &&
+                    it.unitType.canMove() &&
+                    it.unitType.canAttack()
+        }
+    }
+
+    override fun tick(): NodeStatus {
+        if (bases.potentialEnemyBases.isEmpty())
+            return NodeStatus.RUNNING
+        attackerLock.reacquire()
+        if (attackerLock.units.isEmpty())
+            return NodeStatus.RUNNING
+        val targetBase = bases.potentialEnemyBases.minBy { it.center.getApproxDistance(board.myCenter) }!!
+        attackerLock.units.forEach {
+            BasicActions.move(it, targetBase.center)
+        }
+        return NodeStatus.RUNNING
+    }
 }

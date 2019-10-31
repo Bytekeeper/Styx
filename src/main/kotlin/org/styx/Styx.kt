@@ -9,6 +9,7 @@ import org.bk.ass.manage.GMS
 import org.bk.ass.query.PositionQueries
 import org.bk.ass.sim.*
 import org.locationtech.jts.math.Vector2D
+import org.styx.Styx.evaluator
 import org.styx.Styx.frame
 import org.styx.Styx.game
 import org.styx.Styx.units
@@ -47,13 +48,23 @@ object Styx {
         private set
     var economy = Economy()
         private set
+    val pendingUpgrades = PendingUpgrades()
+    var balance = Balance()
+        private set
+
     val sim = Simulator.Builder()
             .withPlayerBBehavior(Simulator.RoleBasedBehavior(NoAttackIfGatheringBehavior(), HealerBehavior(), RepairerBehavior(), SuiciderBehavior()))
+            .build()
+    val simFS3 = Simulator.Builder()
+            .withPlayerBBehavior(Simulator.RoleBasedBehavior(NoAttackIfGatheringBehavior(), HealerBehavior(), RepairerBehavior(), SuiciderBehavior()))
+            .withFrameSkip(3)
             .build()
     val fleeSim = Simulator.Builder()
             .withPlayerABehavior(RetreatBehavior())
             .withFrameSkip(7)
             .build()
+    val evaluator = Evaluator()
+    val diag = Diagnose()
 
     fun update() {
         frameTimes.clear()
@@ -66,6 +77,10 @@ object Styx {
         ft("squads") { squads.update() }
         ft("buildPlan") { buildPlan.update() }
         ft("economy") { economy.update() }
+    }
+
+    fun onEnd() {
+        diag.close()
     }
 
     fun ft(name: String, delegate: () -> kotlin.Unit) {
@@ -115,14 +130,9 @@ class Squads {
                 mine = units.filter { it.myUnit }
                 enemies = units.filter { it.enemyUnit }
                 all = units
-                fastEval = when {
-                    mine.isNotEmpty() && enemies.isNotEmpty() ->
-                        evaluator.evaluate(
-                                mine.filter { it.unitType.canAttack() }.map { it.agent() },
-                                enemies.filter { it.unitType.canAttack() }.map { it.agent() })
-                    mine.isEmpty() -> 0.0
-                    else -> 1.0
-                };
+                fastEval = evaluator.evaluate(
+                        mine.filter { it.remainingBuildTime < 48 }.map { it.agent() },
+                        enemies.filter { it.remainingBuildTime < 48 }.map { it.agent() })
             }
         }
 
@@ -157,6 +167,8 @@ class Units {
         private set
     lateinit var workers: PositionQueries<SUnit>
         private set
+    lateinit var myResourceDepots: PositionQueries<SUnit>
+        private set
     lateinit var resourceDepots: PositionQueries<SUnit>
         private set
     lateinit var minerals: PositionQueries<SUnit>
@@ -183,11 +195,12 @@ class Units {
         geysers = PositionQueries(relevantUnits.filter { it.unitType == UnitType.Resource_Vespene_Geyser }, positionExtractor)
 
         mine = PositionQueries(relevantUnits.filter { it.myUnit }, positionExtractor)
-        resourceDepots = PositionQueries(mine.filter { it.unitType.isResourceDepot }, positionExtractor)
+        resourceDepots = PositionQueries(ownedUnits.filter { it.unitType.isResourceDepot }, positionExtractor)
+        myResourceDepots = PositionQueries(resourceDepots.filter { it.unitType.isResourceDepot }, positionExtractor)
         workers = PositionQueries(mine.filter { it.unitType.isWorker }, positionExtractor)
         enemy = PositionQueries((relevantUnits.filter { it.enemyUnit }), positionExtractor)
         myPending = mine
-                .filter { !it.completed }
+                .filter { !it.isCompleted }
                 .map {
                     if (it.remainingBuildTime == 0 && it.unitType != UnitType.Zerg_Larva && it.unitType != UnitType.Zerg_Egg)
                         PendingUnit(it, it.position, it.unitType, 0)
@@ -200,7 +213,7 @@ class Units {
             myX.computeIfAbsent(type) { LazyOnFrame { PositionQueries(mine.filter { it.unitType == type }, positionExtractor) } }.value
 
     fun myCompleted(type: UnitType): PositionQueries<SUnit> =
-            myCompleted.computeIfAbsent(type) { LazyOnFrame { PositionQueries(mine.filter { it.unitType == type && it.completed }, positionExtractor) } }.value
+            myCompleted.computeIfAbsent(type) { LazyOnFrame { PositionQueries(mine.filter { it.unitType == type && it.isCompleted }, positionExtractor) } }.value
 
     fun onUnitDestroy(unit: Unit) {
         val u = SUnit.forUnit(unit)
@@ -211,26 +224,51 @@ class Units {
 
 class Base(val centerTile: TilePosition,
            val center: Position,
-           var mainResourceDepot: SUnit? = null)
+           val isStartingLocation: Boolean,
+           var mainResourceDepot: SUnit? = null,
+           var lastSeenFrame: Int? = null)
 
 class Bases {
     lateinit var bases: List<Base>
         private set
     lateinit var myBases: List<Base>
         private set
+    lateinit var enemyBases: List<Base>
+        private set
+    lateinit var potentialEnemyBases: List<Base>
+        private set
 
     fun update() {
         if (!this::bases.isInitialized) {
             bases = Styx.map.bases.map {
-                Base(it.location, it.center)
+                Base(it.location, it.center, it.isStartingLocation)
             }
         }
         bases.forEach {
             val resourceDepot = units.resourceDepots.nearest(it.center.x, it.center.y)
-            it.mainResourceDepot = if (resourceDepot != null && resourceDepot.distanceTo(it.center) < 80) resourceDepot else null
+            if (resourceDepot != null && resourceDepot.distanceTo(it.center) < 80)
+                it.mainResourceDepot = resourceDepot
+            if (game.isVisible(it.centerTile))
+                it.lastSeenFrame = frame
         }
         myBases = bases.filter { it.mainResourceDepot?.myUnit == true }
+        enemyBases = bases.filter { it.mainResourceDepot?.enemyUnit == true }
+        potentialEnemyBases = bases.filter {
+            val closestEnemy = units.enemy.nearest(it.center)?.distanceTo(it.center) ?: 0.0
+            it.isStartingLocation &&
+                    !game.isExplored(it.centerTile) &&
+                    (closestEnemy < 300 || closestEnemy > 600)
+        }
     }
+}
+
+class Balance {
+    val globalFastEval by LazyOnFrame {
+        val myAgents = units.mine.map { it.agent() }
+        val enemyAgents = units.enemy.map { it.agent() }
+        evaluator.evaluate(myAgents, enemyAgents)
+    }
+    val direSituation get() = globalFastEval < 0.5
 }
 
 val UnitType.dimensions get() = Position(width(), height())
@@ -246,6 +284,7 @@ operator fun TilePosition.plus(other: TilePosition) = add(other)
 fun <T> Optional<T>.orNull(): T? = orElse(null)
 
 fun <T> PositionQueries<T>.inRadius(pos: Position, radius: Int) = inRadius(pos.x, pos.y, radius)
+fun <T> PositionQueries<T>.nearest(pos: Position): T? = nearest(pos.x, pos.y)
 
 operator fun GMS.minus(value: GMS) = subtract(value)
 operator fun GMS.plus(value: GMS) = add(value)

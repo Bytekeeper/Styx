@@ -51,12 +51,12 @@ class Listener : DefaultBWListener() {
         Styx.units.onUnitDestroy(unit)
     }
 
-    override fun onUnitHide(unit: Unit?) {
-        super.onUnitHide(unit)
-    }
-
     fun start() {
         client.startGame()
+    }
+
+    override fun onEnd(isWinner: Boolean) {
+        Styx.onEnd()
     }
 }
 

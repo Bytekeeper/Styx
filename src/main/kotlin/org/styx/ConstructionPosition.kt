@@ -20,7 +20,7 @@ object ConstructionPosition {
             return findPositionForGas();
         }
 
-        val target = near?.toTilePosition() ?: Styx.bases.myBases.mapNotNull { it.mainResourceDepot }
+        val target = near?.toTilePosition() ?: bases.myBases.mapNotNull { it.mainResourceDepot }
                 .maxBy { Styx.units.workers.inRadius(it.x, it.y, 300).size }?.tilePosition ?: return null
         var bestBuildPosition: TilePosition? = null
         var bestDistance: Int = Int.MAX_VALUE
@@ -34,7 +34,7 @@ object ConstructionPosition {
                 if ((i != 0 || j != 0) && (pos.x % 3 < 1 || pos.y % 5 < 2))
                     continue
                 if (dist < bestDistance
-                        && Styx.game.canBuildHere(pos, unitType)
+                        && game.canBuildHere(pos, unitType)
                         && outsideOfResourceLines(pos, unitType)
                         && hasNoAddonOrEnoughSpace(unitType, pos)
                         && willNotBlockOtherAddon(unitType, pos)
