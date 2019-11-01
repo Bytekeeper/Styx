@@ -111,7 +111,7 @@ class Economy {
             }
 
     fun estimatedAdditionalGMIn(frames: Int): GMS =
-            GMS((perWorkerPerFrameGas * frames * units.workers.count { it.gatheringGas }).toInt(), (perWorkerPerFrameMinerals * frames * units.workers.count { it.gatheringMinerals }).toInt(), 0)
+            GMS((perWorkerPerFrameGas * frames * units.myWorkers.count { it.gatheringGas }).toInt(), (perWorkerPerFrameMinerals * frames * units.myWorkers.count { it.gatheringMinerals }).toInt(), 0)
 
     fun update() {
     }
@@ -173,7 +173,7 @@ class Units {
         private set
     var enemy: PositionQueries<SUnit> = PositionQueries(emptyList(), positionExtractor)
         private set
-    lateinit var workers: PositionQueries<SUnit>
+    lateinit var myWorkers: PositionQueries<SUnit>
         private set
     lateinit var myResourceDepots: PositionQueries<SUnit>
         private set
@@ -205,7 +205,7 @@ class Units {
         mine = PositionQueries(relevantUnits.filter { it.myUnit }, positionExtractor)
         resourceDepots = PositionQueries(ownedUnits.filter { it.unitType.isResourceDepot }, positionExtractor)
         myResourceDepots = PositionQueries(resourceDepots.filter { it.unitType.isResourceDepot }, positionExtractor)
-        workers = PositionQueries(mine.filter { it.unitType.isWorker }, positionExtractor)
+        myWorkers = PositionQueries(mine.filter { it.unitType.isWorker }, positionExtractor)
         enemy = PositionQueries((relevantUnits.filter { it.enemyUnit }), positionExtractor)
         myPending = mine
                 .filter { !it.isCompleted }

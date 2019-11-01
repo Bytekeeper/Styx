@@ -5,6 +5,7 @@ import bwapi.UnitType
 import bwapi.WeaponType
 import org.bk.ass.sim.Agent
 import org.bk.ass.sim.Simulator
+import org.locationtech.jts.math.DD.EPS
 import java.util.*
 import java.util.function.ToIntFunction
 import kotlin.math.max
@@ -26,12 +27,13 @@ object TargetEvaluator {
 
     private val byTimeToAttack: TargetScorer = { a, e ->
         val framesToTurnTo = a.framesToTurnTo(e)
-        -max(0, a.distanceTo(e) - a.maxRangeVs(e)) / 5.0 / max(1.0, a.topSpeed) -
+        -max(0, a.distanceTo(e) - a.maxRangeVs(e)) / 15.0 / max(1.0, a.topSpeed) -
                 framesToTurnTo / 3.0
     }
 
-    private val byEnemyStatus: TargetScorer = { _, e ->
-        -e.hitPoints / 500.0 - e.shields / 700.0
+    private val byTimeToKillEnemy: TargetScorer = { a, e ->
+        val damageAmount = a.weaponAgainst(e).damageAmount()
+        -(e.hitPoints / (a.damagePerFrameVs(e) + EPS) - e.shields / (damageAmount + EPS)) / 500
     }
 
     private val byEnemyRange: TargetScorer = { _, e ->
@@ -39,15 +41,11 @@ object TargetEvaluator {
                 e.unitType.airWeapon().maxRange() / 400.0
     }
 
-    private val byDamageToEnemy: TargetScorer = { a, e ->
-        a.damagePerFrameVs(e) * 0.1
-    }
-
     private val byEnemyDamageCapabilities: TargetScorer = { a, e ->
-        e.damagePerFrameVs(a) * 0.04
+        e.damagePerFrameVs(a) * 0.1
     }
 
-    private val scorers = listOf(byEnemyType, byTimeToAttack, byEnemyStatus, byEnemyRange, byDamageToEnemy, byEnemyDamageCapabilities)
+    private val scorers = listOf(byEnemyType, byTimeToAttack, byTimeToKillEnemy, byEnemyRange, byEnemyDamageCapabilities)
 
     fun bestCombatMoves(attackers: Collection<SUnit>, targets: Collection<SUnit>): Map<SUnit, CombatMove?> {
         val relevantTargets = targets

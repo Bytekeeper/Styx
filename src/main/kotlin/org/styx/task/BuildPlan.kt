@@ -19,9 +19,10 @@ object FollowBO : Par("Follow Build Order",
         Repeat(delegate = Seq("Supply", Condition {
             economy.supplyWithPlanned  < 3
         }, Train(UnitType.Zerg_Overlord))),
-        Repeat(delegate = Get(6, UnitType.Zerg_Zergling)),
-        Repeat(delegate = Get(8, UnitType.Zerg_Drone)),
-        Repeat(delegate = Get(200, UnitType.Zerg_Zergling)),
+        repeat("Initial lings", 3) { Train(UnitType.Zerg_Zergling) },
+        haveBasicZerglingSquad(),
+        Repeat(delegate = Get(7, UnitType.Zerg_Drone)),
+        pumpLings(),
 //        Repeat(delegate = Seq("Train workers", Condition {
 //            min(FollowBO.workerAmountBaseOnSupply(), FollowBO.workerAmountRequiredToFullyUtilize()) > units.workers.size + buildPlan.plannedUnits.count { it.isWorker }
 //        }, Train(UnitType.Zerg_Drone))),
@@ -38,3 +39,6 @@ object FollowBO : Par("Follow Build Order",
                 units.minerals.inRadius(b.center, 400).size * 3 / 2 + units.myResourceDepots.inRadius(b.center, 400).size * 4
             }
 }
+
+private fun pumpLings() = Repeat(delegate = Get(200, UnitType.Zerg_Zergling))
+private fun haveBasicZerglingSquad() = Repeat(delegate = Get(6, UnitType.Zerg_Zergling))

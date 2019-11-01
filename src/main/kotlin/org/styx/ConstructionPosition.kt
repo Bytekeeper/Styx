@@ -21,7 +21,7 @@ object ConstructionPosition {
         }
 
         val target = near?.toTilePosition() ?: bases.myBases.mapNotNull { it.mainResourceDepot }
-                .maxBy { Styx.units.workers.inRadius(it.x, it.y, 300).size }?.tilePosition ?: return null
+                .maxBy { Styx.units.myWorkers.inRadius(it.x, it.y, 300).size }?.tilePosition ?: return null
         var bestBuildPosition: TilePosition? = null
         var bestDistance: Int = Int.MAX_VALUE
         for (i in -15..15) {

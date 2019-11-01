@@ -3,6 +3,7 @@ package org.styx.task
 import bwapi.UnitType
 import org.styx.*
 import org.styx.Styx.resources
+import org.styx.Styx.units
 import org.styx.action.BasicActions
 
 class Gathering(private val onlyRequiredGas: Boolean = false) : BTNode() {
@@ -14,7 +15,8 @@ class Gathering(private val onlyRequiredGas: Boolean = false) : BTNode() {
         if (workers.units.isEmpty()) // No workers left? We have serious problems
             return NodeStatus.RUNNING
 
-        val gatherGas = resources.availableGMS.gas < 0 || !onlyRequiredGas
+        val availableGMS = resources.availableGMS
+        val gatherGas = availableGMS.gas < 0 && units.myWorkers.count() > 6 || !onlyRequiredGas
         if (gatherGas) {
             val pending = workers.units.toMutableList()
             val extractors = Styx.units.myCompleted(UnitType.Zerg_Extractor)

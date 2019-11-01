@@ -15,7 +15,7 @@ object BasicActions {
     }
 
     fun gather(unit: SUnit, resource: SUnit) {
-        if (unit.target == resource || unit.returningMinerals) return
+        if (unit.target == resource || unit.returningResource) return
         unit.gather(resource)
     }
 

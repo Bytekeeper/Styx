@@ -30,20 +30,25 @@ class Listener : DefaultBWListener() {
     }
 
     override fun onFrame() {
-        val timed = Timed()
-        Styx.update()
+        try {
+            val timed = Timed()
+            Styx.update()
 
-        aiTree.tick()
-        ConstructionPosition.drawBlockedAreas()
-        game.drawTextScreen(10, 10, "${bases.myBases.size}")
-        buildPlan.showPlanned(Position(10, 20))
-        val frameTime = timed.ms()
-        if (frameTime > maxFrameTime && game.frameCount > 0) {
-            System.err.println("frame ${game.frameCount} - max frame time: ${frameTime}ms")
-            Styx.frameTimes.forEach {
-                System.err.println("${it.name} : ${it.ms()}ms")
+            aiTree.tick()
+            ConstructionPosition.drawBlockedAreas()
+            game.drawTextScreen(10, 10, "${bases.myBases.size}")
+            buildPlan.showPlanned(Position(10, 20))
+            val frameTime = timed.ms()
+            if (frameTime > maxFrameTime && game.frameCount > 0) {
+                System.err.println("frame ${game.frameCount} - max frame time: ${frameTime}ms")
+                Styx.frameTimes.forEach {
+                    System.err.println("${it.name} : ${it.ms()}ms")
+                }
+                maxFrameTime = frameTime
             }
-            maxFrameTime = frameTime
+        } catch (e: Throwable) {
+            Styx.diag.crash(e)
+            throw e
         }
     }
 

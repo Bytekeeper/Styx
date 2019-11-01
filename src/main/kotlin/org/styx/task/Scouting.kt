@@ -4,7 +4,6 @@ import bwapi.UnitType
 import org.styx.*
 import org.styx.Styx.bases
 import org.styx.Styx.game
-import org.styx.action.BasicActions
 import org.styx.micro.Potential
 
 object Scouting : BTNode() {
@@ -14,7 +13,7 @@ object Scouting : BTNode() {
         ovis.reacquire()
         if (ovis.units.isEmpty()) return NodeStatus.RUNNING
         val remaining = ovis.units.toMutableList()
-        for (base in bases.bases.filter { !game.isVisible(it.centerTile) }) {
+        for (base in bases.bases.filter { !game.isVisible(it.centerTile) }.sortedBy { it.lastSeenFrame ?: 0 }) {
             val ovi = remaining.minBy { it.distanceTo(base.center) } ?: return NodeStatus.RUNNING
             val safety = 32 + 256 - 256 *  ovi.hitPoints / ovi.unitType.maxHitPoints()
             val force = Potential.airAttract(ovi, base.center) * 0.3 + Potential.avoidDanger(ovi, safety)

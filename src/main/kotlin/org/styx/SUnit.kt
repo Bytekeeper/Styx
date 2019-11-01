@@ -69,7 +69,7 @@ class SUnit private constructor(val unit: Unit) {
         private set
     var orderTarget: SUnit? = null
         private set
-    val returningMinerals get() = unit.isCarrying && unit.target?.type?.isResourceDepot == true
+    val returningResource get() = unit.isCarrying && orderTarget?.unitType?.isResourceDepot == true
     var beingGathered = false
         private set
 
@@ -220,11 +220,24 @@ class SUnit private constructor(val unit: Unit) {
             if (unitType == UnitType.Terran_Bunker)
                 UnitType.Terran_Marine.groundWeapon()
             else if (other.flying) unitType.airWeapon() else unitType.groundWeapon()
-    fun damagePerFrameVs(other: SUnit) =
-            (if (other.flying)
-                (unitType.airWeapon().damageAmount() * unitType.maxAirHits()) / unitType.airWeapon().damageCooldown().toDouble()
-            else
-                (unitType.groundWeapon().damageAmount() * unitType.maxGroundHits()) / unitType.groundWeapon().damageCooldown().toDouble()).orZero()
+
+    fun damagePerFrameVs(other: SUnit): Double {
+        val (weapon, hits) =
+                if (other.flying) {
+                    unitType.airWeapon() to unitType.maxAirHits()
+                } else {
+                    unitType.groundWeapon() to unitType.maxGroundHits()
+                }
+        if (weapon.damageAmount() == 0)
+            return 0.0
+        val damagePerHit = DamageCalculator.damageToHitpoints(
+                player.damage(weapon),
+                hits,
+                weapon.damageType(),
+                other.player.armor(other.unitType),
+                other.unitType.size())
+        return damagePerHit / weapon.damageCooldown().toDouble()
+    }
 
     fun isOnCooldown() = unit.groundWeaponCooldown > 0 && unitType.groundWeapon().damageCooldown() - unit.groundWeaponCooldown < stopFrames
             || unit.airWeaponCooldown > 0 && unitType.airWeapon().damageCooldown() - unit.airWeaponCooldown < stopFrames

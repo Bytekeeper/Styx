@@ -73,8 +73,8 @@ class Train(private val type: UnitType) : MemoLeaf() {
                     }.toTypedArray())
 
     override fun performTick(): NodeStatus {
-        if (dependency.tick() != NodeStatus.DONE)
-            return NodeStatus.RUNNING
+        if (dependency.tick() == NodeStatus.FAILED)
+            return NodeStatus.FAILED
         if (trainerLock.unit?.unitType == type)
             return NodeStatus.DONE
         trainerLock.acquire()

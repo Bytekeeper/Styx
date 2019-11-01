@@ -51,6 +51,11 @@ open class Seq(name: String, vararg children: BTNode) : CompoundNode(name, *chil
 
 open class Par(name: String, vararg children: BTNode) : CompoundNode(name, *children) {
     override fun performTick(): NodeStatus = tickPar(tickedChilds)
+
+    companion object {
+        fun repeat(name: String, amount: Int, childSupplier: () -> BTNode) =
+                Par(name, *(0 until amount).map { childSupplier() }.toTypedArray())
+    }
 }
 
 class Memo(private val delegate: BTNode) : BTNode() {
@@ -108,4 +113,3 @@ class Repeat(private val amount: Int = -1, private val delegate: BTNode) : BTNod
         delegate.reset()
     }
 }
-
