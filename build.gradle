@@ -22,10 +22,12 @@ configurations.all {
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
-    implementation("com.github.JavaBWAPI:JBWAPI:develop-SNAPSHOT").changing = true
-    implementation('com.github.Bytekeeper:ass:develop-SNAPSHOT').changing = true
+    implementation("com.github.JavaBWAPI:JBWAPI:fail-early-SNAPSHOT").changing = true
+    //implementation('com.github.Bytekeeper:ass:develop-SNAPSHOT').changing = true
+    implementation(files('lib/ass-1.1.jar'))
     implementation 'org.locationtech.jts:jts-core:1.16.1'
-
+    implementation 'com.github.luben:zstd-jni:1.4.3-1'
+    implementation 'com.jsoniter:jsoniter:0.9.19'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.5.2'
     testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.5.2'
     testImplementation 'org.assertj:assertj-core:3.13.2'

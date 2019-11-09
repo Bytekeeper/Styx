@@ -9,6 +9,7 @@ import org.bk.ass.manage.GMS
 import org.bk.ass.query.PositionQueries
 import org.bk.ass.sim.*
 import org.locationtech.jts.math.Vector2D
+import org.styx.Styx.diag
 import org.styx.Styx.evaluator
 import org.styx.Styx.frame
 import org.styx.Styx.game
@@ -52,6 +53,8 @@ object Styx {
     val pendingUpgrades = PendingUpgrades()
     var balance = Balance()
         private set
+    var tech = Tech()
+        private set
 
     val sim = Simulator.Builder()
             .withPlayerBBehavior(Simulator.RoleBasedBehavior(NoAttackIfGatheringBehavior(), HealerBehavior(), RepairerBehavior(), SuiciderBehavior()))
@@ -71,24 +74,32 @@ object Styx {
         frameTimes.clear()
         minRemainingLatencyFrames = min(minRemainingLatencyFrames, game.remainingLatencyFrames)
         turnSize = game.latencyFrames - minRemainingLatencyFrames + 1
-        frame = game.frameCount
         self = game.self()
-        if (frame > 0 && game.remainingLatencyFrames > minRemainingLatencyFrames || game.isPaused)
+        if (frame > 0 && game.remainingLatencyFrames > minRemainingLatencyFrames && game.frameCount - frame < minRemainingLatencyFrames || game.isPaused)
             return
+        // Opponent fiddled around with speed?
+        if (game.frameCount - frame > minRemainingLatencyFrames) {
+            // Maybe
+            minRemainingLatencyFrames = game.remainingLatencyFrames
+        }
+        frame = game.frameCount
         ft("units") { units.update() }
         ft("resources") { resources.update() }
         ft("bases") { bases.update() }
         ft("squads") { squads.update() }
         ft("buildPlan") { buildPlan.update() }
         ft("economy") { economy.update() }
+        ft("tech") { tech.update() }
     }
 
     fun onEnd() {
         diag.close()
     }
 
-    fun ft(name: String, delegate: () -> kotlin.Unit) {
-        frameTimes += time(name, delegate)
+    fun <T> ft(name: String, delegate: () -> T): T {
+        var result: T? = null
+        frameTimes += time(name) { result = delegate(); Unit }
+        return result!!
     }
 }
 
@@ -118,7 +129,7 @@ class Economy {
 }
 
 class Squads {
-    private val dbScanner = StableDBScanner<SUnit>(3)
+    private val dbScanner = StableDBScanner<SUnit>(2)
     private val evaluator = Evaluator()
 
     private var clusters: Collection<Cluster<SUnit>> = emptyList()
@@ -144,6 +155,10 @@ class Squads {
             }
         }
 
+//        val any = units.mine.filter { !it.unit.isAttacking && !it.gathering && !it.carrying && !it.unit.isMoving && units.mine.inRadius(it, 150).any { it.unit.isAttacking } }
+//        if (any.isNotEmpty()) {
+//            println("ASS")
+//        }
     }
 }
 
@@ -190,7 +205,11 @@ class Units {
 
     fun update() {
         val knownUnits = (Styx.game.allUnits.map { SUnit.forUnit(it) } + enemy).distinct()
-        knownUnits.forEach { it.update() }
+        knownUnits.forEach {
+            it.update()
+            if (it.firstSeenFrame == Styx.frame)
+                diag.onFirstSeen(it)
+        }
         val relevantUnits = knownUnits
                 .filter {
                     it.visible ||
@@ -228,6 +247,19 @@ class Units {
         enemy.remove(u)
         u.dispose()
     }
+}
+
+class Tech {
+    private lateinit var remainingUpgradeTime: Map<UpgradeType, Int>
+
+    fun update() {
+        remainingUpgradeTime = units.mine
+                .filter { it.unit.isUpgrading }
+                .map { it.unit.upgrade to it.unit.remainingUpgradeTime }
+                .toMap()
+    }
+
+    fun timeRemainingForUpgrade(upgradeType: UpgradeType): Int? = remainingUpgradeTime[upgradeType]
 }
 
 class Base(val centerTile: TilePosition,
@@ -276,7 +308,7 @@ class Balance {
         val enemyAgents = units.enemy.map { it.agent() }
         evaluator.evaluate(myAgents, enemyAgents)
     }
-    val direSituation get() = globalFastEval < 0.5
+    val direSituation get() = globalFastEval < 0.2
 }
 
 val UnitType.dimensions get() = Position(width(), height())

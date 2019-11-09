@@ -26,6 +26,10 @@ class SUnit private constructor(val unit: Unit) {
         private set
     var y = 0
         private set
+    val left get() = x - unitType.dimensionLeft()
+    val top get() = y - unitType.dimensionUp()
+    val right get() = x + unitType.dimensionRight()
+    val bottom get() = y + unitType.dimensionDown()
     var angle = 0.0
         private set
     var moving = false
@@ -64,7 +68,7 @@ class SUnit private constructor(val unit: Unit) {
     val carrying: Boolean get() = carryingGas || carryingMinerals
     val owned get() = !player.isNeutral
     val ready get() = readyOnFrame < Styx.frame
-    val sleeping get() = readyOnFrame >= Styx.frame
+    val sleeping get() = readyOnFrame >= Styx.frame || isOnCooldown()
     var target: SUnit? = null
         private set
     var orderTarget: SUnit? = null
@@ -75,6 +79,7 @@ class SUnit private constructor(val unit: Unit) {
 
     val controller = Controller()
     private lateinit var lastAgent: Agent
+    val firstSeenFrame = Styx.frame
     var lastSeenFrame = 0
         private set
     private var lastDamageFrame: Int? = null
@@ -87,13 +92,16 @@ class SUnit private constructor(val unit: Unit) {
     val stopFrames = BWMirrorUnitInfo.stopFrames(unitType)
     var remainingBuildTime = 0
         private set
+    var remainingTrainTime = 0
+        private set
+    val isAttacking get() = exists && unit.isAttacking
 
     fun update() {
         visible = unit.isVisible
+        exists = unit.exists()
         if (!unit.isVisible && Styx.frame > 0) return
         lastAgent = agentFactory.of(unit).setUserObject(this)
         lastSeenFrame = game.frameCount
-        exists = unit.exists()
         unitType = unit.type
         tilePosition = unit.tilePosition
         x = unit.x
@@ -121,17 +129,53 @@ class SUnit private constructor(val unit: Unit) {
         velocity = Vector2D(unit.velocityX, unit.velocityY)
         topSpeed = player.topSpeed(unitType)
         remainingBuildTime = unit.remainingBuildTime
+        remainingTrainTime = unit.remainingTrainTime
         enemyUnit = player.isEnemy(self)
         myUnit = player == self
         stimTimer = unit.stimTimer
     }
 
-    fun distanceTo(other: SUnit) = if (other.visible) unit.getDistance(other.unit) else position.getDistance(other.position).toInt()
     fun distanceTo(pos: Position) = position.getDistance(pos)
     fun distanceTo(pos: TilePosition) = tilePosition.getDistance(pos)
     fun framesToTravelTo(pos: Position) =
             (if (flying) (distanceTo(pos) / topSpeed).toInt()
             else (Styx.map.getPathLength(position, pos) / topSpeed).toInt()) + 12
+
+    fun distanceTo(target: SUnit): Int {
+        // If target is the same as the source
+        if (this === target) {
+            return 0
+        }
+
+        /////// Compute distance
+
+        // retrieve left/top/right/bottom values for calculations
+        val left = target.left - 1
+        val top = target.top - 1
+        val right = target.right + 1
+        val bottom = target.bottom + 1
+
+        // compute x distance
+        var xDist = this.left - right
+        if (xDist < 0) {
+            xDist = left - this.right
+            if (xDist < 0) {
+                xDist = 0
+            }
+        }
+
+        // compute y distance
+        var yDist = this.top - bottom
+        if (yDist < 0) {
+            yDist = top - this.bottom
+            if (yDist < 0) {
+                yDist = 0
+            }
+        }
+
+        // compute actual distance
+        return Position.Origin.getApproxDistance(Position(xDist, yDist))
+    }
 
     val tileGeometry: Geometry
         get() {
@@ -211,10 +255,13 @@ class SUnit private constructor(val unit: Unit) {
         unit.stop();
     }
 
-    fun inAttackRange(other: SUnit, allowance: Float = 0f) = maxRangeVs(other) + allowance >= distanceTo(other)
+    val threats by LazyOnFrame { Styx.units.enemy.inRadius(this, 400) { it.inAttackRange(this, 320f) } }
+    fun inAttackRange(other: SUnit, allowance: Float = 0f) = hasWeaponAgainst(other) && maxRangeVs(other) + allowance >= distanceTo(other)
     fun maxRangeVs(other: SUnit) =
             player.weaponMaxRange(weaponAgainst(other)) +
                     if (unitType == UnitType.Terran_Bunker) 64 else 0
+
+    fun hasWeaponAgainst(other: SUnit) = weaponAgainst(other) != WeaponType.None
 
     fun weaponAgainst(other: SUnit): WeaponType =
             if (unitType == UnitType.Terran_Bunker)
@@ -239,10 +286,10 @@ class SUnit private constructor(val unit: Unit) {
         return damagePerHit / weapon.damageCooldown().toDouble()
     }
 
-    fun isOnCooldown() = unit.groundWeaponCooldown > 0 && unitType.groundWeapon().damageCooldown() - unit.groundWeaponCooldown < stopFrames
-            || unit.airWeaponCooldown > 0 && unitType.airWeapon().damageCooldown() - unit.airWeaponCooldown < stopFrames
+    fun isOnCooldown() = unitType.groundWeapon() != WeaponType.None && unitType.groundWeapon().damageCooldown() - unit.groundWeaponCooldown < stopFrames
+            || unitType.airWeapon() != WeaponType.None && unitType.airWeapon().damageCooldown() - unit.airWeaponCooldown < stopFrames
 
-    override fun toString(): String = "$unitType $position [${player.name}]"
+    override fun toString(): String = "${unitType.shortName()} $position [${player.name.substring(0, 2)}]"
 
     fun canBuildHere(at: TilePosition, type: UnitType) = game.canBuildHere(at, type, unit)
 
@@ -264,6 +311,8 @@ class SUnit private constructor(val unit: Unit) {
         fun forUnit(unit: Unit) = units.computeIfAbsent(unit) { SUnit(it) }
     }
 }
+
+fun UnitType.shortName() = toString().substringAfter('_')
 
 class Controller {
     fun reset() {

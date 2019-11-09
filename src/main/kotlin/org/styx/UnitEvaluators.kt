@@ -6,6 +6,9 @@ import bwapi.WeaponType
 import org.bk.ass.sim.Agent
 import org.bk.ass.sim.Simulator
 import org.locationtech.jts.math.DD.EPS
+import org.styx.Config.evalFramesToKillFactor
+import org.styx.Config.evalFramesToReach
+import org.styx.Config.evalFramesToTurnFactor
 import java.util.*
 import java.util.function.ToIntFunction
 import kotlin.math.max
@@ -27,13 +30,13 @@ object TargetEvaluator {
 
     private val byTimeToAttack: TargetScorer = { a, e ->
         val framesToTurnTo = a.framesToTurnTo(e)
-        -max(0, a.distanceTo(e) - a.maxRangeVs(e)) / 15.0 / max(1.0, a.topSpeed) -
-                framesToTurnTo / 3.0
+        -max(0, a.distanceTo(e) - a.maxRangeVs(e)) * evalFramesToReach / max(1.0, a.topSpeed) -
+                framesToTurnTo * evalFramesToTurnFactor
     }
 
     private val byTimeToKillEnemy: TargetScorer = { a, e ->
         val damageAmount = a.weaponAgainst(e).damageAmount()
-        -(e.hitPoints / (a.damagePerFrameVs(e) + EPS) - e.shields / (damageAmount + EPS)) / 500
+        -(e.hitPoints / (a.damagePerFrameVs(e) + EPS) - e.shields / (damageAmount + EPS)) * evalFramesToKillFactor
     }
 
     private val byEnemyRange: TargetScorer = { _, e ->
@@ -42,7 +45,7 @@ object TargetEvaluator {
     }
 
     private val byEnemyDamageCapabilities: TargetScorer = { a, e ->
-        e.damagePerFrameVs(a) * 0.1
+        e.damagePerFrameVs(a) * 0.2
     }
 
     private val scorers = listOf(byEnemyType, byTimeToAttack, byTimeToKillEnemy, byEnemyRange, byEnemyDamageCapabilities)
@@ -97,6 +100,6 @@ val agentValueForPlayer = ToIntFunction<Agent> { agent ->
     val unitType = (agent.userObject as? SUnit)?.unitType ?: return@ToIntFunction 0
     val airDPF = ((unitType.airWeapon().damageAmount() * unitType.maxAirHits()) / unitType.airWeapon().damageCooldown().toDouble()).orZero()
     val groundDPF = ((unitType.groundWeapon().damageAmount() * unitType.maxGroundHits()) / unitType.groundWeapon().damageCooldown().toDouble()).orZero()
-    (max(airDPF, groundDPF) * 3 +
+    (max(airDPF, groundDPF) * 27 +
             Simulator.HEALTH_AND_HALFED_SHIELD.applyAsInt(agent) / 3).toInt()
 }

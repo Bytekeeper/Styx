@@ -4,8 +4,11 @@ import bwapi.TechType
 import bwapi.TilePosition
 import bwapi.UnitType
 import bwapi.UpgradeType
+import org.bk.ass.manage.GMS
 import org.styx.*
 import org.styx.Styx.buildPlan
+import org.styx.Styx.economy
+import org.styx.Styx.resources
 import org.styx.Styx.units
 import org.styx.action.BasicActions
 import java.util.*
@@ -23,6 +26,12 @@ class Build(val type: UnitType) : MemoLeaf() {
     }
     private val costLock = UnitCostLock(type)
     private var waitFrames = 0
+    private val dependency = Par("Dependencies for ${type}",
+            *type.requiredUnits()
+                    .filter { (type, _) -> type != UnitType.Zerg_Larva }
+                    .map { (type, amount) ->
+                        Get(amount, type)
+                    }.toTypedArray())
 
     override fun performTick(): NodeStatus {
         at?.let {
@@ -33,6 +42,8 @@ class Build(val type: UnitType) : MemoLeaf() {
             if (workerLock.unit?.canBuildHere(it, type) == false)
                 at = null
         }
+        if (dependency.tick() == NodeStatus.FAILED)
+            return NodeStatus.FAILED
         buildPlan.plannedUnits += type
         val buildAt = at ?: ConstructionPosition.findPositionFor(type) ?: return NodeStatus.RUNNING
         at = buildAt
@@ -57,6 +68,8 @@ class Build(val type: UnitType) : MemoLeaf() {
         workerLock.reset()
         at = null
     }
+
+    override fun toString(): String = "Build $type at $at"
 }
 
 /**
@@ -96,6 +109,8 @@ class Train(private val type: UnitType) : MemoLeaf() {
         dependency.reset()
         trainerLock.reset()
     }
+
+    override fun toString(): String = "Train $type"
 }
 
 class Get(private val amount: Int, val type: UnitType) : MemoLeaf() {
@@ -107,12 +122,29 @@ class Get(private val amount: Int, val type: UnitType) : MemoLeaf() {
             children.clear()
             return NodeStatus.DONE
         }
-        val remaining = max(0, amount - units.my(type).size - buildPlan.plannedUnits.count { it == type })
+        val pendingUnitsFactor = if (type.isTwoUnitsInOneEgg) 2 else 1
+        val remaining = max(0, amount - units.my(type).size - buildPlan.plannedUnits.count { it == type } * pendingUnitsFactor)
         if (remaining == 0) {
             return NodeStatus.RUNNING
         }
-        val expectedChildCount = min(
-                units.my(type.whatBuilds().first).count() + units.myPending.count { it.unitType == type }, if (type.isTwoUnitsInOneEgg) (remaining + 1) / 2 else remaining)
+
+        val predictedAdditionalBuilders =
+                if (type.whatBuilds().first == UnitType.Zerg_Larva) {
+                    var estimatedCost = GMS(0, 0, 0)
+                    units.myResourceDepots.filter { it.remainingTrainTime > 0 }
+                            .sortedBy { it.remainingTrainTime }
+                            .asSequence()
+                            .map { it.remainingTrainTime }
+                            .takeWhile { frames ->
+                                estimatedCost += GMS.unitCost(type)
+                                // TODO: Missing additional supply in the given time
+                                (resources.availableGMS + economy.estimatedAdditionalGMIn(frames)).greaterOrEqual(estimatedCost)
+                            }.count()
+                } else 0
+        val builders = units.my(type.whatBuilds().first).count() + predictedAdditionalBuilders
+        val expectedChildCount =
+                min(builders + units.myPending.count { it.unitType == type },
+                        (remaining + pendingUnitsFactor / 2) / pendingUnitsFactor)
         if (expectedChildCount == 0) return NodeStatus.RUNNING
         repeat(expectedChildCount - children.size) {
             children += if (type.isBuilding) Build(type) else Train(type)

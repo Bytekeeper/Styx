@@ -5,12 +5,14 @@ import bwapi.Unit
 import bwem.BWEM
 import org.styx.Styx.bases
 import org.styx.Styx.buildPlan
+import org.styx.Styx.diag
 import org.styx.task.FollowBO
 import org.styx.task.Gathering
 import org.styx.task.Scouting
 import org.styx.task.SquadDispatch
 
 class Listener : DefaultBWListener() {
+    private var lastFrame: Int = 0
     private lateinit var game: Game
     private val client = BWClient(this)
     private var maxFrameTime = 0L;
@@ -30,6 +32,7 @@ class Listener : DefaultBWListener() {
     }
 
     override fun onFrame() {
+        lastFrame = game.frameCount
         try {
             val timed = Timed()
             Styx.update()
@@ -41,7 +44,9 @@ class Listener : DefaultBWListener() {
             val frameTime = timed.ms()
             if (frameTime > maxFrameTime && game.frameCount > 0) {
                 System.err.println("frame ${game.frameCount} - max frame time: ${frameTime}ms")
-                Styx.frameTimes.forEach {
+                Styx.frameTimes
+                        .filter { it.ms() > 0 }
+                        .forEach {
                     System.err.println("${it.name} : ${it.ms()}ms")
                 }
                 maxFrameTime = frameTime
@@ -61,6 +66,9 @@ class Listener : DefaultBWListener() {
     }
 
     override fun onEnd(isWinner: Boolean) {
+        if (game.frameCount > lastFrame) {
+            println("OH OH ${game.frameCount} vs $lastFrame")
+        }
         Styx.onEnd()
     }
 }

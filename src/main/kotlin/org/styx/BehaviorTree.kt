@@ -1,5 +1,7 @@
 package org.styx
 
+import org.styx.Styx.ft
+
 enum class NodeStatus {
     RUNNING,
     DONE,
@@ -26,11 +28,11 @@ abstract class BTNode {
 }
 
 abstract class CompoundNode(val name: String, private vararg val children: BTNode) : BTNode() {
-    protected val tickedChilds get() = children.sortedByDescending { it.priority }.asSequence().map { it.tick() }
+    protected val tickedChilds get() = children.sortedByDescending { it.priority }.asSequence().map { ft(name, it::tick) }
     override fun reset() = children.forEach { it.reset() }
     final override fun tick(): NodeStatus {
         val result = performTick()
-        if (result != NodeStatus.RUNNING) reset()
+//        if (result != NodeStatus.RUNNING) reset()
         return result
     }
 
@@ -41,12 +43,16 @@ open class Sel(name: String, vararg children: BTNode) : CompoundNode(name, *chil
     override fun performTick(): NodeStatus =
             tickedChilds.firstOrNull { it != NodeStatus.FAILED }
                     ?: NodeStatus.FAILED
+
+    override fun toString(): String = "Sel $name"
 }
 
 open class Seq(name: String, vararg children: BTNode) : CompoundNode(name, *children) {
     override fun performTick(): NodeStatus = tickedChilds
             .takeWhile { it == NodeStatus.DONE }.lastOrNull()
             ?: NodeStatus.DONE
+
+    override fun toString(): String = "Seq $name"
 }
 
 open class Par(name: String, vararg children: BTNode) : CompoundNode(name, *children) {
@@ -56,6 +62,8 @@ open class Par(name: String, vararg children: BTNode) : CompoundNode(name, *chil
         fun repeat(name: String, amount: Int, childSupplier: () -> BTNode) =
                 Par(name, *(0 until amount).map { childSupplier() }.toTypedArray())
     }
+
+    override fun toString(): String = "Par $name"
 }
 
 class Memo(private val delegate: BTNode) : BTNode() {
@@ -112,4 +120,6 @@ class Repeat(private val amount: Int = -1, private val delegate: BTNode) : BTNod
         remaining = amount
         delegate.reset()
     }
+
+    override fun toString(): String = "Repeat $amount times: $delegate"
 }

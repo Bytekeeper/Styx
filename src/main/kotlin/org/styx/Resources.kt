@@ -123,7 +123,7 @@ class Resources {
 
     fun tryReserveGMS(gms: GMS): Boolean =
             if (availableGMS.greaterOrEqual(gms)) {
-                availableGMS -= gms
+                reserveGMS(gms)
                 true
             } else false
 
