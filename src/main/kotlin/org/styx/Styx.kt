@@ -9,6 +9,7 @@ import org.bk.ass.manage.GMS
 import org.bk.ass.query.PositionQueries
 import org.bk.ass.sim.*
 import org.locationtech.jts.math.Vector2D
+import org.styx.Styx.buildPlan
 import org.styx.Styx.diag
 import org.styx.Styx.evaluator
 import org.styx.Styx.frame
@@ -16,7 +17,7 @@ import org.styx.Styx.game
 import org.styx.Styx.units
 import org.styx.Timed.Companion.time
 import org.styx.squad.NoAttackIfGatheringBehavior
-import org.styx.squad.SquadBoard
+import org.styx.squad.Squad
 import java.util.*
 import kotlin.math.PI
 import kotlin.math.max
@@ -84,11 +85,11 @@ object Styx {
         }
         frame = game.frameCount
         ft("units") { units.update() }
+        ft("economy") { economy.update() }
         ft("resources") { resources.update() }
         ft("bases") { bases.update() }
         ft("squads") { squads.update() }
         ft("buildPlan") { buildPlan.update() }
-        ft("economy") { economy.update() }
         ft("tech") { tech.update() }
     }
 
@@ -107,6 +108,10 @@ class Economy {
     // "Stolen" from PurpleWave
     private val perWorkerPerFrameMinerals = 0.046
     private val perWorkerPerFrameGas = 0.069
+    private var workersOnMinerals: Int = 0
+    private var workersOnGas: Int = 0
+    lateinit var currentResources : GMS
+        private set
 
     private val supplyWithPending: Int by LazyOnFrame {
         Styx.self.supplyTotal() - Styx.self.supplyUsed() +
@@ -116,25 +121,49 @@ class Economy {
     val supplyWithPlanned: Int
         get() =
             supplyWithPending + Styx.buildPlan.plannedUnits.sumBy {
-                it.supplyProvided() +
-                        -it.supplyRequired() +
-                        (if (it.whatBuilds().first == UnitType.Zerg_Drone) 1 else 0)
+                val u = it.type
+                u.supplyProvided() +
+                        -u.supplyRequired() +
+                        (if (u.whatBuilds().first == UnitType.Zerg_Drone) 1 else 0)
             }
 
-    fun estimatedAdditionalGMIn(frames: Int): GMS =
-            GMS((perWorkerPerFrameGas * frames * units.myWorkers.count { it.gatheringGas }).toInt(), (perWorkerPerFrameMinerals * frames * units.myWorkers.count { it.gatheringMinerals }).toInt(), 0)
+    // TODO: Missing additional supply in the given time
+    fun estimatedAdditionalGMSIn(frames: Int): GMS {
+        require(frames >= 0)
+        val lostWorkers = buildPlan.plannedUnits
+                .filter { it.type.isBuilding }
+                .mapNotNull { if (it.framesToStart != null && it.framesToStart <= frames) it.framesToStart else null }
+                .sortedBy { it }
+        var frame = 0
+        var gasWorkers = workersOnGas
+        var mineralWorkers = workersOnMinerals
+        val estimatedAfterWorkerloss = lostWorkers.fold(GMS(0, 0, 0)) { acc, f ->
+            val deltaFrames = f - frame
+            if (mineralWorkers > 0)
+                mineralWorkers--
+            else if (gasWorkers > 0)
+                gasWorkers--
+            frame = f
+            acc + GMS((perWorkerPerFrameGas * deltaFrames * gasWorkers).toInt(), (perWorkerPerFrameMinerals * deltaFrames * mineralWorkers).toInt(), 0)
+        }
+        val deltaFrames = frames - frame
+        return estimatedAfterWorkerloss +
+                GMS((perWorkerPerFrameGas * deltaFrames * gasWorkers).toInt(), (perWorkerPerFrameMinerals * deltaFrames * mineralWorkers).toInt(), 0)
+    }
 
     fun update() {
+        workersOnMinerals = units.myWorkers.count { it.gatheringMinerals }
+        workersOnGas = units.myWorkers.count { it.gatheringGas }
+        currentResources = GMS(Styx.self.gas(), Styx.self.minerals(), Styx.self.supplyTotal() - Styx.self.supplyUsed())
     }
 }
 
 class Squads {
     private val dbScanner = StableDBScanner<SUnit>(2)
-    private val evaluator = Evaluator()
 
     private var clusters: Collection<Cluster<SUnit>> = emptyList()
         private set
-    private val _squads = mutableMapOf<Cluster<SUnit>, SquadBoard>()
+    private val _squads = mutableMapOf<Cluster<SUnit>, Squad>()
     val squads = _squads.values
 
     fun update() {
@@ -145,14 +174,8 @@ class Squads {
 
         Styx.squads.clusters.forEach { cluster ->
             val units = cluster.elements.toMutableList()
-            with(_squads.computeIfAbsent(cluster) { SquadBoard() }) {
-                mine = units.filter { it.myUnit }
-                enemies = units.filter { it.enemyUnit }
-                all = units
-                fastEval = evaluator.evaluate(
-                        mine.filter { it.remainingBuildTime < 48 }.map { it.agent() },
-                        enemies.filter { it.remainingBuildTime < 48 }.map { it.agent() })
-            }
+            _squads.computeIfAbsent(cluster) { Squad() }
+                    .update(units)
         }
 
 //        val any = units.mine.filter { !it.unit.isAttacking && !it.gathering && !it.carrying && !it.unit.isMoving && units.mine.inRadius(it, 150).any { it.unit.isAttacking } }
@@ -163,21 +186,14 @@ class Squads {
 }
 
 class BuildPlan {
-    val plannedUnits = mutableListOf<UnitType>()
+    val plannedUnits = mutableListOf<PlannedUnit>()
 
     fun update() {
         plannedUnits.clear()
     }
-
-    fun showPlanned(base: Position) {
-        var pos = base
-
-        plannedUnits.forEach {
-            game.drawTextScreen(base, "$it")
-            pos = Position(pos.x, pos.y + 10);
-        }
-    }
 }
+
+data class PlannedUnit(val type: UnitType, val framesToStart: Int? = null)
 
 class Units {
     lateinit var ownedUnits: PositionQueries<SUnit>

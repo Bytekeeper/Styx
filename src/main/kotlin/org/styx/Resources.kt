@@ -50,15 +50,25 @@ abstract class Lock<T : Any>(val criteria: (T) -> Boolean = { true }, val select
     abstract fun tryReserve(item: T): Boolean
 }
 
-class UnitLocks(criteria: (Collection<SUnit>) -> Boolean = { true }, selector: () -> Collection<SUnit>) : Lock<Collection<SUnit>>(criteria, selector) {
+class UnitLocks(criteria: (Collection<SUnit>) -> Boolean = { true }, selector: () -> Collection<SUnit>) : Lock<List<SUnit>>(criteria,{ selector().toMutableList() }) {
     val units get() = item ?: emptyList()
 
-    override fun tryReserve(item: Collection<SUnit>): Boolean {
+    override fun tryReserve(item: List<SUnit>): Boolean {
         if (Styx.resources.tryReserveUnits(item)) {
             item.forEach { it.controller.reset() }
             return true
         }
         return false
+    }
+
+    fun releaseUnit(unit: SUnit) {
+        (item as MutableList) -= unit
+        Styx.resources.releaseUnit(unit)
+    }
+
+    fun releaseUnits(units: Collection<SUnit>) {
+        (item as MutableList) -= units
+        Styx.resources.releaseUnits(units)
     }
 
     override fun releaseItem() {
@@ -95,7 +105,7 @@ open class GMSLock(val gms: GMS) {
             willBeSatisfied = true
             return
         }
-        willBeSatisfied = Styx.resources.availableGMS.plus(economy.estimatedAdditionalGMIn(futureFrames)).greaterOrEqual(gms)
+        willBeSatisfied = Styx.resources.availableGMS.plus(economy.estimatedAdditionalGMSIn(futureFrames)).greaterOrEqual(gms)
         Styx.resources.reserveGMS(gms)
         satisfied = false
     }

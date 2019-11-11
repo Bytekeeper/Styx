@@ -10,6 +10,7 @@ import org.locationtech.jts.geom.Envelope
 import org.locationtech.jts.geom.Geometry
 import org.locationtech.jts.geom.GeometryFactory
 import org.locationtech.jts.math.Vector2D
+import org.styx.Styx.frame
 import org.styx.Styx.game
 import org.styx.Styx.self
 import kotlin.math.abs
@@ -25,6 +26,10 @@ class SUnit private constructor(val unit: Unit) {
     var x = 0
         private set
     var y = 0
+        private set
+    var vx = 0.0
+        private set
+    var vy = 0.0
         private set
     val left get() = x - unitType.dimensionLeft()
     val top get() = y - unitType.dimensionUp()
@@ -96,6 +101,11 @@ class SUnit private constructor(val unit: Unit) {
         private set
     val isAttacking get() = exists && unit.isAttacking
 
+    private var stuckFrames = 0
+        private set
+    var lastUnstickingCommandFrame = Int.MAX_VALUE
+        private set
+
     fun update() {
         visible = unit.isVisible
         exists = unit.exists()
@@ -106,6 +116,8 @@ class SUnit private constructor(val unit: Unit) {
         tilePosition = unit.tilePosition
         x = unit.x
         y = unit.y
+        vx = unit.velocityX
+        vy = unit.velocityY
         angle = unit.angle
         target = unit.target?.let { forUnit(it) }
         orderTarget = unit.orderTarget?.let { forUnit(it) }
@@ -133,6 +145,18 @@ class SUnit private constructor(val unit: Unit) {
         enemyUnit = player.isEnemy(self)
         myUnit = player == self
         stimTimer = unit.stimTimer
+        if (frame - lastUnstickingCommandFrame > game.latencyFrames) {
+            if (vx == 0.0 && vy == 0.0 && !isOnCooldown() && !gathering) {
+                stuckFrames++
+                if (stuckFrames > 24) {
+                    lastUnstickingCommandFrame = Int.MAX_VALUE
+                    stop()
+                }
+            } else
+                lastUnstickingCommandFrame = Int.MAX_VALUE
+        } else {
+            stuckFrames = 0
+        }
     }
 
     fun distanceTo(pos: Position) = position.getDistance(pos)
@@ -185,19 +209,29 @@ class SUnit private constructor(val unit: Unit) {
         }
 
     fun moveTo(target: Position) {
-        if (sleeping) return
+        if (sleeping || unit.position == target) return
+        lastUnstickingCommandFrame = frame
         unit.move(target)
+        sleep()
+    }
+
+    fun follow(other: SUnit) {
+        if (sleeping) return
+        lastUnstickingCommandFrame = frame
+        unit.follow(other.unit)
         sleep()
     }
 
     fun build(type: UnitType, at: TilePosition) {
         if (sleeping) return
+        lastUnstickingCommandFrame = frame
         unit.build(type, at)
         sleep()
     }
 
     fun attack(other: SUnit) {
         if (sleeping) return
+        lastUnstickingCommandFrame = frame
         if (target == other) return
         unit.attack(other.unit)
         sleep(BWMirrorUnitInfo.stopFrames(unitType))
@@ -205,6 +239,7 @@ class SUnit private constructor(val unit: Unit) {
 
     fun attack(target: Position) {
         if (sleeping) return
+        lastUnstickingCommandFrame = frame
         if (this.orderTarget?.enemyUnit == true)
             return
         unit.attack(target)
@@ -212,7 +247,8 @@ class SUnit private constructor(val unit: Unit) {
     }
 
     fun gather(resource: SUnit) {
-        if (sleeping) return
+        if (sleeping || unit.orderTarget == resource.unit) return
+        lastUnstickingCommandFrame = frame
         unit.gather(resource.unit)
         sleep()
     }
@@ -247,11 +283,13 @@ class SUnit private constructor(val unit: Unit) {
 
     fun rightClick(target: SUnit) {
         if (sleeping) return
+        lastUnstickingCommandFrame = frame
         unit.rightClick(target.unit)
         sleep()
     }
 
     fun stop() {
+        if (!unit.isMoving) return
         unit.stop();
     }
 
@@ -289,7 +327,7 @@ class SUnit private constructor(val unit: Unit) {
     fun isOnCooldown() = unitType.groundWeapon() != WeaponType.None && unitType.groundWeapon().damageCooldown() - unit.groundWeaponCooldown < stopFrames
             || unitType.airWeapon() != WeaponType.None && unitType.airWeapon().damageCooldown() - unit.airWeaponCooldown < stopFrames
 
-    override fun toString(): String = "${unitType.shortName()} $position [${player.name.substring(0, 2)}]"
+    override fun toString(): String = "i$id ${unitType.shortName()}${if (!visible && enemyUnit) "(H)" else ""} $position [${player.name.substring(0, 2)}]"
 
     fun canBuildHere(at: TilePosition, type: UnitType) = game.canBuildHere(at, type, unit)
 

@@ -27,19 +27,17 @@ abstract class BTNode {
     }
 }
 
-abstract class CompoundNode(val name: String, private vararg val children: BTNode) : BTNode() {
+abstract class CompoundNode(val name: String) : BTNode() {
+    protected abstract val children : Collection<BTNode>
     protected val tickedChilds get() = children.sortedByDescending { it.priority }.asSequence().map { ft(name, it::tick) }
     override fun reset() = children.forEach { it.reset() }
-    final override fun tick(): NodeStatus {
-        val result = performTick()
-//        if (result != NodeStatus.RUNNING) reset()
-        return result
-    }
+    final override fun tick(): NodeStatus = performTick()
 
     abstract fun performTick(): NodeStatus
 }
 
-open class Sel(name: String, vararg children: BTNode) : CompoundNode(name, *children) {
+open class Sel(name: String, vararg children: BTNode) : CompoundNode(name) {
+    override val children: List<BTNode> = children.toList()
     override fun performTick(): NodeStatus =
             tickedChilds.firstOrNull { it != NodeStatus.FAILED }
                     ?: NodeStatus.FAILED
@@ -47,7 +45,8 @@ open class Sel(name: String, vararg children: BTNode) : CompoundNode(name, *chil
     override fun toString(): String = "Sel $name"
 }
 
-open class Seq(name: String, vararg children: BTNode) : CompoundNode(name, *children) {
+open class Seq(name: String, vararg children: BTNode) : CompoundNode(name) {
+    override val children: List<BTNode> = children.toList()
     override fun performTick(): NodeStatus = tickedChilds
             .takeWhile { it == NodeStatus.DONE }.lastOrNull()
             ?: NodeStatus.DONE
@@ -55,7 +54,8 @@ open class Seq(name: String, vararg children: BTNode) : CompoundNode(name, *chil
     override fun toString(): String = "Seq $name"
 }
 
-open class Par(name: String, vararg children: BTNode) : CompoundNode(name, *children) {
+open class Par(name: String, vararg children: BTNode) : CompoundNode(name) {
+    override val children: Collection<BTNode> = children.toList()
     override fun performTick(): NodeStatus = tickPar(tickedChilds)
 
     companion object {

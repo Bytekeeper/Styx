@@ -12,14 +12,15 @@ import java.io.PrintWriter
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.Paths
-import java.time.LocalDateTime
 import java.util.*
+import java.util.logging.Level
 
 fun WalkPosition.diag() = "($x,$y)"
-fun SUnit.diag() = "i$id $unitType ${position.toWalkPosition().diag()}"
+fun SUnit.diag() = "i$id ${unitType.shortName()} ${position.toWalkPosition().diag()}"
 
 class Diagnose : Closeable {
     private val jsonOut: JsonStream
+    private val logOut: PrintWriter
     private val writePath: Path
     private var firstLog = true
     private val drawCommands = mutableMapOf<String, MutableList<DrawCommand>>()
@@ -37,6 +38,7 @@ class Diagnose : Closeable {
         println("Writing to folder $path")
         val trace = ZstdOutputStream(Files.newOutputStream(path.resolve("trace.json")))
         jsonOut = JsonStream(trace, 4096)
+        logOut = PrintWriter(Files.newBufferedWriter(path.resolve("log.log")), true)
         if (Config.logEnabled) {
             jsonOut.writeObjectStart()
             jsonOut.writeObjectField("_version")
@@ -77,9 +79,14 @@ class Diagnose : Closeable {
         Any.wrap(firstSeen).writeTo(jsonOut)
         jsonOut.writeObjectEnd()
         jsonOut.close()
+        logOut.close()
     }
 
-    fun log(message: String, vararg attach: DAttachment = arrayOf()) {
+    fun log(message: String, logLevel: Level = Level.INFO) {
+        logOut.println("${logLevel.name} - ${Styx.frame}: $message")
+    }
+
+    fun traceLog(message: String, vararg attach: DAttachment = arrayOf()) {
         if (!Config.logEnabled) return
         if (firstLog)
             firstLog = false

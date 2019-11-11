@@ -1,13 +1,12 @@
 package org.styx
 
-import bwapi.*
+import bwapi.BWClient
+import bwapi.DefaultBWListener
+import bwapi.Game
 import bwapi.Unit
 import bwem.BWEM
-import org.styx.Styx.bases
-import org.styx.Styx.buildPlan
 import org.styx.Styx.diag
 import org.styx.task.FollowBO
-import org.styx.task.Gathering
 import org.styx.task.Scouting
 import org.styx.task.SquadDispatch
 
@@ -39,15 +38,13 @@ class Listener : DefaultBWListener() {
 
             aiTree.tick()
             ConstructionPosition.drawBlockedAreas()
-            game.drawTextScreen(10, 10, "${bases.myBases.size}")
-            buildPlan.showPlanned(Position(10, 20))
             val frameTime = timed.ms()
-            if (frameTime > maxFrameTime && game.frameCount > 0) {
-                System.err.println("frame ${game.frameCount} - max frame time: ${frameTime}ms")
+            if (frameTime > 42 && game.frameCount > 0) {
+                diag.log("frame ${game.frameCount} - frame time: ${frameTime}ms")
                 Styx.frameTimes
                         .filter { it.ms() > 0 }
                         .forEach {
-                    System.err.println("${it.name} : ${it.ms()}ms")
+                            diag.log("${it.name} : ${it.ms()}ms")
                 }
                 maxFrameTime = frameTime
             }
@@ -66,9 +63,6 @@ class Listener : DefaultBWListener() {
     }
 
     override fun onEnd(isWinner: Boolean) {
-        if (game.frameCount > lastFrame) {
-            println("OH OH ${game.frameCount} vs $lastFrame")
-        }
         Styx.onEnd()
     }
 }

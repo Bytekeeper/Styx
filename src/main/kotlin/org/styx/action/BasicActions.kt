@@ -14,6 +14,13 @@ object BasicActions {
         unit.moveTo(to)
     }
 
+    fun follow(unit: SUnit, other: SUnit) {
+        if (other.visible)
+            unit.follow(other)
+        else
+            move(unit, other.position)
+    }
+
     fun gather(unit: SUnit, resource: SUnit) {
         if (unit.target == resource || unit.returningResource) return
         unit.gather(resource)
@@ -28,11 +35,12 @@ object BasicActions {
     }
 
     fun build(worker: SUnit, type: UnitType, at: TilePosition) {
-        if (worker.distanceTo(at) < 5) {
+        val targetPosition = at.toPosition() + type.dimensions / 2
+        if (worker.distanceTo(targetPosition) < 5 * 32) {
             worker.build(type, at)
             return
         }
-        move(worker, at.toPosition() + type.dimensions / 2)
+        move(worker, targetPosition)
     }
 
     fun attack(unit: SUnit, target: SUnit) {

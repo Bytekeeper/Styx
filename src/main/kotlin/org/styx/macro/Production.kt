@@ -7,6 +7,7 @@ import bwapi.UpgradeType
 import org.bk.ass.manage.GMS
 import org.styx.*
 import org.styx.Styx.buildPlan
+import org.styx.Styx.diag
 import org.styx.Styx.economy
 import org.styx.Styx.resources
 import org.styx.Styx.units
@@ -22,10 +23,10 @@ class Build(val type: UnitType) : MemoLeaf() {
     private var at: TilePosition? = null
     private val workerLock = UnitLock {
         val eval = closeTo(at!!.toPosition())
-        Styx.resources.availableUnits.filter { it.unitType.isWorker }.minBy { eval(it) }
+        resources.availableUnits.filter { it.unitType.isWorker }.minBy { eval(it) }
     }
     private val costLock = UnitCostLock(type)
-    private var waitFrames = 0
+    private var hysteresisFrames = 0
     private val dependency = Par("Dependencies for ${type}",
             *type.requiredUnits()
                     .filter { (type, _) -> type != UnitType.Zerg_Larva }
@@ -44,22 +45,44 @@ class Build(val type: UnitType) : MemoLeaf() {
         }
         if (dependency.tick() == NodeStatus.FAILED)
             return NodeStatus.FAILED
-        buildPlan.plannedUnits += type
-        val buildAt = at ?: ConstructionPosition.findPositionFor(type) ?: return NodeStatus.RUNNING
+        val buildAt = at ?: ConstructionPosition.findPositionFor(type) ?: run {
+            buildPlan.plannedUnits += PlannedUnit(type)
+            return NodeStatus.RUNNING
+        }
         at = buildAt
         workerLock.acquire()
         val buildPosition = buildAt.toPosition() + type.dimensions / 2
-        costLock.futureFrames = workerLock.unit?.framesToTravelTo(buildPosition) ?: 0
+        val travelFrames = workerLock.unit?.framesToTravelTo(buildPosition) ?: 0
+        costLock.futureFrames = travelFrames + hysteresisFrames
         costLock.acquire()
-        val worker = workerLock.unit ?: return NodeStatus.RUNNING
-        if (costLock.satisfied)
+        val worker = workerLock.unit ?: run {
+            buildPlan.plannedUnits += PlannedUnit(type)
+            return NodeStatus.RUNNING
+        }
+        if (costLock.satisfied) {
+            buildPlan.plannedUnits += PlannedUnit(type, 0)
+            hysteresisFrames = 0
             BasicActions.build(worker, type, buildAt)
-        else if (costLock.willBeSatisfied || waitFrames > 0) {
-            waitFrames--;
+        } else if (costLock.willBeSatisfied) {
+            buildPlan.plannedUnits += PlannedUnit(type, travelFrames)
+            if (hysteresisFrames == 0 && Config.logEnabled) {
+                diag.traceLog("Build ${type} with ${worker.diag()} at ${buildAt.toWalkPosition().diag()} - GMS: ${resources.availableGMS}, " +
+                        "actual resources: ${economy.currentResources}, " +
+                        "frames to target: $travelFrames, plan queue: ${buildPlan.plannedUnits}")
+            }
+            hysteresisFrames--;
             BasicActions.move(worker, buildPosition)
-            if (costLock.willBeSatisfied) waitFrames = 48;
-        } else
+            if (costLock.willBeSatisfied) hysteresisFrames = Config.productionHysteresisFrames
+        } else {
+            buildPlan.plannedUnits += PlannedUnit(type)
+            if (hysteresisFrames > 0) {
+                diag.traceLog("Postponed build ${type} with ${worker.diag()} at ${buildAt.toWalkPosition().diag()}  - GMS: ${resources.availableGMS}, " +
+                        "frames to target: $travelFrames, hysteresis frames: " +
+                        "$hysteresisFrames")
+            }
+            hysteresisFrames = 0
             workerLock.release()
+        }
         return NodeStatus.RUNNING
     }
 
@@ -67,6 +90,7 @@ class Build(val type: UnitType) : MemoLeaf() {
         super.reset()
         workerLock.reset()
         at = null
+        hysteresisFrames = 0
     }
 
     override fun toString(): String = "Build $type at $at"
@@ -93,7 +117,7 @@ class Train(private val type: UnitType) : MemoLeaf() {
         trainerLock.acquire()
         if (trainerLock.unit?.buildType == type)
             return NodeStatus.RUNNING
-        buildPlan.plannedUnits += type
+        buildPlan.plannedUnits += PlannedUnit(type)
         costLock.acquire()
         if (!costLock.satisfied)
             return NodeStatus.RUNNING
@@ -113,7 +137,8 @@ class Train(private val type: UnitType) : MemoLeaf() {
     override fun toString(): String = "Train $type"
 }
 
-class Get(private val amount: Int, val type: UnitType) : MemoLeaf() {
+class Get(private val amount: Int,
+          val type: UnitType) : MemoLeaf() {
     private val children = ArrayDeque<BTNode>()
 
     override fun performTick(): NodeStatus {
@@ -123,25 +148,12 @@ class Get(private val amount: Int, val type: UnitType) : MemoLeaf() {
             return NodeStatus.DONE
         }
         val pendingUnitsFactor = if (type.isTwoUnitsInOneEgg) 2 else 1
-        val remaining = max(0, amount - units.my(type).size - buildPlan.plannedUnits.count { it == type } * pendingUnitsFactor)
+        val remaining = max(0, amount - units.my(type).size - buildPlan.plannedUnits.count { it.type == type } * pendingUnitsFactor)
         if (remaining == 0) {
             return NodeStatus.RUNNING
         }
 
-        val predictedAdditionalBuilders =
-                if (type.whatBuilds().first == UnitType.Zerg_Larva) {
-                    var estimatedCost = GMS(0, 0, 0)
-                    units.myResourceDepots.filter { it.remainingTrainTime > 0 }
-                            .sortedBy { it.remainingTrainTime }
-                            .asSequence()
-                            .map { it.remainingTrainTime }
-                            .takeWhile { frames ->
-                                estimatedCost += GMS.unitCost(type)
-                                // TODO: Missing additional supply in the given time
-                                (resources.availableGMS + economy.estimatedAdditionalGMIn(frames)).greaterOrEqual(estimatedCost)
-                            }.count()
-                } else 0
-        val builders = units.my(type.whatBuilds().first).count() + predictedAdditionalBuilders
+        val builders = units.my(type.whatBuilds().first).count() + determineFutureBuildersToBlockNow()
         val expectedChildCount =
                 min(builders + units.myPending.count { it.unitType == type },
                         (remaining + pendingUnitsFactor / 2) / pendingUnitsFactor)
@@ -157,6 +169,26 @@ class Get(private val amount: Int, val type: UnitType) : MemoLeaf() {
         }
         return NodeStatus.RUNNING
     }
+
+    // Do we have enough money when the builder arrives? If not, we should lock resources etc.
+    private fun determineFutureBuildersToBlockNow(): Int {
+        val costPerUnit = GMS.unitCost(type)
+        val predictedAdditionalBuilders =
+                if (type.whatBuilds().first == UnitType.Zerg_Larva) {
+                    var estimatedCost = GMS(0, 0, 0)
+                    units.myResourceDepots.filter { it.remainingTrainTime > 0 }
+                            .sortedBy { it.remainingTrainTime }
+                            .asSequence()
+                            .map { it.remainingTrainTime }
+                            .takeWhile { frames ->
+                                estimatedCost += costPerUnit
+                                !(resources.availableGMS + economy.estimatedAdditionalGMSIn(frames)).greaterOrEqual(estimatedCost)
+                            }.count()
+                } else 0
+        return predictedAdditionalBuilders
+    }
+
+    override fun toString(): String = "Get $amount ${type.shortName()}"
 }
 
 class Upgrade(private val upgrade: UpgradeType, private val level: Int) : MemoLeaf() {

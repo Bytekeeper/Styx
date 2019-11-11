@@ -9,6 +9,7 @@ import org.locationtech.jts.math.DD.EPS
 import org.styx.Config.evalFramesToKillFactor
 import org.styx.Config.evalFramesToReach
 import org.styx.Config.evalFramesToTurnFactor
+import org.styx.Styx.diag
 import java.util.*
 import java.util.function.ToIntFunction
 import kotlin.math.max
@@ -17,6 +18,7 @@ typealias TargetScorer = (a: SUnit, e: SUnit) -> Double
 
 interface CombatMove
 data class AttackMove(val enemy: SUnit) : CombatMove
+class WaitMove() : CombatMove
 
 object TargetEvaluator {
     private val byEnemyType: TargetScorer = { _, e ->
@@ -53,8 +55,10 @@ object TargetEvaluator {
     fun bestCombatMoves(attackers: Collection<SUnit>, targets: Collection<SUnit>): Map<SUnit, CombatMove?> {
         val relevantTargets = targets
                 .filter { it.detected && it.unitType != UnitType.Zerg_Larva}
-        if (relevantTargets.isEmpty())
+        if (relevantTargets.isEmpty() || attackers.isEmpty())
             return mapOf()
+        val alreadyEngaged = relevantTargets.any { e -> attackers.any { e.inAttackRange(it, 48f) || it.inAttackRange(e, 48f) } } || relevantTargets.none { it.unitType.canAttack() }
+        val averageDistance = if (alreadyEngaged) 0.0 else relevantTargets.map { e -> attackers.map { e.distanceTo(it) }.min()!! }.average()
         val remaining = ArrayDeque(attackers)
         val result = mutableMapOf<SUnit, CombatMove>()
         val attackedByCount = mutableMapOf<SUnit, Int>()
@@ -64,9 +68,16 @@ object TargetEvaluator {
                     e to scorers.sumByDouble { it(a, e) } - (attackedByCount[e] ?: 0) * 0.05
                 }.maxBy { it.second }?.let { a to it }
             }.maxBy { it.second.second } ?: break
-            remaining.remove(best.first)
-            result[best.first] = AttackMove(best.second.first)
-            attackedByCount.compute(best.second.first) { _, v -> (v ?: 0) + 1 }
+            val (a, e) = best.first to best.second.first
+            remaining.remove(a)
+            if (a.distanceTo(e) < averageDistance * 0.4) {
+                // Consider Waiting
+                result[a] = WaitMove()
+//                diag.log("$a waits ${a.distanceTo(e)} vs $averageDistance")
+            } else {
+                result[a] = AttackMove(e)
+            }
+            attackedByCount.compute(e) { _, v -> (v ?: 0) + 1 }
         }
         return result
     }

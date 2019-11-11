@@ -30,5 +30,10 @@ function play() {
 # play Stone
 # play McRaveZ
 # play 'Chris Coxe'
-play Antiga
+# play Antiga
+# play Locutus
+# play Proxy
+play BananaBrain
+# play tscmoo
+# play WuliBot
 sleep 5
