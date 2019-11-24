@@ -6,9 +6,7 @@ import bwapi.Game
 import bwapi.Unit
 import bwem.BWEM
 import org.styx.Styx.diag
-import org.styx.task.FollowBO
-import org.styx.task.Scouting
-import org.styx.task.SquadDispatch
+import org.styx.task.*
 
 class Listener : DefaultBWListener() {
     private var lastFrame: Int = 0
@@ -18,7 +16,8 @@ class Listener : DefaultBWListener() {
 
     private val aiTree = Par("Main AI Tree",
             SquadDispatch,
-            FollowBO,
+            Nine734,
+//            NinePoolCheese,
             Scouting
     )
 
@@ -28,6 +27,7 @@ class Listener : DefaultBWListener() {
         val bwem = BWEM(game)
         bwem.initialize()
         Styx.map = bwem.map
+        Styx.init()
     }
 
     override fun onFrame() {
@@ -36,8 +36,9 @@ class Listener : DefaultBWListener() {
             val timed = Timed()
             Styx.update()
 
-            aiTree.tick()
-            ConstructionPosition.drawBlockedAreas()
+
+            aiTree.perform()
+//            diag.log("PLAN: " + buildPlan.plannedUnits.joinToString())
             val frameTime = timed.ms()
             if (frameTime > 42 && game.frameCount > 0) {
                 diag.log("frame ${game.frameCount} - frame time: ${frameTime}ms")
@@ -49,7 +50,7 @@ class Listener : DefaultBWListener() {
                 maxFrameTime = frameTime
             }
         } catch (e: Throwable) {
-            Styx.diag.crash(e)
+            diag.crash(e)
             throw e
         }
     }

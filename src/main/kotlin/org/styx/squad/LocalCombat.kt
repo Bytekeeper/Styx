@@ -3,7 +3,12 @@ package org.styx.squad
 import org.bk.ass.sim.Agent
 import org.bk.ass.sim.IntEvaluation
 import org.styx.*
+import org.styx.Styx.diag
+import org.styx.Styx.fleeSim
+import org.styx.Styx.ft
+import org.styx.Styx.sim
 import org.styx.action.BasicActions
+import org.styx.micro.Potential
 import kotlin.math.max
 import kotlin.math.min
 
@@ -36,8 +41,10 @@ class LocalCombat(private val squad: Squad) : BTNode() {
         val workersAndBuildingsAreSave = squad.mine.none { b ->
             (b.unitType.isBuilding || b.unitType.isWorker) && squad.enemies.any { it.inAttackRange(b, 64f) }
         }
-        if (enemies.isEmpty() || retreatHysteresisFrames > 0 && workersAndBuildingsAreSave) {
+        if (workersAndBuildingsAreSave) {
             workersToUse = 0
+        }
+        if (enemies.isEmpty() || retreatHysteresisFrames > 0 && workersAndBuildingsAreSave) {
             return NodeStatus.RUNNING
         }
         attackerLock.reacquire()
@@ -49,89 +56,129 @@ class LocalCombat(private val squad: Squad) : BTNode() {
         val attackers = attackerLock.units
 
         if (!Styx.balance.direSituation) {
-            val afterCombat = simulateCombat()
+            val agentsBeforeCombat = prepareCombatSim()
+            val valuesBeforeCombat = agentsBeforeCombat.map { it to agentValueForPlayer.applyAsInt(it) }.toMap()
+            val sims = (1..1).map { simulateCombat(agentsBeforeCombat, Config.simHorizon) }
+            val afterCombat = sims.last()
             val afterFlee = simulateFleeing()
 
             val scoreAfterCombat = afterCombat.eval.delta()
             val scoreAfterFleeing = afterFlee.eval.delta()
             val shouldFlee = scoreAfterFleeing > scoreAfterCombat + attackHysteresis + maxUseableWorkers * 3
+
             val scoreAfterWaitingForUpgrades = if (!shouldFlee && scoreAfterFleeing > scoreAfterCombat + maxUseableWorkers * 3)
-                simulateWithUpgradesDone(7 * 24).eval.delta()
+                simulateWithUpgradesDone(5 * 24).eval.delta()
             else
                 Int.MIN_VALUE
 
-            val waitForUpgrade = scoreAfterWaitingForUpgrades > scoreAfterCombat + attackers.size * attackHysteresis / 7
+            val waitForUpgrade = scoreAfterWaitingForUpgrades > scoreAfterCombat + attackers.size * Config.attackerHysteresisValue / 2
 
             if (workersAndBuildingsAreSave && (waitForUpgrade || shouldFlee)) {
-//                diag.log("Fight ${board.name} attack: $scoreAfterCombat flee: $scoreAfterFleeing upg: $scoreAfterWaitingForUpgrades ${board.all}")
+                diag.log("Squad retreat ${squad.name} $waitForUpgrade, $shouldFlee - ${sim.agentsA} | ${sim.agentsB} - when fleeing ${fleeSim.agentsA} | ${fleeSim.agentsB}")
                 if (enemies.any { !it.flying }) {
                     workersToUse = min(maxUseableWorkers, workersToUse + 1)
                 }
                 lastAttackHysteresis = 0
                 retreatHysteresisFrames = Config.retreatHysteresisFrames
 
+                val valuesAfterCombat = sim.agentsA.map { it to agentValueForPlayer.applyAsInt(it) }
+                val attackersToKeep = valuesAfterCombat.filter { (a, v) ->
+                    a.attackCounter > 0 && v * 3.0 > (valuesBeforeCombat[a] ?: Int.MAX_VALUE)
+                }.map { it.first.userObject as SUnit }
+
                 // Keep units that'd die anyway
-                attackerLock.releaseUnits(attackers - afterFlee.lostUnits)
+                attackerLock.releaseUnits(attackers - afterFlee.lostUnits - attackersToKeep)
                 if (attackers.isEmpty())
                     return NodeStatus.RUNNING
                 else {
-                    Styx.diag.log("Will lose $attackers anyways, keep attacking")
+                    diag.log("Will lose ${afterFlee.lostUnits} anyways, keep attacking. Will also not lose $attackersToKeep either way, so keep them going too")
                 }
             } else {
                 squad.task = "Fight"
 
-                lastAttackHysteresis = attackers.size * Config.attackerHysteresisValue
-                if (scoreAfterCombat > scoreAfterFleeing + Config.attackerHysteresisValue)
+                if (scoreAfterCombat > scoreAfterFleeing + Config.attackerHysteresisValue / 2)
                     workersToUse = max(0, workersToUse - 1)
                 else if (scoreAfterFleeing > scoreAfterCombat && workersToUse < maxUseableWorkers && enemies.any { !it.flying }) {
                     workersToUse = min(maxUseableWorkers, workersToUse + 1)
                 }
+                diag.log("Squad fight ${squad.name}")
             }
         } else if (Styx.balance.direSituation) {
             workersToUse = maxUseableWorkers
         }
 
-        val combatMoves = TargetEvaluator.bestCombatMoves(attackers, enemies)
-        attackers.forEach { a ->
-            when (val move = combatMoves[a]) {
-                is AttackMove ->
-                    if (move.enemy.visible)
-                        BasicActions.attack(a, move.enemy)
-                    else
-                        BasicActions.move(a, move.enemy.position)
-                is WaitMove ->
-                    a.stop()
-                // TODO fix releasing in locks
-                else -> Styx.resources.releaseUnit(a)
-            }
+        lastAttackHysteresis = attackers.size * Config.attackerHysteresisValue
+
+        if (attackers.isNotEmpty()) {
+            performAttack(attackers, enemies)
         }
 
         return NodeStatus.RUNNING
     }
 
+    private fun performAttack(attackers: List<SUnit>, enemies: List<SUnit>) {
+        val combatMoves = ft("best combat moves") { TargetEvaluator.bestCombatMoves(attackers, enemies) }
+        diag.log("Squad combat moves ${squad.name} $combatMoves")
+        attackers.forEach { a ->
+            when (val move = combatMoves[a]) {
+                is AttackMove ->
+                    if (move.enemy.visible) {
+                        val relativeMovement = a.velocity.normalize().dot(move.enemy.velocity.normalize())
+                        if (relativeMovement < -0.3 || move.enemy.distanceTo(a) < a.maxRangeVs(move.enemy) + 32) {
+                            BasicActions.attack(a, move.enemy)
+                        } else {
+                            val force = Potential.collisionRepulsion(a) * 0.2 +
+                                    Potential.intercept(a, move.enemy)
+                            Potential.apply(a, force)
+                        }
+                    } else
+                        BasicActions.move(a, move.enemy.position)
+                is WaitMove ->
+                    a.stop()
+                // TODO fix releasing in locks - don't use lock.release! It will crash with ConcurrentModification
+                else -> Styx.resources.releaseUnit(a)
+            }
+        }
+    }
+
     private val unitToAgentMapper = { it: SUnit ->
         val agent = it.agent()
-        if (it.enemyUnit && it.gathering || (it.myUnit && !attackerLock.units.contains(it)))
+        if (it.enemyUnit && (it.gathering ||
+                        it.unitType.isWorker && !it.visible) || (it.myUnit && !attackerLock.units.contains(it)) ||
+                !it.hasPower)
             agent.setCooldown(Config.simHorizon)
         if (!it.unitType.canAttack())
             agent.setAttackTargetPriority(Agent.TargetingPriority.MEDIUM)
         agent
     }
 
-    private fun simulateCombat(): SimResult {
-        Styx.sim.reset()
-        val agentsBeforeCombat = squad.mine.map(unitToAgentMapper)
-        agentsBeforeCombat.forEach { Styx.sim.addAgentA(it) }
-        squad.enemies.forEach {
-            val a = it.agent()
-            Styx.sim.addAgentB(a)
-//            if (!it.unitType.canAttack())
-//                a.setAttackTargetPriority(Agent.TargetingPriority.MEDIUM)
-        }
-
-        Styx.sim.simulate(Config.simHorizon)
+    private fun simulateCombat(agentsBeforeCombat: List<Agent>, frames: Int): SimResult {
+        ft("combat sim") { sim.simulate(frames) }
         val lostUnits = agentsBeforeCombat.filter { it.health <= 0 }.map { it.userObject as SUnit }
-        val eval = Styx.sim.evalToInt(agentValueForPlayer)
+        val eval = sim.evalToInt(agentValueForPlayer)
+        return SimResult(lostUnits, eval)
+    }
+
+    private fun prepareCombatSim(): List<Agent> {
+        sim.reset()
+        val agentsBeforeCombat = squad.mine.map(unitToAgentMapper)
+        agentsBeforeCombat
+                .forEach { sim.addAgentA(it) }
+        squad.enemies
+                .forEach { sim.addAgentB(unitToAgentMapper(it)) }
+        return agentsBeforeCombat
+    }
+
+    private fun simulateFleeing(): SimResult {
+        fleeSim.reset()
+        val agentsBeforeCombat = squad.mine.map(unitToAgentMapper)
+        agentsBeforeCombat
+                .forEach { Styx.fleeSim.addAgentA(it) }
+        squad.enemies.map(unitToAgentMapper)
+                .forEach { Styx.fleeSim.addAgentB(it) }
+        ft("flee sim") { Styx.fleeSim.simulate(Config.simHorizon) }
+        val lostUnits = agentsBeforeCombat.filter { it.health <= 0 }.map { it.userObject as SUnit }
+        val eval = fleeSim.evalToInt(agentValueForPlayer)
         return SimResult(lostUnits, eval)
     }
 
@@ -144,26 +191,11 @@ class LocalCombat(private val squad: Squad) : BTNode() {
         squad.enemies.forEach {
             val a = Styx.pendingUpgrades.agentWithPendingUpgradesApplied(it.agent(), frames)
             Styx.simFS3.addAgentB(a)
-            if (!it.unitType.canAttack())
-                a.setAttackTargetPriority(Agent.TargetingPriority.MEDIUM)
         }
 
-        Styx.simFS3.simulate(Config.simHorizon)
+        ft("with upgrade sim") { Styx.simFS3.simulate(Config.simHorizon) }
         val lostUnits = agentsBeforeCombat.filter { it.health <= 0 }.map { it.userObject as SUnit }
         val eval = Styx.simFS3.evalToInt(agentValueForPlayer)
-        return SimResult(lostUnits, eval)
-    }
-
-    private fun simulateFleeing(): SimResult {
-        Styx.fleeSim.reset()
-        val agentsBeforeCombat = squad.mine.map(unitToAgentMapper)
-        agentsBeforeCombat
-                .forEach { Styx.fleeSim.addAgentA(it) }
-        squad.enemies.map(unitToAgentMapper)
-                .forEach { Styx.fleeSim.addAgentB(it) }
-        Styx.fleeSim.simulate(Config.simHorizon)
-        val lostUnits = agentsBeforeCombat.filter { it.health <= 0 }.map { it.userObject as SUnit }
-        val eval = Styx.fleeSim.evalToInt(agentValueForPlayer)
         return SimResult(lostUnits, eval)
     }
 }

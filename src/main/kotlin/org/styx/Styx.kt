@@ -5,24 +5,29 @@ import bwapi.Unit
 import bwem.BWMap
 import org.bk.ass.cluster.Cluster
 import org.bk.ass.cluster.StableDBScanner
+import org.bk.ass.grid.Grid
+import org.bk.ass.grid.RayCaster
 import org.bk.ass.manage.GMS
 import org.bk.ass.query.PositionQueries
-import org.bk.ass.sim.*
+import org.bk.ass.sim.Evaluator
+import org.bk.ass.sim.RetreatBehavior
+import org.bk.ass.sim.Simulator
 import org.locationtech.jts.math.Vector2D
 import org.styx.Styx.buildPlan
 import org.styx.Styx.diag
 import org.styx.Styx.evaluator
 import org.styx.Styx.frame
 import org.styx.Styx.game
+import org.styx.Styx.resources
 import org.styx.Styx.units
 import org.styx.Timed.Companion.time
-import org.styx.squad.NoAttackIfGatheringBehavior
+import org.styx.info.Geography
 import org.styx.squad.Squad
+import java.awt.Color
+import java.awt.image.BufferedImage
+import java.lang.IllegalStateException
 import java.util.*
-import kotlin.math.PI
-import kotlin.math.max
-import kotlin.math.min
-import kotlin.math.roundToInt
+import kotlin.math.*
 
 val positionExtractor: (SUnit) -> org.bk.ass.path.Position = { org.bk.ass.path.Position(it.x, it.y) }
 
@@ -56,12 +61,11 @@ object Styx {
         private set
     var tech = Tech()
         private set
+    val geography = Geography()
 
     val sim = Simulator.Builder()
-            .withPlayerBBehavior(Simulator.RoleBasedBehavior(NoAttackIfGatheringBehavior(), HealerBehavior(), RepairerBehavior(), SuiciderBehavior()))
             .build()
     val simFS3 = Simulator.Builder()
-            .withPlayerBBehavior(Simulator.RoleBasedBehavior(NoAttackIfGatheringBehavior(), HealerBehavior(), RepairerBehavior(), SuiciderBehavior()))
             .withFrameSkip(3)
             .build()
     val fleeSim = Simulator.Builder()
@@ -91,6 +95,7 @@ object Styx {
         ft("squads") { squads.update() }
         ft("buildPlan") { buildPlan.update() }
         ft("tech") { tech.update() }
+        ft("geography") { geography.update() }
     }
 
     fun onEnd() {
@@ -101,6 +106,10 @@ object Styx {
         var result: T? = null
         frameTimes += time(name) { result = delegate(); Unit }
         return result!!
+    }
+
+    fun init() {
+        geography.init()
     }
 }
 
@@ -120,7 +129,7 @@ class Economy {
 
     val supplyWithPlanned: Int
         get() =
-            supplyWithPending + Styx.buildPlan.plannedUnits.sumBy {
+            supplyWithPending + buildPlan.plannedUnits.sumBy {
                 val u = it.type
                 u.supplyProvided() +
                         -u.supplyRequired() +
@@ -193,7 +202,7 @@ class BuildPlan {
     }
 }
 
-data class PlannedUnit(val type: UnitType, val framesToStart: Int? = null)
+data class PlannedUnit(val type: UnitType, val framesToStart: Int? = null, val gmsWhilePlanning: GMS = resources.availableGMS)
 
 class Units {
     lateinit var ownedUnits: PositionQueries<SUnit>
@@ -214,8 +223,6 @@ class Units {
         private set
     lateinit var geysers: PositionQueries<SUnit>
         private set
-    private val myX = mutableMapOf<UnitType, LazyOnFrame<PositionQueries<SUnit>>>()
-    private val myCompleted = mutableMapOf<UnitType, LazyOnFrame<PositionQueries<SUnit>>>()
     lateinit var myPending: List<PendingUnit>
         private set
 
@@ -250,13 +257,14 @@ class Units {
                     else
                         PendingUnit(it, it.position, it.buildType, it.remainingBuildTime)
                 }
+        if (game.bullets.any { it.source?.type == UnitType.Terran_Bunker }) {
+            println("GOT YA")
+        }
     }
 
-    fun my(type: UnitType): PositionQueries<SUnit> =
-            myX.computeIfAbsent(type) { LazyOnFrame { PositionQueries(mine.filter { it.unitType == type }, positionExtractor) } }.value
+    fun my(type: UnitType) = mine.filter { it.unitType == type }
 
-    fun myCompleted(type: UnitType): PositionQueries<SUnit> =
-            myCompleted.computeIfAbsent(type) { LazyOnFrame { PositionQueries(mine.filter { it.unitType == type && it.isCompleted }, positionExtractor) } }.value
+    fun myCompleted(type: UnitType) = mine.filter { it.unitType == type && it.isCompleted }
 
     fun onUnitDestroy(unit: Unit) {
         val u = SUnit.forUnit(unit)
@@ -310,7 +318,7 @@ class Bases {
         myBases = bases.filter { it.mainResourceDepot?.myUnit == true }
         enemyBases = bases.filter { it.mainResourceDepot?.enemyUnit == true }
         potentialEnemyBases = bases.filter {
-            val closestEnemy = units.enemy.nearest(it.center)?.distanceTo(it.center) ?: 0.0
+            val closestEnemy = units.enemy.nearest(it.center)?.distanceTo(it.center) ?: 0
             it.isStartingLocation &&
                     !game.isExplored(it.centerTile) &&
                     (closestEnemy < 300 || closestEnemy > 600)
@@ -337,6 +345,15 @@ fun Position.toVector2D() = Vector2D(x.toDouble(), y.toDouble())
 
 operator fun TilePosition.plus(other: TilePosition) = add(other)
 
+operator fun WalkPosition.plus(other: WalkPosition) = add(other)
+operator fun WalkPosition.minus(other: WalkPosition) = subtract(other)
+infix fun WalkPosition.dot(other: WalkPosition) = x * other.x + y * other.y
+fun WalkPosition.middlePosition() = toPosition() + Position(4, 4)
+fun WalkPosition.makeValid() = WalkPosition(
+        clamp(x, 0, game.mapWidth() * 4 - 1),
+        clamp(y, 0, game.mapHeight() * 4 - 1))
+fun org.bk.ass.path.Position.toWalkPosition() = WalkPosition(x, y)
+
 fun <T> Optional<T>.orNull(): T? = orElse(null)
 
 fun <T> PositionQueries<T>.inRadius(pos: Position, radius: Int) = inRadius(pos.x, pos.y, radius)
@@ -354,3 +371,25 @@ fun Double.orZero() = if (isNaN()) 0.0 else this
 fun clamp(x: Int, l: Int, h: Int) = min(h, max(l, x))
 val PI2 = Math.PI * 2
 val Double.normalizedRadians get() = ((this % PI2) + PI2) % PI2 - PI
+
+fun List<SUnit>.nearest(x: Int, y: Int) = minBy { it.distanceTo(Position(x, y)) }
+
+fun fastSig(x: Double) = x / (1 + abs(x))
+
+fun RayCaster<Boolean>.tracePath(start: WalkPosition, end: WalkPosition) =
+        trace(start.x, start.y, end.x, end.y)?.toWalkPosition()
+                ?: throw IllegalStateException()
+fun RayCaster<Boolean>.noObstacle(start: WalkPosition, end: WalkPosition) =
+        tracePath(start, end) == end
+
+fun RayCaster.Hit<*>.toWalkPosition() = WalkPosition(x, y)
+
+fun Grid<Boolean>.toBufferedImage() : BufferedImage {
+    val image = BufferedImage(width, height, BufferedImage.TYPE_3BYTE_BGR)
+    for (y in 0 until height) {
+        for (x in 0 until width) {
+            image.setRGB(x, y, if (get(x, y)) Color.GREEN.rgb else Color.GRAY.rgb)
+        }
+    }
+    return image
+}

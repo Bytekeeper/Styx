@@ -1,10 +1,8 @@
 package org.styx.squad
 
-import org.styx.BTNode
-import org.styx.NodeStatus
-import org.styx.Styx
-import org.styx.UnitLocks
+import org.styx.*
 import org.styx.action.BasicActions
+import org.styx.micro.Potential
 
 class SeekCombatSquad(private val squad: Squad) : BTNode() {
     private val attackerLock = UnitLocks { Styx.resources.availableUnits.filter { squad.mine.contains(it) && !it.unitType.isWorker && !it.unitType.isBuilding && it.unitType.canAttack() } }
@@ -31,10 +29,10 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
                     ?: targetSquad.enemies.filter { !it.flying }.minBy { it.distanceTo(targetSquad.center) }?.position
             attackers.forEach { attacker ->
                 if (targetPosition != null && attacker.threats.isEmpty()) {
-//                    val force = Potential.groundAttract(attacker, targetPosition) +
-//                            Potential.keepGroundCompany(attacker, 32) * 0.2
-//                    Potential.apply(attacker, force)
-                    BasicActions.move(attacker, targetPosition)
+                    val force = Potential.groundAttract(attacker, targetPosition) +
+                            Potential.collisionRepulsion(attacker) * 0.2 +
+                            Potential.keepGroundCompany(attacker, 32) * 0.2
+                    Potential.apply(attacker, force)
                 } else {
                     Styx.resources.releaseUnit(attacker)
                 }
@@ -52,5 +50,5 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
                 null
 
     private fun bestSquadToSupport(candidates: List<Pair<Squad, Double>>) =
-            candidates.filter { it.first != squad && it.second > 0.6 }.maxBy { it.second }?.first
+            candidates.filter { it.second > 0.45 }.maxBy { it.second }?.first
 }

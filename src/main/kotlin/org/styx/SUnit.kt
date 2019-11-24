@@ -52,6 +52,7 @@ class SUnit private constructor(val unit: Unit) {
         private set
     lateinit var position: Position
         private set
+    val walkPosition get() = position.toWalkPosition()
     val id: Int = unit.id
     var myUnit = false
     var enemyUnit: Boolean = false
@@ -72,8 +73,8 @@ class SUnit private constructor(val unit: Unit) {
     val gathering get() = gatheringGas || gatheringMinerals
     val carrying: Boolean get() = carryingGas || carryingMinerals
     val owned get() = !player.isNeutral
-    val ready get() = readyOnFrame < Styx.frame
-    val sleeping get() = readyOnFrame >= Styx.frame || isOnCooldown()
+    val ready get() = readyOnFrame < frame
+    val sleeping get() = readyOnFrame >= frame || isOnCooldown() || !interuptible
     var target: SUnit? = null
         private set
     var orderTarget: SUnit? = null
@@ -81,10 +82,12 @@ class SUnit private constructor(val unit: Unit) {
     val returningResource get() = unit.isCarrying && orderTarget?.unitType?.isResourceDepot == true
     var beingGathered = false
         private set
+    var morphing = false
+        private set
 
     val controller = Controller()
     private lateinit var lastAgent: Agent
-    val firstSeenFrame = Styx.frame
+    val firstSeenFrame = frame
     var lastSeenFrame = 0
         private set
     private var lastDamageFrame: Int? = null
@@ -100,16 +103,22 @@ class SUnit private constructor(val unit: Unit) {
     var remainingTrainTime = 0
         private set
     val isAttacking get() = exists && unit.isAttacking
+    val interuptible get() = unit.isInterruptible
+    val idle get() = unit.isIdle
+    var hasPower: Boolean = false
+        private set
 
     private var stuckFrames = 0
         private set
     var lastUnstickingCommandFrame = Int.MAX_VALUE
         private set
 
+    fun predictPosition(frames: Int) = position + velocity.multiply(frames.toDouble()).toPosition()
+
     fun update() {
         visible = unit.isVisible
         exists = unit.exists()
-        if (!unit.isVisible && Styx.frame > 0) return
+        if (!unit.isVisible && frame > 0) return
         lastAgent = agentFactory.of(unit).setUserObject(this)
         lastSeenFrame = game.frameCount
         unitType = unit.type
@@ -145,6 +154,9 @@ class SUnit private constructor(val unit: Unit) {
         enemyUnit = player.isEnemy(self)
         myUnit = player == self
         stimTimer = unit.stimTimer
+        morphing = unit.isMorphing
+        hasPower = unit.isPowered
+
         if (frame - lastUnstickingCommandFrame > game.latencyFrames) {
             if (vx == 0.0 && vy == 0.0 && !isOnCooldown() && !gathering) {
                 stuckFrames++
@@ -159,11 +171,34 @@ class SUnit private constructor(val unit: Unit) {
         }
     }
 
-    fun distanceTo(pos: Position) = position.getDistance(pos)
+    fun distanceTo(target: Position) : Int {
+        // compute x distance
+        var xDist = left - target.x - 1
+        if (xDist < 0) {
+            xDist = target.x - right - 1
+            if (xDist < 0) {
+                xDist = 0
+            }
+        }
+
+        // compute y distance
+        var yDist = this.top - target.y - 1
+        if (yDist < 0) {
+            yDist = target.y - bottom - 1
+            if (yDist < 0) {
+                yDist = 0
+            }
+        }
+
+        // compute actual distance
+        return Position.Origin.getApproxDistance(Position(xDist, yDist))
+    }
+
     fun distanceTo(pos: TilePosition) = tilePosition.getDistance(pos)
     fun framesToTravelTo(pos: Position) =
-            (if (flying) (distanceTo(pos) / topSpeed).toInt()
-            else (Styx.map.getPathLength(position, pos) / topSpeed).toInt()) + 12
+            framesToTurnTo(pos) +
+                    (if (flying) (distanceTo(pos) / topSpeed).toInt()
+                    else (Styx.map.getPathLength(position, pos) / topSpeed).toInt()) * 4 / 3 + 24
 
     fun distanceTo(target: SUnit): Int {
         // If target is the same as the source
@@ -171,27 +206,19 @@ class SUnit private constructor(val unit: Unit) {
             return 0
         }
 
-        /////// Compute distance
-
-        // retrieve left/top/right/bottom values for calculations
-        val left = target.left - 1
-        val top = target.top - 1
-        val right = target.right + 1
-        val bottom = target.bottom + 1
-
         // compute x distance
-        var xDist = this.left - right
+        var xDist = left - target.right - 1
         if (xDist < 0) {
-            xDist = left - this.right
+            xDist = target.left - right - 1
             if (xDist < 0) {
                 xDist = 0
             }
         }
 
         // compute y distance
-        var yDist = this.top - bottom
+        var yDist = top - target.bottom - 1
         if (yDist < 0) {
-            yDist = top - this.bottom
+            yDist = target.top - bottom - 1
             if (yDist < 0) {
                 yDist = 0
             }
@@ -209,14 +236,14 @@ class SUnit private constructor(val unit: Unit) {
         }
 
     fun moveTo(target: Position) {
-        if (sleeping || unit.position == target) return
+        if (sleeping || unit.position == target || unit.targetPosition == target) return
         lastUnstickingCommandFrame = frame
         unit.move(target)
         sleep()
     }
 
     fun follow(other: SUnit) {
-        if (sleeping) return
+        if (sleeping || orderTarget == other) return
         lastUnstickingCommandFrame = frame
         unit.follow(other.unit)
         sleep()
@@ -271,8 +298,14 @@ class SUnit private constructor(val unit: Unit) {
         sleep()
     }
 
+    fun cancelMorph() {
+        if (sleeping) return
+        unit.cancelMorph()
+        sleep()
+    }
+
     private fun sleep(minFrames: Int = 2) {
-        readyOnFrame = Styx.frame + max(minFrames, Styx.turnSize)
+        readyOnFrame = frame + max(minFrames, Styx.turnSize)
     }
 
     fun train(type: UnitType) {
@@ -293,8 +326,9 @@ class SUnit private constructor(val unit: Unit) {
         unit.stop();
     }
 
-    val threats by LazyOnFrame { Styx.units.enemy.inRadius(this, 400) { it.inAttackRange(this, 320f) } }
+    val threats by LazyOnFrame { Styx.units.enemy.inRadius(this, 400) { it.inAttackRange(this, 96f) } }
     fun inAttackRange(other: SUnit, allowance: Float = 0f) = hasWeaponAgainst(other) && maxRangeVs(other) + allowance >= distanceTo(other)
+
     fun maxRangeVs(other: SUnit) =
             player.weaponMaxRange(weaponAgainst(other)) +
                     if (unitType == UnitType.Terran_Bunker) 64 else 0
@@ -331,15 +365,16 @@ class SUnit private constructor(val unit: Unit) {
 
     fun canBuildHere(at: TilePosition, type: UnitType) = game.canBuildHere(at, type, unit)
 
-    fun agent() = Agent(lastAgent)
-            .setCooldown(remainingBuildTime) // Trick to prevent incomplete units from attacking
+    fun agent() : Agent = Agent(lastAgent)
 
     fun dispose() {
         units.remove(unit)
     }
 
-    fun radiansTo(other: SUnit): Double = position.toVector2D().angleTo(other.position.toVector2D())
+    fun radiansTo(other: SUnit): Double = radiansTo(other.position)
+    fun radiansTo(pos: Position): Double = position.toVector2D().angleTo(pos.toVector2D())
     fun framesToTurnTo(other: SUnit) = (abs((radiansTo(other) - angle).normalizedRadians) * 256.0 / PI2 / unitType.turnRadius()).toInt()
+    fun framesToTurnTo(pos: Position) = (abs((radiansTo(pos) - angle).normalizedRadians) * 256.0 / PI2 / unitType.turnRadius()).toInt()
 
     companion object {
         private val units = mutableMapOf<Unit, SUnit>()

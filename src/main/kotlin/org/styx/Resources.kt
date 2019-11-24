@@ -3,6 +3,7 @@ package org.styx
 import bwapi.TechType
 import bwapi.UnitType
 import bwapi.UpgradeType
+import com.sun.org.apache.xalan.internal.xsltc.compiler.util.NodeSetType
 import org.bk.ass.manage.GMS
 import org.bk.ass.query.PositionQueries
 import org.styx.Styx.economy
@@ -44,6 +45,15 @@ abstract class Lock<T : Any>(val criteria: (T) -> Boolean = { true }, val select
             val reserved = tryReserve(item!!)
             require(reserved)
         }
+    }
+
+    fun acquireUnlessFailed(call: (T?) -> NodeStatus) : NodeStatus {
+        acquire()
+        val result = call(item)
+        if (result == NodeStatus.FAILED) {
+            release()
+        }
+        return result
     }
 
     abstract fun releaseItem()
@@ -108,6 +118,12 @@ open class GMSLock(val gms: GMS) {
         willBeSatisfied = Styx.resources.availableGMS.plus(economy.estimatedAdditionalGMSIn(futureFrames)).greaterOrEqual(gms)
         Styx.resources.reserveGMS(gms)
         satisfied = false
+    }
+
+    fun release() {
+        Styx.resources.releaseGMS(gms)
+        satisfied = false
+        willBeSatisfied = false
     }
 }
 

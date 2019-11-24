@@ -91,20 +91,6 @@ object ConstructionPosition {
         return poly is Geometry && !poly.intersects(toTest)
     }
 
-    fun drawBlockedAreas() {
-        resourceBlockedGeometry.values.forEach { g ->
-            if (g is Polygon) {
-                val coordinateSequence = g.exteriorRing.coordinateSequence
-                for (i in 0 until coordinateSequence.size() - 1) {
-                    val a = coordinateSequence.getCoordinate(i)
-                    val b = coordinateSequence.getCoordinate(i + 1)
-                    Styx.game.drawLineMap(TilePosition(a.x.toInt(), a.y.toInt()).toPosition(),
-                            TilePosition(b.x.toInt(), b.y.toInt()).toPosition(), Color.Blue)
-                }
-            }
-        }
-    }
-
     private fun findPositionForGas(): TilePosition? {
         val geysers = Styx.units.geysers
         return bases.myBases.asSequence()

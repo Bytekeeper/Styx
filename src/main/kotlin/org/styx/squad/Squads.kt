@@ -37,8 +37,3 @@ class Squad {
                 enemies.filter { it.remainingBuildTime < 48 }.map { it.agent() })
     }
 }
-
-class NoAttackIfGatheringBehavior : AttackerBehavior() {
-    override fun simUnit(frameSkip: Int, agent: Agent, allies: UnorderedCollection<Agent>, enemies: UnorderedCollection<Agent>): Boolean =
-            (agent.userObject as? SUnit)?.gathering != true && super.simUnit(frameSkip, agent, allies, enemies)
-}

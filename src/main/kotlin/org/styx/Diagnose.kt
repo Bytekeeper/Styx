@@ -7,6 +7,7 @@ import bwapi.WalkPosition
 import com.github.luben.zstd.ZstdOutputStream
 import com.jsoniter.any.Any
 import com.jsoniter.output.JsonStream
+import java.awt.image.RenderedImage
 import java.io.Closeable
 import java.io.PrintWriter
 import java.nio.file.Files
@@ -14,6 +15,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.util.*
 import java.util.logging.Level
+import javax.imageio.ImageIO
 
 fun WalkPosition.diag() = "($x,$y)"
 fun SUnit.diag() = "i$id ${unitType.shortName()} ${position.toWalkPosition().diag()}"
@@ -84,6 +86,13 @@ class Diagnose : Closeable {
 
     fun log(message: String, logLevel: Level = Level.INFO) {
         logOut.println("${logLevel.name} - ${Styx.frame}: $message")
+    }
+
+    fun dump(name: String, image: RenderedImage) {
+        Files.newOutputStream(writePath.resolve(name + ".jpg"))
+                .use { out ->
+                    ImageIO.write(image, "jpg", out)
+                }
     }
 
     fun traceLog(message: String, vararg attach: DAttachment = arrayOf()) {
