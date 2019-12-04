@@ -3,7 +3,7 @@ package org.styx
 import org.styx.Styx.ft
 
 enum class NodeStatus {
-    INITIIAL,
+    INITIAL,
     RUNNING,
     DONE,
     FAILED
@@ -11,7 +11,7 @@ enum class NodeStatus {
 
 
 abstract class BTNode {
-    var status: NodeStatus = NodeStatus.INITIIAL
+    var status: NodeStatus = NodeStatus.INITIAL
         private set
     open val priority: Double = 0.0
     protected abstract fun tick(): NodeStatus
@@ -22,16 +22,21 @@ abstract class BTNode {
     }
 
     open fun reset() {
-        status = NodeStatus.INITIIAL
+        status = NodeStatus.INITIAL
+    }
+
+    open fun loadLearned() {
+    }
+
+    open fun saveLearned() {
     }
 
     companion object {
         fun tickPar(childResults: Sequence<NodeStatus>): NodeStatus {
-            val results = childResults.takeWhile { it != NodeStatus.FAILED }.toList()
-            val last = results.lastOrNull() ?: return NodeStatus.DONE
-            if (last == NodeStatus.FAILED)
+            val results = childResults.toList()
+            if (results.contains(NodeStatus.FAILED))
                 return NodeStatus.FAILED
-            if (results.any { it == NodeStatus.RUNNING })
+            if (results.contains(NodeStatus.RUNNING))
                 return NodeStatus.RUNNING
             return NodeStatus.DONE
         }
@@ -42,6 +47,23 @@ abstract class CompoundNode(val name: String) : BTNode() {
     protected abstract val children : Collection<BTNode>
     protected val tickedChilds get() = children.sortedByDescending { it.priority }.asSequence().map { ft(name, it::perform) }
     override fun reset() = children.forEach { it.reset() }
+
+    override fun loadLearned() {
+        children.forEach(BTNode::loadLearned)
+    }
+
+    override fun saveLearned() {
+        children.forEach(BTNode::saveLearned)
+    }
+}
+
+class Best(name: String, vararg children: BTNode) : CompoundNode(name) {
+    override val children = children.toList()
+    override fun tick(): NodeStatus {
+        return tickedChilds.first()
+    }
+
+    override fun toString(): String = "Best $name"
 }
 
 open class Sel(name: String, vararg children: BTNode) : CompoundNode(name) {
@@ -76,7 +98,7 @@ open class Par(name: String, vararg children: BTNode) : CompoundNode(name) {
 
 open class Memo(private val delegate: BTNode) : BTNode() {
     override fun tick(): NodeStatus {
-        if (status != NodeStatus.INITIIAL && status != NodeStatus.RUNNING)
+        if (status != NodeStatus.INITIAL && status != NodeStatus.RUNNING)
             return status
         return delegate.perform()
     }
@@ -89,7 +111,7 @@ open class Memo(private val delegate: BTNode) : BTNode() {
 
 abstract class MemoLeaf : BTNode() {
     final override fun perform(): NodeStatus {
-        if (status != NodeStatus.INITIIAL && status != NodeStatus.RUNNING)
+        if (status != NodeStatus.INITIAL && status != NodeStatus.RUNNING)
             return status
         return super.perform()
     }
@@ -100,7 +122,7 @@ class Condition(private val condition: () -> Boolean) : BTNode() {
             if (condition()) NodeStatus.DONE else NodeStatus.RUNNING
 }
 
-class Repeat(private val amount: Int = -1, private val delegate: BTNode) : BTNode() {
+class Repeat(private val amount: Int = -1, private val repeatOnFailure: Boolean = true, private val delegate: BTNode) : BTNode() {
     private var remaining = amount
 
     override fun tick(): NodeStatus {
@@ -109,6 +131,9 @@ class Repeat(private val amount: Int = -1, private val delegate: BTNode) : BTNod
         }
         delegate.perform()
         if (delegate.status != NodeStatus.DONE) {
+            if (repeatOnFailure && delegate.status == NodeStatus.FAILED) {
+                delegate.reset()
+            }
             return delegate.status
         }
         if (remaining > 0) {

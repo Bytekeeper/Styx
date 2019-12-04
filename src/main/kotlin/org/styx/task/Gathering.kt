@@ -21,22 +21,25 @@ class Gathering(private val onlyRequiredGas: Boolean = false) : BTNode() {
         val gatherGas = availableGMS.gas < 0 && units.myWorkers.count() > 6 || !onlyRequiredGas
         val workers = workersLock.units
 
-        val futureResources = economy.estimatedAdditionalGMSIn(24 * 80) +
+        val futureResources = economy.estimatedAdditionalGMSIn(24 * 170) +
                 availableGMS
         val extractors = units.myCompleted(UnitType.Zerg_Extractor)
         val gasWorkers = workers.count { it.gatheringGas }
         val missingGasWorkers = min((if (gatherGas) extractors.size * 3 else 0) - gasWorkers,
-                if (futureResources.minerals > availableGMS.gas)
+                if (futureResources.minerals > futureResources.gas)
                     workers.size
-                else if (futureResources.minerals < availableGMS.gas - 200)
+                else if (futureResources.minerals < futureResources.gas - 3000)
                     -gasWorkers
                 else
                     0
         )
         if (missingGasWorkers > 0) {
-            workers.take(missingGasWorkers)
+            workers.sortedBy { it.carrying || it.gatheringGas }
+                    .take(missingGasWorkers)
                     .forEach { worker ->
-                        val target = extractors.nearest(worker.x, worker.y) ?: return@forEach
+                        val target = extractors.nearest(worker.x, worker.y) { ex ->
+                            assignment.values.count { it == ex } < 4
+                        } ?: return@forEach
                         if (worker.target != target) {
                             assignment[worker] = target
                         }
@@ -45,13 +48,16 @@ class Gathering(private val onlyRequiredGas: Boolean = false) : BTNode() {
             assignment.entries.filter { it.value.unitType.isRefinery }
                     .take(-missingGasWorkers)
                     .forEach {
-                        assignment.remove(it.key)
+                        assignment -= it.key
                     }
         }
         assignment.entries.removeIf { (u, m) -> !u.exists || !workers.contains(u) || !m.exists }
         workers.forEach { worker ->
-            if (worker.orderTarget?.unitType?.isResourceDepot == true)
+            if (worker.orderTarget?.unitType?.isResourceDepot == true) {
+                if (worker.gatheringMinerals)
+                    assignment -= worker // reassign
                 return@forEach
+            }
             if (assignment[worker] == null) {
                 val target = units.minerals.inRadius(worker.x, worker.y, 300) { mineral ->
                     assignment.values.count { it == mineral } == 0
@@ -61,7 +67,7 @@ class Gathering(private val onlyRequiredGas: Boolean = false) : BTNode() {
                 assignment[worker] = target
             }
             val assigned = assignment[worker] ?: return@forEach
-            if (worker.orderTarget?.unitType?.isResourceContainer != false && assigned != worker.orderTarget) {
+            if (assigned != worker.orderTarget) {
                 BasicActions.gather(worker, assigned)
             }
         }

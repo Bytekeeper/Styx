@@ -25,7 +25,9 @@ import org.styx.info.Geography
 import org.styx.squad.Squad
 import java.awt.Color
 import java.awt.image.BufferedImage
-import java.lang.IllegalStateException
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
 import java.util.*
 import kotlin.math.*
 
@@ -34,7 +36,15 @@ val positionExtractor: (SUnit) -> org.bk.ass.path.Position = { org.bk.ass.path.P
 object Styx {
     lateinit var game: Game
     lateinit var map: BWMap
+    lateinit var writePath: Path
+        private set
+    lateinit var readPath: Path
+        private set
 
+    lateinit var fingerPrint: FingerPrint
+        private set
+    lateinit var relevantGameResults: List<GameResult>
+        private set
     val frameTimes = mutableListOf<Timed>()
     var turnSize = 0
         private set
@@ -74,6 +84,8 @@ object Styx {
             .build()
     val evaluator = Evaluator()
     val diag = Diagnose()
+    val storage = Storage()
+    var strategy = ""
 
     fun update() {
         frameTimes.clear()
@@ -98,8 +110,10 @@ object Styx {
         ft("geography") { geography.update() }
     }
 
-    fun onEnd() {
+    fun onEnd(winner: Boolean) {
         diag.close()
+        storage.appendAndSave(
+                GameResult(fingerPrint, strategy, winner))
     }
 
     fun <T> ft(name: String, delegate: () -> T): T {
@@ -110,6 +124,55 @@ object Styx {
 
     fun init() {
         geography.init()
+        var path = Paths.get("bwapi-data").resolve("write")
+        if (!Files.exists(path)) {
+            path = Paths.get("")
+            while (Files.list(path).noneMatch { it.fileName.toString() == "write" }) {
+                path = path.parent ?: error("Failed to find write folder")
+            }
+        }
+        writePath = path
+        println("Writing to folder $path")
+        path = Paths.get("bwapi-data").resolve("read")
+        if (!Files.exists(path)) {
+            path = Paths.get("")
+            while (Files.list(path).noneMatch { it.fileName.toString() == "read" }) {
+                path = path.parent ?: error("Failed to find write folder")
+            }
+        }
+        readPath = path
+        diag.init()
+        storage.init()
+        fingerPrint = FingerPrint(
+                game.enemy().name,
+                game.mapFileName(),
+                game.startLocations.size,
+                game.enemy().race)
+
+        val bestPrelearnedMatch = sequenceOf<(GameResult) -> Boolean>(
+                { it.fingerPrint == fingerPrint },
+                { it.fingerPrint.copy(map = null) == fingerPrint.copy(map = null) },
+                { it.fingerPrint.copy(map = null, startLocations = null) == fingerPrint.copy(map = null, startLocations = null) },
+                { it.fingerPrint.copy(map = null, startLocations = null, enemy = null) == fingerPrint.copy(map = null, startLocations = null, enemy = null) }
+        ).map { storage.learned.gameResults.filter(it) }
+                .takeWhile { it.size < 10 }
+                .toList()
+
+        val matchingPreviousGames =
+                if (bestPrelearnedMatch.isNotEmpty() && bestPrelearnedMatch.last().size >= 10)
+                    bestPrelearnedMatch.last()
+                else
+                    bestPrelearnedMatch.firstOrNull { it.isNotEmpty() }
+        relevantGameResults = matchingPreviousGames ?: emptyList()
+        storage.learned.gameResults
+                .map { it.strategy to it.won }
+                .groupBy({ it.first }) { it.second }
+                .forEach { (strat, winLoss) ->
+                    val successRate = winLoss.map { if (it) 1.0 else 0.0 }.average()
+                    if (winLoss.size >= 10 && successRate < 0.2) {
+                        println("Possible shitty strategy: $strat - it was played ${winLoss.size} but has a winrate of $successRate!")
+                    }
+                }
     }
 }
 
@@ -138,6 +201,9 @@ class Economy {
 
     // TODO: Missing additional supply in the given time
     fun estimatedAdditionalGMSIn(frames: Int): GMS {
+        if (frames < 0) {
+            println("!!")
+        }
         require(frames >= 0)
         val lostWorkers = buildPlan.plannedUnits
                 .filter { it.type.isBuilding }
@@ -237,7 +303,7 @@ class Units {
                 .filter {
                     it.visible ||
                             !game.isVisible(it.tilePosition) ||
-                            (frame - 240 <= it.lastSeenFrame && !it.detected)
+                            (frame - 480 <= it.lastSeenFrame && !it.detected)
                 }
         allunits = PositionQueries(relevantUnits, positionExtractor)
         ownedUnits = PositionQueries(relevantUnits.filter { it.owned }, positionExtractor)
@@ -290,7 +356,9 @@ class Base(val centerTile: TilePosition,
            val center: Position,
            val isStartingLocation: Boolean,
            var mainResourceDepot: SUnit? = null,
-           var lastSeenFrame: Int? = null)
+           var lastSeenFrame: Int? = null,
+           var hasGas: Boolean,
+           var populated: Boolean = false)
 
 class Bases {
     lateinit var bases: List<Base>
@@ -305,7 +373,7 @@ class Bases {
     fun update() {
         if (!this::bases.isInitialized) {
             bases = Styx.map.bases.map {
-                Base(it.location, it.center, it.isStartingLocation)
+                Base(it.location, it.center, it.isStartingLocation, hasGas = it.geysers.isNotEmpty())
             }
         }
         bases.forEach {
@@ -314,12 +382,14 @@ class Bases {
                 it.mainResourceDepot = resourceDepot
             if (game.isVisible(it.centerTile))
                 it.lastSeenFrame = frame
+            it.populated = units.ownedUnits.nearest(it.center.x, it.center.y) { it.unitType.isBuilding }.distanceTo(it.center) < 600
         }
         myBases = bases.filter { it.mainResourceDepot?.myUnit == true }
-        enemyBases = bases.filter { it.mainResourceDepot?.enemyUnit == true }
+        enemyBases = (bases - myBases).filter { it.populated }
         potentialEnemyBases = bases.filter {
             val closestEnemy = units.enemy.nearest(it.center)?.distanceTo(it.center) ?: 0
             it.isStartingLocation &&
+                    !it.populated &&
                     !game.isExplored(it.centerTile) &&
                     (closestEnemy < 300 || closestEnemy > 600)
         }
@@ -373,12 +443,13 @@ val PI2 = Math.PI * 2
 val Double.normalizedRadians get() = ((this % PI2) + PI2) % PI2 - PI
 
 fun List<SUnit>.nearest(x: Int, y: Int) = minBy { it.distanceTo(Position(x, y)) }
+fun List<SUnit>.nearest(x: Int, y: Int, predicate: (SUnit) -> Boolean) = filter(predicate).minBy { it.distanceTo(Position(x, y)) }
 
 fun fastSig(x: Double) = x / (1 + abs(x))
 
 fun RayCaster<Boolean>.tracePath(start: WalkPosition, end: WalkPosition) =
         trace(start.x, start.y, end.x, end.y)?.toWalkPosition()
-                ?: throw IllegalStateException()
+                ?: start
 fun RayCaster<Boolean>.noObstacle(start: WalkPosition, end: WalkPosition) =
         tracePath(start, end) == end
 

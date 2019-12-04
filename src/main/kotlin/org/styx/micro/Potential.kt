@@ -75,6 +75,15 @@ object Potential {
         return (waypoint - u.position).toVector2D().normalize()
     }
 
+    fun reach(u: SUnit, position: Position) : Vector2D {
+        return if (u.flying)
+            airAttract(u, position)
+        else if (game.isWalkable(u.walkPosition))
+            groundAttract(u, position)
+        else
+            Vector2D()
+    }
+
     fun intercept(u: SUnit, t: SUnit): Vector2D {
         val framesDistance = 2.0 * u.distanceTo(t) / (u.topSpeed + 0.1)
         val predictedPosition = t.predictPosition(framesDistance.toInt()).toWalkPosition().makeValid()
@@ -85,13 +94,7 @@ object Potential {
                     geography.walkRay.tracePath(
                             t.walkPosition,
                             predictedPosition)
-
-        return if (u.flying)
-            airAttract(u, fixedPredictedPosition.middlePosition())
-        else if (game.isWalkable(u.walkPosition))
-            groundAttract(u, fixedPredictedPosition.middlePosition())
-        else
-            Vector2D()
+        return reach(u, fixedPredictedPosition.middlePosition())
     }
 
 
@@ -106,7 +109,7 @@ object Potential {
     }
 
     fun keepGroundCompany(u: SUnit, distance: Int): Vector2D {
-        val company = units.allunits.nearest(u.x, u.y) { !it.flying && it != u }?.position?.toVector2D()
+        val company = units.allunits.nearest(u.x, u.y) { !it.flying && it != u && it.unitType.canMove() }?.position?.toVector2D()
                 ?: return Vector2D()
         val delta = u.position.toVector2D() - company
         return if (delta.length() > distance) delta.normalize().negate() else delta.normalize()
@@ -114,7 +117,7 @@ object Potential {
 
     fun avoidDanger(u: SUnit, safety: Int): Vector2D {
         val enemy = units.enemy.nearest(u.x, u.y) {
-            (it.weaponAgainst(u) != WeaponType.None || it.unitType == UnitType.Terran_Bunker) &&
+            (it.hasWeaponAgainst(u) || it.unitType == UnitType.Terran_Bunker) &&
                     it.distanceTo(u) - it.maxRangeVs(u) < safety
         } ?: return Vector2D()
 
@@ -145,13 +148,17 @@ object Potential {
                             val end = (currentWalkPosition + v).makeValid()
                             geography.walkRay.tracePath(currentWalkPosition, end)
                         }
-                val wpToMoveTo = dir8Candidates.filter {
-                    it.getDistance(currentWalkPosition) > 2
-                }.minBy {
-                    requestedTargetWalkPosition.getDistance(it)
-                } ?: dir8Candidates.minBy {
-                    requestedTargetWalkPosition.getDistance(it)
-                }!!
+                val endPoints = dir8Candidates.filter {
+                    it.getDistance(currentWalkPosition) > 5
+                }
+                val wpToMoveTo =
+                        endPoints.firstOrNull {
+                            geography.walkRay.noObstacle(it, requestedTargetWalkPosition)
+                        } ?: endPoints.minBy {
+                            requestedTargetWalkPosition.getDistance(it)
+                        } ?: dir8Candidates.minBy {
+                            requestedTargetWalkPosition.getDistance(it)
+                        }!!
                 u.moveTo(wpToMoveTo.middlePosition())
             }
         }

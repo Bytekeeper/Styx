@@ -16,8 +16,14 @@ class Listener : DefaultBWListener() {
 
     private val aiTree = Par("Main AI Tree",
             SquadDispatch,
-            Nine734,
-//            NinePoolCheese,
+            Best("Strategy",
+                    Nine734,
+                    NinePoolCheese,
+                    TwoHatchHydra,
+                    TwoHatchMuta
+//                    TwelveHatch
+            ),
+            Gathering(),
             Scouting
     )
 
@@ -28,6 +34,7 @@ class Listener : DefaultBWListener() {
         bwem.initialize()
         Styx.map = bwem.map
         Styx.init()
+        aiTree.loadLearned()
     }
 
     override fun onFrame() {
@@ -64,7 +71,8 @@ class Listener : DefaultBWListener() {
     }
 
     override fun onEnd(isWinner: Boolean) {
-        Styx.onEnd()
+        Styx.onEnd(isWinner)
+        aiTree.saveLearned()
     }
 }
 

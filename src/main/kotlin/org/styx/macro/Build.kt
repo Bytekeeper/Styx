@@ -1,6 +1,8 @@
 package org.styx.macro
 
-import bwapi.*
+import bwapi.Position
+import bwapi.TilePosition
+import bwapi.UnitType
 import org.styx.*
 import org.styx.Styx.buildPlan
 import org.styx.Styx.diag
@@ -8,10 +10,12 @@ import org.styx.Styx.economy
 import org.styx.Styx.resources
 import org.styx.Styx.units
 import org.styx.action.BasicActions
-import kotlin.math.max
 
 class StartBuild(private val type: UnitType,
                  private val positionFinder: () -> TilePosition? = { ConstructionPosition.findPositionFor(type) }) : MemoLeaf() {
+    init {
+        require(type.isBuilding)
+    }
     private var at: TilePosition? = null
     private val workerLock = UnitLock {
         val eval = closeTo(at!!.toPosition())
@@ -19,12 +23,7 @@ class StartBuild(private val type: UnitType,
     }
     private val costLock = UnitCostLock(type)
     private var hysteresisFrames = 0
-    private val dependency = Par("Dependencies for ${type}",
-            *type.requiredUnits()
-                    .filter { (type, _) -> type != UnitType.Zerg_Larva }
-                    .map { (type, amount) ->
-                        Get(amount, type)
-                    }.toTypedArray())
+    private val dependency = EnsureDependenciesFor(type)
     var building: SUnit? = null
         private set
 
@@ -59,9 +58,6 @@ class StartBuild(private val type: UnitType,
             val buildPosition = buildAt.toPosition() + type.dimensions / 2
             val travelFrames = worker?.framesToTravelTo(buildPosition) ?: 0
             costLock.futureFrames = travelFrames + hysteresisFrames
-            if (costLock.futureFrames < 0) {
-                println("!!")
-            }
             costLock.acquire()
             if (worker != null)
                 orderBuild(worker, buildAt, travelFrames, buildPosition)
@@ -75,6 +71,10 @@ class StartBuild(private val type: UnitType,
 
     private fun orderBuild(worker: SUnit, buildAt: TilePosition, travelFrames: Int, buildPosition: Position): NodeStatus =
             if (costLock.satisfied) {
+                if (type == UnitType.Zerg_Hydralisk_Den && (buildPlan.plannedUnits.any { it.type == UnitType.Zerg_Hydralisk_Den } || units.myPending.any { it.unitType == UnitType.Zerg_Hydralisk_Den } || units.mine.any { it.unitType == UnitType.Zerg_Hydralisk_Den })) {
+                    println("!!")
+                }
+
                 buildPlan.plannedUnits += PlannedUnit(type, 0)
                 hysteresisFrames = 0
                 BasicActions.build(worker, type, buildAt)

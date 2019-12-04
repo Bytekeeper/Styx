@@ -3,15 +3,18 @@ package org.styx.action
 import bwapi.Position
 import bwapi.TilePosition
 import bwapi.UnitType
-import org.styx.SUnit
-import org.styx.dimensions
-import org.styx.div
-import org.styx.plus
+import org.styx.*
 
 
 object BasicActions {
     fun move(unit: SUnit, to: Position) {
-        unit.moveTo(to)
+        val waypoint =
+                if (unit.flying) to
+                else
+                    Styx.map.getPath(unit.position, to)
+                            .firstOrNull { it.center.getDistance(unit.walkPosition) > 16 }
+                            ?.center?.toPosition()
+        unit.moveTo(waypoint ?: to)
     }
 
     fun follow(unit: SUnit, other: SUnit) {

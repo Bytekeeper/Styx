@@ -112,6 +112,9 @@ class SUnit private constructor(val unit: Unit) {
         private set
     var lastUnstickingCommandFrame = Int.MAX_VALUE
         private set
+    var hatchery: SUnit? = null
+        private set
+    val threats by LazyOnFrame { Styx.units.enemy.inRadius(this, 400) { it.inAttackRange(this, 96f) } }
 
     fun predictPosition(frames: Int) = position + velocity.multiply(frames.toDouble()).toPosition()
 
@@ -156,6 +159,7 @@ class SUnit private constructor(val unit: Unit) {
         stimTimer = unit.stimTimer
         morphing = unit.isMorphing
         hasPower = unit.isPowered
+        hatchery = unit.hatchery?.let { forUnit(it) }
 
         if (frame - lastUnstickingCommandFrame > game.latencyFrames) {
             if (vx == 0.0 && vy == 0.0 && !isOnCooldown() && !gathering) {
@@ -326,8 +330,9 @@ class SUnit private constructor(val unit: Unit) {
         unit.stop();
     }
 
-    val threats by LazyOnFrame { Styx.units.enemy.inRadius(this, 400) { it.inAttackRange(this, 96f) } }
+
     fun inAttackRange(other: SUnit, allowance: Float = 0f) = hasWeaponAgainst(other) && maxRangeVs(other) + allowance >= distanceTo(other)
+
 
     fun maxRangeVs(other: SUnit) =
             player.weaponMaxRange(weaponAgainst(other)) +
@@ -365,7 +370,11 @@ class SUnit private constructor(val unit: Unit) {
 
     fun canBuildHere(at: TilePosition, type: UnitType) = game.canBuildHere(at, type, unit)
 
-    fun agent() : Agent = Agent(lastAgent)
+    fun agent(): Agent = Agent(lastAgent)
+
+    val isCombatRelevant
+        get() = !unitType.isWorker &&
+                (unitType.canAttack() || unitType.isSpellcaster)
 
     fun dispose() {
         units.remove(unit)
@@ -392,3 +401,15 @@ class Controller {
 
     }
 }
+
+val hydraSpeedUpgrade = UpgradeType.Muscular_Augments
+val hydraRangeUpgrade = UpgradeType.Grooved_Spines
+val lingSpeedUpgrade = UpgradeType.Metabolic_Boost
+
+val WeaponType.isSplash: Boolean
+    get() =
+        this == WeaponType.Subterranean_Spines ||
+                this == WeaponType.Glave_Wurm ||
+                explosionType() == ExplosionType.Enemy_Splash ||
+                explosionType() == ExplosionType.Radial_Splash ||
+                explosionType() == ExplosionType.Nuclear_Missile

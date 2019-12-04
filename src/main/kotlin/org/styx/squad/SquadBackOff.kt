@@ -32,19 +32,28 @@ class SquadBackOff(private val squad: Squad) : BTNode() {
             }
             return NodeStatus.RUNNING
         }
+        Styx.diag.log("Squad backing off ${squad.name}")
+
         squad.task = "Back Off"
         val bestUnit = targetSquad.mine.filter { !it.flying }.minBy { it.distanceTo(targetSquad.myCenter) }
                 ?: targetSquad.mine.minBy { it.distanceTo(targetSquad.myCenter) }!!
         attackerLock.units.forEach { a ->
-            if (squad.enemies.any { it.inAttackRange(a, 32f) }) {
-                val force = Potential.groundAttract(a, targetSquad.myCenter) +
-                        Potential.avoidDanger(a, 96) * 0.3 +
-                        Potential.collisionRepulsion(a) * 0.2
-                Potential.apply(a, force)
-            } else if (a.distanceTo(bestUnit) > 64) {
-                BasicActions.follow(a, bestUnit)
-            } else if (a.moving && a.distanceTo(bestUnit) < 96) {
-                a.stop()
+            when {
+                squad.enemies.any { it.inAttackRange(a, 32f) } -> {
+                    val force = Potential.reach(a, targetSquad.myCenter) +
+                            Potential.avoidDanger(a, 96) * 0.3 +
+                            Potential.collisionRepulsion(a) * 0.2
+                    Potential.apply(a, force)
+                }
+                squad.enemies.any { it.inAttackRange(a, 384f) } -> {
+                    BasicActions.follow(a, bestUnit)
+                }
+                else ->
+                    squad.mine.filter { !it.flying }
+                            .minBy { it.distanceTo(squad.myCenter) }
+                            ?.let {
+                                BasicActions.follow(a, it)
+                            }
             }
         }
         return NodeStatus.RUNNING

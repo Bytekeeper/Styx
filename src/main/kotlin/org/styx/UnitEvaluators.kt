@@ -42,12 +42,12 @@ object TargetEvaluator {
     }
 
     private val byEnemyRange: TargetScorer = { _, e ->
-        e.unitType.groundWeapon().maxRange() / 300.0 +
-                e.unitType.airWeapon().maxRange() / 400.0
+        e.unitType.groundWeapon().maxRange() / 1000.0 +
+                e.unitType.airWeapon().maxRange() / 1400.0
     }
 
     private val byEnemyDamageCapabilities: TargetScorer = { a, e ->
-        e.damagePerFrameVs(a) * 0.2
+        e.damagePerFrameVs(a) * 1.5
     }
 
     private val defaultScorers = listOf(byEnemyType, byTimeToAttack, byTimeToKillEnemy, byEnemyRange, byEnemyDamageCapabilities)
@@ -59,7 +59,7 @@ object TargetEvaluator {
             return mapOf()
         val alreadyEngaged = relevantTargets.any { e -> attackers.any { e.inAttackRange(it, 48f) || it.inAttackRange(e, 48f) } } || relevantTargets.none { it.unitType.canAttack() }
         val averageMinimumDistanceToEnemy = if (alreadyEngaged) 0.0 else attackers.map { a -> relevantTargets.map { a.distanceTo(it) }.min()!! }.average()
-        val pylons = 6.0 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
+        val pylons = 4.0 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
         val defensiveBuildings = targets.count {
             it.remainingBuildTime < 48 &&
                     (it.unitType == UnitType.Protoss_Photon_Cannon || it.unitType == UnitType.Protoss_Shield_Battery)
@@ -103,14 +103,18 @@ typealias UnitEvaluator = (SUnit) -> Double
 
 fun closeTo(position: Position): UnitEvaluator = { u ->
     u.framesToTravelTo(position) +
-            (if (u.carrying) 80.0 else 0.0)
+            (if (u.carrying) 100.0 else 0.0)
 }
 
 fun unitThreatValueToEnemy(sUnit: SUnit): Int {
     val unitType = sUnit.unitType
-    val airDPF = ((unitType.airWeapon().damageAmount() * unitType.maxAirHits()) / unitType.airWeapon().damageCooldown().toDouble()).orZero()
-    val groundDPF = ((unitType.groundWeapon().damageAmount() * unitType.maxGroundHits()) / unitType.groundWeapon().damageCooldown().toDouble()).orZero()
-    return (max(airDPF, groundDPF) * 27).toInt()
+    val airWeapon = unitType.airWeapon()
+    val airDPF = ((airWeapon.damageAmount() * unitType.maxAirHits()) / airWeapon.damageCooldown().toDouble()).orZero() *
+            (if (airWeapon.isSplash) 2 else 1)
+    val groundWeapon = unitType.groundWeapon()
+    val groundDPF = ((groundWeapon.damageAmount() * unitType.maxGroundHits()) / groundWeapon.damageCooldown().toDouble()).orZero() *
+            (if (groundWeapon.isSplash) 2 else 1)
+    return (max(airDPF, groundDPF) * 31).toInt()
 }
 
 fun agentHealthAndShieldValue(agent: Agent): Int =
@@ -118,6 +122,7 @@ fun agentHealthAndShieldValue(agent: Agent): Int =
 
 fun unitTypeValue(sUnit: SUnit) = when (sUnit.unitType) {
     UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 10
+    UnitType.Zerg_Mutalisk -> 5
     else -> 0
 }
 

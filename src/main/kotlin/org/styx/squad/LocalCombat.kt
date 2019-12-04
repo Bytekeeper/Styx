@@ -40,7 +40,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
         retreatHysteresisFrames--
         val workersAndBuildingsAreSave = squad.mine.none { b ->
             (b.unitType.isBuilding || b.unitType.isWorker) && squad.enemies.any { it.inAttackRange(b, 64f) }
-        }
+        } || squad.mine.none { it.unitType.isBuilding }
         if (workersAndBuildingsAreSave) {
             workersToUse = 0
         }
@@ -71,7 +71,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
             else
                 Int.MIN_VALUE
 
-            val waitForUpgrade = scoreAfterWaitingForUpgrades > scoreAfterCombat + attackers.size * Config.attackerHysteresisValue / 2
+            val waitForUpgrade = false && scoreAfterWaitingForUpgrades > scoreAfterCombat + attackers.size * Config.attackerHysteresisValue / 2
 
             if (workersAndBuildingsAreSave && (waitForUpgrade || shouldFlee)) {
                 diag.log("Squad retreat ${squad.name} $waitForUpgrade, $shouldFlee - ${sim.agentsA} | ${sim.agentsB} - when fleeing ${fleeSim.agentsA} | ${fleeSim.agentsB}")

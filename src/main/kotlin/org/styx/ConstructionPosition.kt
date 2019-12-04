@@ -1,6 +1,5 @@
 package org.styx
 
-import bwapi.Color
 import bwapi.Position
 import bwapi.TilePosition
 import bwapi.UnitType
@@ -12,7 +11,7 @@ import org.styx.Styx.units
 
 
 object ConstructionPosition {
-    private val resourceBlockedGeometry = mutableMapOf<Base, Polygonal>()
+    private val resourceBlockedGeometry = mutableMapOf<Base, Geometry>()
     private val geometryFactory = GeometryFactory()
 
     fun findPositionFor(unitType: UnitType, near: Position? = null): TilePosition? {
@@ -76,7 +75,7 @@ object ConstructionPosition {
     private fun outsideOfResourceLines(pos: TilePosition, unitType: UnitType): Boolean {
         val base = bases.myBases.filter { it.mainResourceDepot != null }.minBy { it.centerTile.getDistance(pos) }
                 ?: return true
-        val poly = resourceBlockedGeometry.computeIfAbsent(base) {
+        val blockedArea = resourceBlockedGeometry.computeIfAbsent(base) {
             val relevantUnits = units.allunits.inRadius(base.center, 400)
                     .filter { it.unitType.isResourceContainer || it.unitType.isRefinery }
                     .toMutableList()
@@ -84,11 +83,11 @@ object ConstructionPosition {
                 ConvexHull(geometryFactory.createGeometryCollection(arrayOf(it.tileGeometry, base.mainResourceDepot!!.tileGeometry)))
                         .convexHull
             }.toTypedArray()
-            return@computeIfAbsent geometryFactory.createGeometryCollection(blockedGeometry).union() as Polygonal
+            return@computeIfAbsent geometryFactory.createGeometryCollection(blockedGeometry).union() as Geometry
         }
         val endpos = pos + unitType.tileSize()
         val toTest = geometryFactory.toGeometry(Envelope(Coordinate(pos.x.toDouble(), pos.y.toDouble()), Coordinate(endpos.x.toDouble(), endpos.y.toDouble())))
-        return poly is Geometry && !poly.intersects(toTest)
+        return !blockedArea.intersects(toTest)
     }
 
     private fun findPositionForGas(): TilePosition? {

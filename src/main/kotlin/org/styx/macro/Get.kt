@@ -3,36 +3,42 @@ package org.styx.macro
 import bwapi.UnitType
 import org.bk.ass.manage.GMS
 import org.styx.*
+import org.styx.Styx.units
 import java.util.*
 import kotlin.math.max
 import kotlin.math.min
 
-class Get(private val amount: Int,
+class Get(private val amountProvider: () -> Int,
           val type: UnitType) : MemoLeaf() {
     private val children = ArrayDeque<BTNode>()
 
     override fun tick(): NodeStatus {
-        val missingOrIncompleteAnnotation = max(0, amount - Styx.units.my(type).count { it.isCompleted })
-        if (missingOrIncompleteAnnotation == 0) {
+        val amount = amountProvider()
+        val existingUnits = units.my(type)
+        val completedUnits = existingUnits.count { it.isCompleted }
+        val missingOrIncomplete = max(0, amount - completedUnits)
+        if (missingOrIncomplete == 0) {
             children.clear()
             return NodeStatus.DONE
         }
         val pendingUnitsFactor = if (type.isTwoUnitsInOneEgg) 2 else 1
-        val remaining = max(0, amount - Styx.units.my(type).size - Styx.buildPlan.plannedUnits.count { it.type == type } * pendingUnitsFactor)
+        val pendingUnits = units.myPending.count { it.unitType == type }
+        val completedAndIncompletedUnitAmount = existingUnits.sumBy { if (it.isCompleted) 1 else pendingUnitsFactor }
+        val remaining = max(0, amount - completedAndIncompletedUnitAmount - (pendingUnits + Styx.buildPlan.plannedUnits.count { it.type == type }) * pendingUnitsFactor)
         if (remaining == 0) {
             return NodeStatus.RUNNING
         }
 
-        val builders = Styx.units.my(type.whatBuilds().first).count() + determineFutureBuildersToBlockNow()
+        val builders = units.my(type.whatBuilds().first).count() + determineFutureBuildersToBlockNow()
         val expectedChildCount =
-                min(builders + Styx.units.myPending.count { it.unitType == type },
+                min(builders + pendingUnits,
                         (remaining + pendingUnitsFactor / 2) / pendingUnitsFactor)
         if (expectedChildCount == 0) return NodeStatus.RUNNING
         repeat(expectedChildCount - children.size) {
             children += if (type.isBuilding) Build(type) else Train(type)
         }
         repeat(children.size - expectedChildCount) {
-            children.removeFirst()
+            children.removeLast()
         }
         children.removeIf {
             it.perform() != NodeStatus.RUNNING
@@ -58,5 +64,5 @@ class Get(private val amount: Int,
         return predictedAdditionalBuilders
     }
 
-    override fun toString(): String = "Get $amount ${type.shortName()}"
+    override fun toString(): String = "Get ${amountProvider()} ${type.shortName()}"
 }

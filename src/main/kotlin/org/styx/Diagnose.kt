@@ -7,12 +7,11 @@ import bwapi.WalkPosition
 import com.github.luben.zstd.ZstdOutputStream
 import com.jsoniter.any.Any
 import com.jsoniter.output.JsonStream
+import org.styx.Styx.writePath
 import java.awt.image.RenderedImage
 import java.io.Closeable
 import java.io.PrintWriter
 import java.nio.file.Files
-import java.nio.file.Path
-import java.nio.file.Paths
 import java.util.*
 import java.util.logging.Level
 import javax.imageio.ImageIO
@@ -21,26 +20,16 @@ fun WalkPosition.diag() = "($x,$y)"
 fun SUnit.diag() = "i$id ${unitType.shortName()} ${position.toWalkPosition().diag()}"
 
 class Diagnose : Closeable {
-    private val jsonOut: JsonStream
-    private val logOut: PrintWriter
-    private val writePath: Path
+    private lateinit var jsonOut: JsonStream
+    private lateinit var  logOut: PrintWriter
     private var firstLog = true
     private val drawCommands = mutableMapOf<String, MutableList<DrawCommand>>()
     private var firstSeen = mutableMapOf<String, MutableList<FirstSeen>>()
 
-    init {
-        var path = Paths.get("bwapi-data").resolve("write")
-        if (!Files.exists(path)) {
-            path = Paths.get("")
-            while (Files.list(path).noneMatch { it.fileName.toString() == "write" }) {
-                path = path.parent ?: error("Failed to find write folder")
-            }
-        }
-        writePath = path
-        println("Writing to folder $path")
-        val trace = ZstdOutputStream(Files.newOutputStream(path.resolve("trace.json")))
+    fun init() {
+        val trace = ZstdOutputStream(Files.newOutputStream(Styx.writePath.resolve("trace.json")))
         jsonOut = JsonStream(trace, 4096)
-        logOut = PrintWriter(Files.newBufferedWriter(path.resolve("log.log")), true)
+        logOut = PrintWriter(Files.newBufferedWriter(Styx.writePath.resolve("log.log")), true)
         if (Config.logEnabled) {
             jsonOut.writeObjectStart()
             jsonOut.writeObjectField("_version")

@@ -1,11 +1,11 @@
 package org.styx.squad
 
 import bwapi.Position
-import org.bk.ass.collection.UnorderedCollection
-import org.bk.ass.sim.Agent
-import org.bk.ass.sim.AttackerBehavior
-import org.styx.*
+import org.styx.LazyOnFrame
+import org.styx.SUnit
 import org.styx.Styx.evaluator
+import org.styx.div
+import org.styx.plus
 import kotlin.math.max
 
 val adjectives = listOf("stinging", "red", "running", "weak", "blazing", "awful", "spiteful", "loving", "hesitant", "raving", "hunting")
@@ -25,6 +25,8 @@ class Squad {
         all.fold(Position(0, 0)) { agg, p -> agg + p.position } / max(1, all.size)
     }
     val myWorkers by lazy { mine.filter { it.unitType.isWorker } }
+    var shouldBeDefended: Boolean = false
+        private set
 
     override fun toString(): String = "$name: [$fastEval, $mine, $enemies, $myCenter, $center]"
 
@@ -32,6 +34,7 @@ class Squad {
         mine = units.filter { it.myUnit }
         enemies = units.filter { it.enemyUnit }
         all = units
+        shouldBeDefended = mine.any { it.unitType.isBuilding }
         fastEval = evaluator.evaluate(
                 mine.filter { it.remainingBuildTime < 48 }.map { it.agent() },
                 enemies.filter { it.remainingBuildTime < 48 }.map { it.agent() })
