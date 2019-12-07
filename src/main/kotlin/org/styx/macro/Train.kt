@@ -8,7 +8,7 @@ import org.styx.action.BasicActions
 /**
  * Trigger training of unit, don't wait for completion
  */
-class Train(private val type: UnitType) : MemoLeaf() {
+class StartTrain(private val type: UnitType) : MemoLeaf() {
     init {
         require(!type.isBuilding)
     }
@@ -31,7 +31,7 @@ class Train(private val type: UnitType) : MemoLeaf() {
 
     private val costLock = UnitCostLock(type)
     private val dependency = EnsureDependenciesFor(type)
-    var trainedUnit: SUnit? = null
+    var unitBeingTrained: SUnit? = null
         private set
 
     override fun tick(): NodeStatus {
@@ -40,14 +40,12 @@ class Train(private val type: UnitType) : MemoLeaf() {
             return NodeStatus.FAILED
         trainerLock.acquire()
         trainerLock.unit?.let {trainer ->
-            if (trainer.unitType == type && trainer.isCompleted)
-                return NodeStatus.DONE
             if (trainer.buildType == type || trainer.unitType == type) {
-                trainedUnit = trainerLock.unit
-                return NodeStatus.RUNNING
+                unitBeingTrained = trainerLock.unit
+                return NodeStatus.DONE
             }
         }
-        trainedUnit = null
+        unitBeingTrained = null
         Styx.buildPlan.plannedUnits += PlannedUnit(type)
         costLock.acquire()
         if (!costLock.satisfied)
@@ -63,6 +61,36 @@ class Train(private val type: UnitType) : MemoLeaf() {
         super.reset()
         dependency.reset()
         trainerLock.reset()
+    }
+
+    override fun toString(): String = "StartTrain $type"
+}
+/**
+ * Trigger training of unit, don't wait for completion
+ */
+class Train(private val type: UnitType) : MemoLeaf() {
+    init {
+        require(!type.isBuilding)
+    }
+
+    private val startTrain = StartTrain(type)
+    var trainedUnit: SUnit? = null
+        private set
+
+    override fun tick(): NodeStatus {
+        val trainStatus = startTrain.perform()
+        if (trainStatus != NodeStatus.DONE)
+            return trainStatus;
+        val unitBeingTrained = startTrain.unitBeingTrained ?: return NodeStatus.FAILED
+        trainedUnit = unitBeingTrained
+        if (unitBeingTrained.isCompleted)
+            return NodeStatus.DONE
+        return NodeStatus.RUNNING
+    }
+
+    override fun reset() {
+        super.reset()
+        startTrain.reset()
     }
 
     override fun toString(): String = "Train $type"

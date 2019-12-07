@@ -25,7 +25,7 @@ object TargetEvaluator {
             UnitType.Zerg_Egg, UnitType.Zerg_Lurker_Egg -> -5.0
             UnitType.Zerg_Larva -> -10.0
             UnitType.Zerg_Extractor, UnitType.Terran_Refinery, UnitType.Protoss_Assimilator -> -2.0
-            UnitType.Zerg_Drone, UnitType.Protoss_Probe, UnitType.Terran_SCV -> 0.5
+            UnitType.Zerg_Drone, UnitType.Protoss_Probe, UnitType.Terran_SCV -> 0.8
             else -> 0.0
         }
     }
@@ -42,12 +42,12 @@ object TargetEvaluator {
     }
 
     private val byEnemyRange: TargetScorer = { _, e ->
-        e.unitType.groundWeapon().maxRange() / 1000.0 +
-                e.unitType.airWeapon().maxRange() / 1400.0
+        e.unitType.groundWeapon().maxRange() / 800.0 +
+                e.unitType.airWeapon().maxRange() / 1200.0
     }
 
     private val byEnemyDamageCapabilities: TargetScorer = { a, e ->
-        e.damagePerFrameVs(a) * 1.5
+        if (e.hasPower) e.damagePerFrameVs(a) * 1.6 else 0.0
     }
 
     private val defaultScorers = listOf(byEnemyType, byTimeToAttack, byTimeToKillEnemy, byEnemyRange, byEnemyDamageCapabilities)
@@ -110,20 +110,19 @@ fun unitThreatValueToEnemy(sUnit: SUnit): Int {
     val unitType = sUnit.unitType
     val airWeapon = unitType.airWeapon()
     val airDPF = ((airWeapon.damageAmount() * unitType.maxAirHits()) / airWeapon.damageCooldown().toDouble()).orZero() *
-            (if (airWeapon.isSplash) 2 else 1)
+            (if (airWeapon.isSplash) 3 else 1)
     val groundWeapon = unitType.groundWeapon()
     val groundDPF = ((groundWeapon.damageAmount() * unitType.maxGroundHits()) / groundWeapon.damageCooldown().toDouble()).orZero() *
-            (if (groundWeapon.isSplash) 2 else 1)
-    return (max(airDPF, groundDPF) * 31).toInt()
+            (if (groundWeapon.isSplash) 3 else 1)
+    return (max(airDPF, groundDPF) * 37).toInt()
 }
 
 fun agentHealthAndShieldValue(agent: Agent): Int =
-        Simulator.HEALTH_AND_HALFED_SHIELD.applyAsInt(agent) / 3
+        Simulator.HEALTH_AND_HALFED_SHIELD.applyAsInt(agent) / 12
 
 fun unitTypeValue(sUnit: SUnit) = when (sUnit.unitType) {
     UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 10
-    UnitType.Zerg_Mutalisk -> 5
-    else -> 0
+    else -> 5
 }
 
 // Simplified, but should take more stuff into account:

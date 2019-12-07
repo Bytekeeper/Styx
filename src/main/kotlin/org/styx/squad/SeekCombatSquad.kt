@@ -54,7 +54,7 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
             candidates.sortedBy { it.second }
                     .firstOrNull {
                         it.first.shouldBeDefended && it.first.enemies.isNotEmpty() ||
-                                it.second > 0.3 && it.first.enemies.size > squad.enemies.size ||
+                                it.second > it.first.fastEval && it.first.enemies.size > squad.enemies.size ||
                                 it.second == 0.5 && it.first.mine.count { u -> u.isCombatRelevant } > squad.mine.count { u -> u.isCombatRelevant }
                     }
                     ?.let { it.first to it.second }

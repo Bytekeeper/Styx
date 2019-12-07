@@ -55,56 +55,52 @@ class LocalCombat(private val squad: Squad) : BTNode() {
         }
         val attackers = attackerLock.units
 
-        if (!Styx.balance.direSituation) {
-            val agentsBeforeCombat = prepareCombatSim()
-            val valuesBeforeCombat = agentsBeforeCombat.map { it to agentValueForPlayer.applyAsInt(it) }.toMap()
-            val sims = (1..1).map { simulateCombat(agentsBeforeCombat, Config.simHorizon) }
-            val afterCombat = sims.last()
-            val afterFlee = simulateFleeing()
+        val agentsBeforeCombat = prepareCombatSim()
+        val valuesBeforeCombat = agentsBeforeCombat.map { it to agentValueForPlayer.applyAsInt(it) }.toMap()
+        val sims = (1..1).map { simulateCombat(agentsBeforeCombat, Config.simHorizon) }
+        val afterCombat = sims.last()
+        val afterFlee = simulateFleeing()
 
-            val scoreAfterCombat = afterCombat.eval.delta()
-            val scoreAfterFleeing = afterFlee.eval.delta()
-            val shouldFlee = scoreAfterFleeing > scoreAfterCombat + attackHysteresis + maxUseableWorkers * 3
+        val scoreAfterCombat = afterCombat.eval.delta()
+        val scoreAfterFleeing = afterFlee.eval.delta()
+        val shouldFlee = scoreAfterFleeing > scoreAfterCombat + attackHysteresis + maxUseableWorkers * 3
 
-            val scoreAfterWaitingForUpgrades = if (!shouldFlee && scoreAfterFleeing > scoreAfterCombat + maxUseableWorkers * 3)
-                simulateWithUpgradesDone(5 * 24).eval.delta()
-            else
-                Int.MIN_VALUE
+//            val scoreAfterWaitingForUpgrades = if (!shouldFlee && scoreAfterFleeing > scoreAfterCombat + maxUseableWorkers * 3)
+//                simulateWithUpgradesDone(5 * 24).eval.delta()
+//            else
+//                Int.MIN_VALUE
+//
+//            val waitForUpgrade = false && scoreAfterWaitingForUpgrades > scoreAfterCombat + attackers.size * Config.attackerHysteresisValue / 2
 
-            val waitForUpgrade = false && scoreAfterWaitingForUpgrades > scoreAfterCombat + attackers.size * Config.attackerHysteresisValue / 2
-
-            if (workersAndBuildingsAreSave && (waitForUpgrade || shouldFlee)) {
-                diag.log("Squad retreat ${squad.name} $waitForUpgrade, $shouldFlee - ${sim.agentsA} | ${sim.agentsB} - when fleeing ${fleeSim.agentsA} | ${fleeSim.agentsB}")
-                if (enemies.any { !it.flying }) {
-                    workersToUse = min(maxUseableWorkers, workersToUse + 1)
-                }
-                lastAttackHysteresis = 0
-                retreatHysteresisFrames = Config.retreatHysteresisFrames
-
-                val valuesAfterCombat = sim.agentsA.map { it to agentValueForPlayer.applyAsInt(it) }
-                val attackersToKeep = valuesAfterCombat.filter { (a, v) ->
-                    a.attackCounter > 0 && v * 3.0 > (valuesBeforeCombat[a] ?: Int.MAX_VALUE)
-                }.map { it.first.userObject as SUnit }
-
-                // Keep units that'd die anyway
-                attackerLock.releaseUnits(attackers - afterFlee.lostUnits - attackersToKeep)
-                if (attackers.isEmpty())
-                    return NodeStatus.RUNNING
-                else {
-                    diag.log("Will lose ${afterFlee.lostUnits} anyways, keep attacking. Will also not lose $attackersToKeep either way, so keep them going too")
-                }
-            } else {
-                squad.task = "Fight"
-
-                if (scoreAfterCombat > scoreAfterFleeing + Config.attackerHysteresisValue / 2)
-                    workersToUse = max(0, workersToUse - 1)
-                else if (scoreAfterFleeing > scoreAfterCombat && workersToUse < maxUseableWorkers && enemies.any { !it.flying }) {
-                    workersToUse = min(maxUseableWorkers, workersToUse + 1)
-                }
-                diag.log("Squad fight ${squad.name}")
+        if (workersAndBuildingsAreSave && shouldFlee) {
+            diag.log("Squad retreat ${squad.name} $shouldFlee - ${sim.agentsA} | ${sim.agentsB} - when fleeing ${fleeSim.agentsA} | ${fleeSim.agentsB}")
+            if (enemies.any { !it.flying }) {
+                workersToUse = min(maxUseableWorkers, workersToUse + 1)
             }
-        } else if (Styx.balance.direSituation) {
-            workersToUse = maxUseableWorkers
+            lastAttackHysteresis = 0
+            retreatHysteresisFrames = Config.retreatHysteresisFrames
+
+            val valuesAfterCombat = sim.agentsA.map { it to agentValueForPlayer.applyAsInt(it) }
+            val attackersToKeep = valuesAfterCombat.filter { (a, v) ->
+                a.attackCounter > 0 && v * 4.0 > (valuesBeforeCombat[a] ?: Int.MAX_VALUE)
+            }.map { it.first.userObject as SUnit }
+
+            // Keep units that'd die anyway
+            attackerLock.releaseUnits(attackers - afterFlee.lostUnits - attackersToKeep)
+            if (attackers.isEmpty())
+                return NodeStatus.RUNNING
+            else {
+                diag.log("Will lose ${afterFlee.lostUnits} anyways, keep attacking. Will also not lose $attackersToKeep either way, so keep them going too")
+            }
+        } else {
+            squad.task = "Fight"
+
+            if (scoreAfterCombat > scoreAfterFleeing + Config.attackerHysteresisValue / 2)
+                workersToUse = max(0, workersToUse - 1)
+            else if (scoreAfterFleeing > scoreAfterCombat && workersToUse < maxUseableWorkers && enemies.any { !it.flying }) {
+                workersToUse = min(maxUseableWorkers, workersToUse + 1)
+            }
+            diag.log("Squad fight ${squad.name} $scoreAfterCombat $scoreAfterFleeing")
         }
 
         lastAttackHysteresis = attackers.size * Config.attackerHysteresisValue

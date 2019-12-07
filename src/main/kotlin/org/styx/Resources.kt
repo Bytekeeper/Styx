@@ -86,7 +86,7 @@ class UnitLocks(criteria: (Collection<SUnit>) -> Boolean = { true }, selector: (
     }
 }
 
-class UnitLock(criteria: (SUnit) -> Boolean = { true }, selector: () -> SUnit?) : Lock<SUnit>(criteria, selector) {
+class UnitLock(criteria: (SUnit) -> Boolean = { Styx.resources.availableUnits.contains(it) }, selector: () -> SUnit?) : Lock<SUnit>(criteria, selector) {
     val unit get() = item
 
     override fun tryReserve(item: SUnit): Boolean {

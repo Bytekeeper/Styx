@@ -21,6 +21,9 @@ object Scouting : BTNode() {
                 val force = Potential.airAttract(ovi, base.center) * 0.3 + Potential.avoidDanger(ovi, safety)
                 Potential.apply(ovi, force)
             } else {
+                if (Styx.units.enemy.inRadius(ovi, 300).any { it.inAttackRange(ovi, 32f) }) {
+                    println("MEH")
+                }
                 BasicActions.move(ovi, base.center)
             }
             remaining.remove(ovi)

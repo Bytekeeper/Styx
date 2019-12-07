@@ -71,7 +71,7 @@ class StartBuild(private val type: UnitType,
 
     private fun orderBuild(worker: SUnit, buildAt: TilePosition, travelFrames: Int, buildPosition: Position): NodeStatus =
             if (costLock.satisfied) {
-                if (type == UnitType.Zerg_Hydralisk_Den && (buildPlan.plannedUnits.any { it.type == UnitType.Zerg_Hydralisk_Den } || units.myPending.any { it.unitType == UnitType.Zerg_Hydralisk_Den } || units.mine.any { it.unitType == UnitType.Zerg_Hydralisk_Den })) {
+                if (units.my(type).isNotEmpty() && type != UnitType.Zerg_Hatchery && type != UnitType.Zerg_Extractor) {
                     println("!!")
                 }
 

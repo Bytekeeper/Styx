@@ -3,7 +3,6 @@ package org.styx.task
 import bwapi.UnitType
 import bwapi.UpgradeType
 import org.styx.*
-import org.styx.Styx.diag
 import org.styx.Styx.economy
 import org.styx.Styx.relevantGameResults
 import org.styx.Styx.resources
@@ -38,19 +37,26 @@ open class Strat(
 
 object TwoHatchMuta : Strat("2HatchMuta",
         TwelveHatchBasic,
+        Repeat(delegate = Get({ 12 }, UnitType.Zerg_Drone)),
         Build(UnitType.Zerg_Extractor),
-        Get({ 14 }, UnitType.Zerg_Drone),
+        Get({ 8 }, UnitType.Zerg_Zergling),
         Morph(UnitType.Zerg_Lair),
-        Build(UnitType.Zerg_Extractor),
-        Repeat(delegate = Get({ 21 }, UnitType.Zerg_Drone)),
-        Train(UnitType.Zerg_Overlord),
-        Expand(),
+        Get({ 3 }, UnitType.Zerg_Overlord),
+        Upgrade(lingSpeedUpgrade, 1),
+        Get({ 20 }, UnitType.Zerg_Drone),
         Build(UnitType.Zerg_Spire),
-        Train(UnitType.Zerg_Overlord),
-        Train(UnitType.Zerg_Overlord),
-        Repeat(delegate = Get({ 24 }, UnitType.Zerg_Drone)),
+        Get({ 22 }, UnitType.Zerg_Drone),
+        Expand(),
+        Build(UnitType.Zerg_Extractor),
+        Repeat(delegate = Get({ 22 }, UnitType.Zerg_Drone)),
+        Get({ 5 }, UnitType.Zerg_Overlord),
         ensureSupply(),
-        pumpMutas()
+        Repeat(delegate = Seq("Add Lings",
+                Condition { resources.availableGMS.minerals > 600 },
+                pumpLings()
+        )),
+        pumpMutas(),
+        Expand()
 )
 
 object TwoHatchHydra : Strat("2HatchHydra",
@@ -58,16 +64,11 @@ object TwoHatchHydra : Strat("2HatchHydra",
         Build(UnitType.Zerg_Extractor),
         Get({ 14 }, UnitType.Zerg_Drone),
         Train(UnitType.Zerg_Overlord),
-        Repeat(delegate = Get({ 2 }, UnitType.Zerg_Zergling)),
+        Repeat(delegate = Get({ 4 }, UnitType.Zerg_Zergling)),
+        Upgrade(hydraRangeUpgrade, 1),
         Build(UnitType.Zerg_Hydralisk_Den),
         Repeat(delegate = Get({ 15 }, UnitType.Zerg_Drone)),
-        Upgrade(hydraSpeedUpgrade, 1),
-//        Train(UnitType.Zerg_Overlord),
         ensureSupply(),
-        Seq("Hydra Range",
-                Condition { units.my(UnitType.Zerg_Hydralisk).size > 10 },
-                Upgrade(hydraRangeUpgrade, 1)
-        ),
         Repeat(delegate = Seq("More hatches",
                 Condition { resources.availableGMS.minerals > 600 },
                 Build(UnitType.Zerg_Hatchery))
@@ -104,7 +105,7 @@ object Nine734 : Strat("9734",
         pumpHydras()
 )
 
-object TwelveHatch : Strat("12HatchHydra",
+object TwelveHatchHydra : Strat("12HatchHydra",
         Get({ 9 }, UnitType.Zerg_Drone),
         Build(UnitType.Zerg_Spawning_Pool),
         Train(UnitType.Zerg_Drone),

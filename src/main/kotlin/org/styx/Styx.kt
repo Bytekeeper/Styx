@@ -170,7 +170,7 @@ object Styx {
                 .forEach { (strat, winLoss) ->
                     val successRate = winLoss.map { if (it) 1.0 else 0.0 }.average()
                     if (winLoss.size >= 10 && successRate < 0.2) {
-                        println("Possible shitty strategy: $strat - it was played ${winLoss.size} but has a winrate of $successRate!")
+                        println("Possible shitty strategy: $strat - it was played ${winLoss.size} times but has a winrate of $successRate!")
                     }
                 }
     }
@@ -303,7 +303,7 @@ class Units {
                 .filter {
                     it.visible ||
                             !game.isVisible(it.tilePosition) ||
-                            (frame - 480 <= it.lastSeenFrame && !it.detected)
+                            (frame - 24 * 60 <= it.lastSeenFrame && !it.detected)
                 }
         allunits = PositionQueries(relevantUnits, positionExtractor)
         ownedUnits = PositionQueries(relevantUnits.filter { it.owned }, positionExtractor)

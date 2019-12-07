@@ -14,34 +14,34 @@ class Get(private val amountProvider: () -> Int,
 
     override fun tick(): NodeStatus {
         val amount = amountProvider()
-        val existingUnits = units.my(type)
-        val completedUnits = existingUnits.count { it.isCompleted }
-        val missingOrIncomplete = max(0, amount - completedUnits)
+        val completedUnitsAmount = units.myCompleted(type).size
+        val missingOrIncomplete = max(0, amount - completedUnitsAmount)
         if (missingOrIncomplete == 0) {
             children.clear()
             return NodeStatus.DONE
         }
         val pendingUnitsFactor = if (type.isTwoUnitsInOneEgg) 2 else 1
         val pendingUnits = units.myPending.count { it.unitType == type }
-        val completedAndIncompletedUnitAmount = existingUnits.sumBy { if (it.isCompleted) 1 else pendingUnitsFactor }
-        val remaining = max(0, amount - completedAndIncompletedUnitAmount - (pendingUnits + Styx.buildPlan.plannedUnits.count { it.type == type }) * pendingUnitsFactor)
+        val remaining = max(0, missingOrIncomplete - (pendingUnits + Styx.buildPlan.plannedUnits.count { it.type == type }) * pendingUnitsFactor)
         if (remaining == 0) {
             return NodeStatus.RUNNING
         }
 
-        val builders = units.my(type.whatBuilds().first).count() + determineFutureBuildersToBlockNow()
+        val builders = units.my(type.whatBuilds().first).count { it.buildType == UnitType.None } + determineFutureBuildersToBlockNow()
         val expectedChildCount =
-                min(builders + pendingUnits,
-                        (remaining + pendingUnitsFactor / 2) / pendingUnitsFactor)
-        if (expectedChildCount == 0) return NodeStatus.RUNNING
-        repeat(expectedChildCount - children.size) {
-            children += if (type.isBuilding) Build(type) else Train(type)
-        }
+                min(builders, (remaining + pendingUnitsFactor / 2) / pendingUnitsFactor)
+        if (expectedChildCount == 0)
+            return NodeStatus.RUNNING
         repeat(children.size - expectedChildCount) {
-            children.removeLast()
+            children.removeFirst()
         }
         children.removeIf {
             it.perform() != NodeStatus.RUNNING
+        }
+        repeat(expectedChildCount - children.size) {
+            val newNode = if (type.isBuilding) StartBuild(type) else StartTrain(type)
+            children += newNode
+            newNode.perform()
         }
         return NodeStatus.RUNNING
     }
