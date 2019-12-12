@@ -20,8 +20,8 @@ class SquadScout(private val squad: Squad) : BTNode() {
         if (attackerLock.units.isEmpty())
             return NodeStatus.RUNNING
         val targetBase = Styx.bases.potentialEnemyBases.minBy {
-            it.center.getApproxDistance(squad.myCenter) + (Styx.units.enemy.nearest(it.center)?.distanceTo(it.center)?.toInt()
-                    ?: 0)
+            it.center.getApproxDistance(squad.myCenter) + (Styx.units.enemy.nearest(it.center)?.framesToTravelTo(it.center)
+                    ?: Int.MAX_VALUE)
         }!!
         squad.task = "Scout"
         attackerLock.units.forEach {

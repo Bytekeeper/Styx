@@ -347,10 +347,10 @@ class SUnit private constructor(val unit: Unit) {
 
     fun damagePerFrameVs(other: SUnit): Double {
         val (weapon, hits) =
-                if (other.flying) {
-                    unitType.airWeapon() to unitType.maxAirHits()
-                } else {
-                    unitType.groundWeapon() to unitType.maxGroundHits()
+                when {
+                    unitType == UnitType.Terran_Bunker -> WeaponType.Gauss_Rifle to 4
+                    other.flying -> unitType.airWeapon() to unitType.maxAirHits()
+                    else -> unitType.groundWeapon() to unitType.maxGroundHits()
                 }
         if (weapon.damageAmount() == 0)
             return 0.0

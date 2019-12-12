@@ -149,7 +149,7 @@ object Potential {
                             geography.walkRay.tracePath(currentWalkPosition, end)
                         }
                 val endPoints = dir8Candidates.filter {
-                    it.getDistance(currentWalkPosition) > 5
+                    it.getDistance(currentWalkPosition) > 6
                 }
                 val wpToMoveTo =
                         endPoints.firstOrNull {

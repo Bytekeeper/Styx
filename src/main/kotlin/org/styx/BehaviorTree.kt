@@ -6,58 +6,123 @@ enum class NodeStatus {
     INITIAL,
     RUNNING,
     DONE,
-    FAILED
+    FAILED;
+
+    fun after(code: () -> Unit): () -> NodeStatus = {
+        code()
+        this
+    }
 }
 
+typealias SimpleNode = () -> NodeStatus
 
-abstract class BTNode {
+interface Resettable {
+    fun reset()
+}
+
+interface Prioritized {
+    val priority: Double
+}
+
+interface Learner {
+    fun loadLearned()
+    fun saveLearned() {}
+}
+
+abstract class BehaviorTree(val name: String) : SimpleNode, Resettable, Learner {
+    abstract val root: SimpleNode
     var status: NodeStatus = NodeStatus.INITIAL
         private set
-    open val priority: Double = 0.0
+
+    override fun invoke(): NodeStatus {
+        status = root()
+        return status
+    }
+
+    override fun reset() {
+        status = NodeStatus.INITIAL
+        (root as? Resettable)?.reset()
+    }
+
+    override fun loadLearned() {
+        (root as? Learner)?.loadLearned()
+    }
+
+    override fun saveLearned() {
+        (root as? Learner)?.saveLearned()
+    }
+
+    override fun toString(): String = name
+}
+
+abstract class BTNode : SimpleNode, Prioritized, Learner, Resettable {
+    var status: NodeStatus = NodeStatus.INITIAL
+        private set
+    override val priority: Double = 0.0
     protected abstract fun tick(): NodeStatus
 
-    open fun perform(): NodeStatus {
+    override fun invoke(): NodeStatus {
         status = tick()
         return status
     }
 
-    open fun reset() {
+    override fun reset() {
         status = NodeStatus.INITIAL
     }
 
-    open fun loadLearned() {
+    override fun loadLearned() {
     }
 
-    open fun saveLearned() {
+    override fun saveLearned() {
     }
+}
 
-    companion object {
-        fun tickPar(childResults: Sequence<NodeStatus>): NodeStatus {
-            val results = childResults.toList()
-            if (results.contains(NodeStatus.FAILED))
-                return NodeStatus.FAILED
-            if (results.contains(NodeStatus.RUNNING))
-                return NodeStatus.RUNNING
-            return NodeStatus.DONE
+class Dispatch<T>(
+        name: String,
+        private val valuesProvider: () -> Collection<T>,
+        private val treeMaker: (T) -> SimpleNode) : CompoundNode(name) {
+    private val managed = mutableMapOf<T, SimpleNode>()
+
+    override val children: Collection<SimpleNode>
+        get() {
+            val values = valuesProvider()
+            managed.keys.retainAll(values)
+            return values.map { value ->
+                managed.computeIfAbsent(value) {
+                    treeMaker(it)
+                }
+            }
         }
+
+    override fun tick(): NodeStatus {
+        val results = tickedChilds.toList()
+        if (results.contains(NodeStatus.FAILED))
+            return NodeStatus.FAILED
+        if (results.contains(NodeStatus.RUNNING))
+            return NodeStatus.RUNNING
+        return NodeStatus.DONE
     }
 }
 
 abstract class CompoundNode(val name: String) : BTNode() {
-    protected abstract val children : Collection<BTNode>
-    protected val tickedChilds get() = children.sortedByDescending { it.priority }.asSequence().map { ft(name, it::perform) }
-    override fun reset() = children.forEach { it.reset() }
+    protected abstract val children: Collection<SimpleNode>
+    protected val tickedChilds
+        get() = children.sortedByDescending {
+            (it as? Prioritized)?.priority ?: 0.0
+        }.asSequence().map { ft(name, it) }
+
+    override fun reset() = children.filterIsInstance<Resettable>().forEach(Resettable::reset)
 
     override fun loadLearned() {
-        children.forEach(BTNode::loadLearned)
+        children.filterIsInstance<Learner>().forEach(Learner::loadLearned)
     }
 
     override fun saveLearned() {
-        children.forEach(BTNode::saveLearned)
+        children.filterIsInstance<Learner>().forEach(Learner::saveLearned)
     }
 }
 
-class Best(name: String, vararg children: BTNode) : CompoundNode(name) {
+class Best(name: String, vararg children: SimpleNode) : CompoundNode(name) {
     override val children = children.toList()
     override fun tick(): NodeStatus {
         return tickedChilds.first()
@@ -66,8 +131,8 @@ class Best(name: String, vararg children: BTNode) : CompoundNode(name) {
     override fun toString(): String = "Best $name"
 }
 
-open class Sel(name: String, vararg children: BTNode) : CompoundNode(name) {
-    override val children: List<BTNode> = children.toList()
+open class Sel(name: String, vararg children: SimpleNode) : CompoundNode(name) {
+    override val children: Collection<SimpleNode> = children.toList()
     override fun tick(): NodeStatus =
             tickedChilds.firstOrNull { it != NodeStatus.FAILED }
                     ?: NodeStatus.FAILED
@@ -75,22 +140,33 @@ open class Sel(name: String, vararg children: BTNode) : CompoundNode(name) {
     override fun toString(): String = "Sel $name"
 }
 
-open class Seq(name: String, vararg children: BTNode) : CompoundNode(name) {
-    override val children: List<BTNode> = children.toList()
+class Seq(name: String, vararg children: SimpleNode) : CompoundNode(name) {
+    override val children: Collection<SimpleNode> = children.asList()
+
     override fun tick(): NodeStatus = tickedChilds
-            .takeWhile { it == NodeStatus.DONE }.lastOrNull()
+            .firstOrNull { it != NodeStatus.DONE }
             ?: NodeStatus.DONE
 
     override fun toString(): String = "Seq $name"
 }
 
-open class Par(name: String, vararg children: BTNode) : CompoundNode(name) {
-    override val children: Collection<BTNode> = children.toList()
-    override fun tick(): NodeStatus = tickPar(tickedChilds)
+class Par(name: String, private val continueOnFail: Boolean = false, vararg children: SimpleNode) : CompoundNode(name) {
+    override val children: Collection<SimpleNode> = children.asList()
+
+    override fun tick(): NodeStatus {
+        val results = tickedChilds
+                .takeWhile { it != NodeStatus.FAILED || continueOnFail }
+                .toList()
+        if (results.contains(NodeStatus.FAILED))
+            return NodeStatus.FAILED
+        if (results.contains(NodeStatus.RUNNING))
+            return NodeStatus.RUNNING
+        return NodeStatus.DONE
+    }
 
     companion object {
-        fun repeat(name: String, amount: Int, childSupplier: () -> BTNode) =
-                Par(name, *(0 until amount).map { childSupplier() }.toTypedArray())
+        fun repeat(name: String, amount: Int, childSupplier: () -> BehaviorTree) =
+                Par(name, false, *(0 until amount).map { childSupplier() }.toTypedArray())
     }
 
     override fun toString(): String = "Par $name"
@@ -100,7 +176,7 @@ open class Memo(private val delegate: BTNode) : BTNode() {
     override fun tick(): NodeStatus {
         if (status != NodeStatus.INITIAL && status != NodeStatus.RUNNING)
             return status
-        return delegate.perform()
+        return delegate()
     }
 
     override fun reset() {
@@ -110,16 +186,21 @@ open class Memo(private val delegate: BTNode) : BTNode() {
 }
 
 abstract class MemoLeaf : BTNode() {
-    final override fun perform(): NodeStatus {
+    override fun invoke(): NodeStatus {
         if (status != NodeStatus.INITIAL && status != NodeStatus.RUNNING)
             return status
-        return super.perform()
+        return super.invoke()
     }
+}
+
+class WaitFor(private val condition: () -> Boolean) : BTNode() {
+    override fun tick(): NodeStatus =
+            if (condition()) NodeStatus.DONE else NodeStatus.RUNNING
 }
 
 class Condition(private val condition: () -> Boolean) : BTNode() {
     override fun tick(): NodeStatus =
-            if (condition()) NodeStatus.DONE else NodeStatus.RUNNING
+            if (condition()) NodeStatus.DONE else NodeStatus.FAILED
 }
 
 class Repeat(private val amount: Int = -1, private val repeatOnFailure: Boolean = true, private val delegate: BTNode) : BTNode() {
@@ -129,7 +210,7 @@ class Repeat(private val amount: Int = -1, private val repeatOnFailure: Boolean 
         if (remaining == 0) {
             return NodeStatus.DONE
         }
-        delegate.perform()
+        delegate()
         if (delegate.status != NodeStatus.DONE) {
             if (repeatOnFailure && delegate.status == NodeStatus.FAILED) {
                 delegate.reset()

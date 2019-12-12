@@ -26,25 +26,25 @@ function play() {
  #nohup scbw.play --headless --bots StyxZ tscmoo --timeout_at_frame 43200 --game_name shark&
 # nohup scbw.play --headless --bots StyxZ WuliBot --timeout_at_frame 43200 --game_name shark&
 #nohup scbw.play --headless --bots StyxZ "Andrew Smith" --timeout_at_frame 43200 --game_name shark&
-#play CUBOT
+# play CUBOT
 #play Stone
- #play McRaveZ
-# play 'Chris Coxe'
+#play McRaveZ
+#play 'Chris Coxe'
 # play Antiga
-#play Locutus
+# play Locutus
 #play Proxy
-play BananaBrain
+#play BananaBrain
 # play tscmoo
 # play WuliBot
 #play 'Iron bot'
-#play TyrProtoss
+play TyrProtoss
 #play 'Tomas Vajda'
-#play McRave
+# play McRave
 #play ZurZurZur
 # play Flash
 # play 'Simon Prins'
-# play 'Andrew Smith'
- # play Bereaver
+#play 'Andrew Smith'
+# play Bereaver
 #play WillBot
 # play Crona
 # play Ecgberht

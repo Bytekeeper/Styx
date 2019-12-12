@@ -15,13 +15,13 @@ class Listener : DefaultBWListener() {
     private var maxFrameTime = 0L;
 
     private val aiTree = Par("Main AI Tree",
-            SquadDispatch,
+            true,
+            squadDispatch,
             Best("Strategy",
                     Nine734,
                     NinePoolCheese,
                     TwoHatchHydra,
                     TwoHatchMuta
-//                    TwelveHatchHydra
             ),
             Gathering(),
             Scouting
@@ -44,7 +44,7 @@ class Listener : DefaultBWListener() {
             Styx.update()
 
 
-            aiTree.perform()
+            aiTree()
 //            diag.log("PLAN: " + buildPlan.plannedUnits.joinToString())
             val frameTime = timed.ms()
             if (frameTime > 42 && game.frameCount > 0) {

@@ -22,7 +22,7 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
         }
         val targetCandidate = bestSquadToSupport(candidates)
                 ?: desperateAttemptToWinSquad(candidates)
-        if (targetCandidate != null) {
+        if (targetCandidate != null && targetCandidate.first != squad) {
             Styx.diag.log("Squad seeking $squad - $targetCandidate")
             squad.task = "Attack"
             val targetSquad = targetCandidate.first
@@ -51,11 +51,8 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
                 null
 
     private fun bestSquadToSupport(candidates: List<Pair<Squad, Double>>) =
-            candidates.sortedBy { it.second }
-                    .firstOrNull {
-                        it.first.shouldBeDefended && it.first.enemies.isNotEmpty() ||
-                                it.second > it.first.fastEval && it.first.enemies.size > squad.enemies.size ||
-                                it.second == 0.5 && it.first.mine.count { u -> u.isCombatRelevant } > squad.mine.count { u -> u.isCombatRelevant }
-                    }
-                    ?.let { it.first to it.second }
+            candidates.maxBy { (s, eval) ->
+                (eval - 0.6) * (s.enemies.count { it.isCombatRelevant } + s.enemies.size) +
+                        (0.3 - eval) * (s.mine.count { !it.isCombatRelevant })
+            }
 }

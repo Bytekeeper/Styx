@@ -43,7 +43,7 @@ object Styx {
 
     lateinit var fingerPrint: FingerPrint
         private set
-    lateinit var relevantGameResults: List<GameResult>
+    lateinit var relevantGameResults: RelevantGames
         private set
     val frameTimes = mutableListOf<Timed>()
     var turnSize = 0
@@ -149,21 +149,15 @@ object Styx {
                 game.startLocations.size,
                 game.enemy().race)
 
-        val bestPrelearnedMatch = sequenceOf<(GameResult) -> Boolean>(
+        relevantGameResults = RelevantGames(sequenceOf<(GameResult) -> Boolean>(
                 { it.fingerPrint == fingerPrint },
                 { it.fingerPrint.copy(map = null) == fingerPrint.copy(map = null) },
                 { it.fingerPrint.copy(map = null, startLocations = null) == fingerPrint.copy(map = null, startLocations = null) },
-                { it.fingerPrint.copy(map = null, startLocations = null, enemy = null) == fingerPrint.copy(map = null, startLocations = null, enemy = null) }
+                { it.fingerPrint.copy(map = null, startLocations = null, enemy = null) == fingerPrint.copy(map = null, startLocations = null, enemy = null) },
+                { it.fingerPrint.copy(map = null, enemy = null, enemyRace = null) == fingerPrint.copy(map = null, enemy = null, enemyRace = null) }
         ).map { storage.learned.gameResults.filter(it) }
-                .takeWhile { it.size < 10 }
-                .toList()
+                .toList())
 
-        val matchingPreviousGames =
-                if (bestPrelearnedMatch.isNotEmpty() && bestPrelearnedMatch.last().size >= 10)
-                    bestPrelearnedMatch.last()
-                else
-                    bestPrelearnedMatch.firstOrNull { it.isNotEmpty() }
-        relevantGameResults = matchingPreviousGames ?: emptyList()
         storage.learned.gameResults
                 .map { it.strategy to it.won }
                 .groupBy({ it.first }) { it.second }
@@ -176,13 +170,35 @@ object Styx {
     }
 }
 
+data class RelevantGames(private val results: List<List<GameResult>>) {
+    val amount = results.sumBy { it.size }
+    val score: Double
+        get() {
+            val aggregated = generateSequence(1.0) { it * 0.8 }.take(results.size)
+                    .mapIndexedNotNull { index, factor ->
+                        val won = results[index].map { if (it.won) 1.0 else 0.0 }
+                        if (won.isEmpty())
+                            null
+                        else
+                            won.average() * factor to factor
+                    }.toList()
+            return if (aggregated.isEmpty())
+                0.5
+            else aggregated.reduce { acc, pair ->
+                (acc.first + pair.first) to (acc.second + pair.second)
+            }.run { first / second }
+        }
+
+    fun filteredByStrategy(strategy: String) = RelevantGames(results.map { it.filter { it.strategy == strategy } })
+}
+
 class Economy {
     // "Stolen" from PurpleWave
     private val perWorkerPerFrameMinerals = 0.046
     private val perWorkerPerFrameGas = 0.069
     private var workersOnMinerals: Int = 0
     private var workersOnGas: Int = 0
-    lateinit var currentResources : GMS
+    lateinit var currentResources: GMS
         private set
 
     private val supplyWithPending: Int by LazyOnFrame {
@@ -201,9 +217,6 @@ class Economy {
 
     // TODO: Missing additional supply in the given time
     fun estimatedAdditionalGMSIn(frames: Int): GMS {
-        if (frames < 0) {
-            println("!!")
-        }
         require(frames >= 0)
         val lostWorkers = buildPlan.plannedUnits
                 .filter { it.type.isBuilding }
@@ -252,11 +265,6 @@ class Squads {
             _squads.computeIfAbsent(cluster) { Squad() }
                     .update(units)
         }
-
-//        val any = units.mine.filter { !it.unit.isAttacking && !it.gathering && !it.carrying && !it.unit.isMoving && units.mine.inRadius(it, 150).any { it.unit.isAttacking } }
-//        if (any.isNotEmpty()) {
-//            println("ASS")
-//        }
     }
 }
 
@@ -302,8 +310,8 @@ class Units {
         val relevantUnits = knownUnits
                 .filter {
                     it.visible ||
-                            !game.isVisible(it.tilePosition) ||
-                            (frame - 24 * 60 <= it.lastSeenFrame && !it.detected)
+                            !game.isVisible(it.tilePosition) && frame - 24 * 40 <= it.lastSeenFrame ||
+                            !it.detected
                 }
         allunits = PositionQueries(relevantUnits, positionExtractor)
         ownedUnits = PositionQueries(relevantUnits.filter { it.owned }, positionExtractor)
@@ -382,16 +390,16 @@ class Bases {
                 it.mainResourceDepot = resourceDepot
             if (game.isVisible(it.centerTile))
                 it.lastSeenFrame = frame
-            it.populated = units.ownedUnits.nearest(it.center.x, it.center.y) { it.unitType.isBuilding }.distanceTo(it.center) < 600
+            it.populated = units.ownedUnits.nearest(it.center.x, it.center.y) { it.unitType.isBuilding }?.distanceTo(it.center) ?: Int.MAX_VALUE < 600
         }
         myBases = bases.filter { it.mainResourceDepot?.myUnit == true }
         enemyBases = (bases - myBases).filter { it.populated }
         potentialEnemyBases = bases.filter {
-            val closestEnemy = units.enemy.nearest(it.center)?.distanceTo(it.center) ?: 0
             it.isStartingLocation &&
                     !it.populated &&
-                    !game.isExplored(it.centerTile) &&
-                    (closestEnemy < 300 || closestEnemy > 600)
+                    !game.isExplored(it.centerTile)
+        }.sortedBy {
+            units.enemy.nearest(it.center)?.framesToTravelTo(it.center) ?: Int.MAX_VALUE
         }
     }
 }
@@ -422,6 +430,7 @@ fun WalkPosition.middlePosition() = toPosition() + Position(4, 4)
 fun WalkPosition.makeValid() = WalkPosition(
         clamp(x, 0, game.mapWidth() * 4 - 1),
         clamp(y, 0, game.mapHeight() * 4 - 1))
+
 fun org.bk.ass.path.Position.toWalkPosition() = WalkPosition(x, y)
 
 fun <T> Optional<T>.orNull(): T? = orElse(null)
@@ -450,12 +459,13 @@ fun fastSig(x: Double) = x / (1 + abs(x))
 fun RayCaster<Boolean>.tracePath(start: WalkPosition, end: WalkPosition) =
         trace(start.x, start.y, end.x, end.y)?.toWalkPosition()
                 ?: start
+
 fun RayCaster<Boolean>.noObstacle(start: WalkPosition, end: WalkPosition) =
         tracePath(start, end) == end
 
 fun RayCaster.Hit<*>.toWalkPosition() = WalkPosition(x, y)
 
-fun Grid<Boolean>.toBufferedImage() : BufferedImage {
+fun Grid<Boolean>.toBufferedImage(): BufferedImage {
     val image = BufferedImage(width, height, BufferedImage.TYPE_3BYTE_BGR)
     for (y in 0 until height) {
         for (x in 0 until width) {

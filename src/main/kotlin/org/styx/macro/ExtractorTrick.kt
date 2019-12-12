@@ -13,19 +13,19 @@ class ExtractorTrick() : MemoLeaf() {
 
     override fun tick(): NodeStatus {
         costLock.acquire()
-        if (build.perform() == NodeStatus.FAILED)
+        if (build() == NodeStatus.FAILED)
             return NodeStatus.FAILED
         costLock.release()
         val extractor = build.building ?: return NodeStatus.RUNNING
         cancel = cancel ?: Cancel(extractor)
-        train.perform()
+        train()
         if (train.status == NodeStatus.FAILED) {
-            if (cancel!!.perform() != NodeStatus.RUNNING)
+            if (cancel!!() != NodeStatus.RUNNING)
                 return NodeStatus.FAILED
             return NodeStatus.RUNNING
         }
         if (train.trainedUnit != null) {
-            return cancel!!.perform()
+            return cancel!!()
         }
         return NodeStatus.RUNNING
     }

@@ -1,5 +1,6 @@
 package org.styx.squad
 
+import bwapi.UnitType
 import org.bk.ass.sim.Agent
 import org.bk.ass.sim.IntEvaluation
 import org.styx.*
@@ -143,7 +144,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
                         it.unitType.isWorker && !it.visible) || (it.myUnit && !attackerLock.units.contains(it)) ||
                 !it.hasPower)
             agent.setCooldown(Config.simHorizon)
-        if (!it.unitType.canAttack())
+        if (!it.unitType.canAttack() && it.unitType != UnitType.Terran_Bunker)
             agent.setAttackTargetPriority(Agent.TargetingPriority.MEDIUM)
         agent
     }

@@ -23,7 +23,7 @@ class Expand(private val requireGas: Boolean = true) : MemoLeaf() {
                         ?.centerTile
             }
         }
-        return build.perform()
+        return build()
     }
 
 }

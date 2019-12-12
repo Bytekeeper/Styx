@@ -12,12 +12,13 @@ import org.styx.Styx.units
 import org.styx.action.BasicActions
 
 class StartBuild(private val type: UnitType,
-                 private val positionFinder: () -> TilePosition? = { ConstructionPosition.findPositionFor(type) }) : MemoLeaf() {
+                 private val positionFinder: () -> TilePosition? = { ConstructionPosition.findPositionFor(type) }) : BehaviorTree("Start Build $type") {
     init {
         require(type.isBuilding)
     }
+
     private var at: TilePosition? = null
-    private val workerLock = UnitLock {
+    private val workerLock = UnitLock({ it.unitType.isWorker && resources.availableUnits.contains(it) }) {
         val eval = closeTo(at!!.toPosition())
         resources.availableUnits.filter { it.unitType.isWorker }.minBy { eval(it) }
     }
@@ -26,6 +27,41 @@ class StartBuild(private val type: UnitType,
     private val dependency = EnsureDependenciesFor(type)
     var building: SUnit? = null
         private set
+
+    override val root: SimpleNode = Memo(
+                Sel("Execute",
+                        this::checkForExistingBuilding,
+                        Seq("Execute",
+                                Par("Requirements", false,
+                                        EnsureDependenciesFor(type),
+                                        this::findBuildSpot
+                                ),
+                                {
+                                    workerLock.acquire()
+                                    val buildPosition = at!!.toPosition() + type.dimensions / 2
+                                    val worker = workerLock.unit
+                                    val travelFrames = worker?.framesToTravelTo(buildPosition) ?: 0
+                                    costLock.futureFrames = travelFrames + hysteresisFrames
+                                    costLock.acquire()
+                                    if (worker != null)
+                                        orderBuild(worker, at!!, travelFrames, buildPosition)
+                                    else {
+                                        buildPlan.plannedUnits += PlannedUnit(type)
+                                    }
+                                    NodeStatus.RUNNING
+                                }
+                        )
+                )
+        )
+
+    private fun findBuildSpot(): NodeStatus {
+        val buildAt = at ?: positionFinder() ?: run {
+            buildPlan.plannedUnits += PlannedUnit(type)
+            return NodeStatus.RUNNING
+        }
+        at = buildAt
+        return NodeStatus.DONE
+    }
 
     private fun checkForExistingBuilding(): NodeStatus {
         at?.let {
@@ -42,44 +78,14 @@ class StartBuild(private val type: UnitType,
         return NodeStatus.FAILED
     }
 
-    override fun tick(): NodeStatus {
-        val existingBuildingState = checkForExistingBuilding()
-        if (existingBuildingState != NodeStatus.FAILED)
-            return existingBuildingState
-        val dependencyStatus = dependency.perform()
-        if (dependencyStatus == NodeStatus.FAILED)
-            return NodeStatus.FAILED
-        val buildAt = at ?: positionFinder() ?: run {
-            buildPlan.plannedUnits += PlannedUnit(type)
-            return NodeStatus.RUNNING
-        }
-        at = buildAt
-        workerLock.acquireUnlessFailed { worker ->
-            val buildPosition = buildAt.toPosition() + type.dimensions / 2
-            val travelFrames = worker?.framesToTravelTo(buildPosition) ?: 0
-            costLock.futureFrames = travelFrames + hysteresisFrames
-            costLock.acquire()
-            if (worker != null)
-                orderBuild(worker, buildAt, travelFrames, buildPosition)
-            else {
-                buildPlan.plannedUnits += PlannedUnit(type)
-                NodeStatus.RUNNING
-            }
-        }
-        return NodeStatus.RUNNING
-    }
-
-    private fun orderBuild(worker: SUnit, buildAt: TilePosition, travelFrames: Int, buildPosition: Position): NodeStatus =
-            if (costLock.satisfied) {
-                if (units.my(type).isNotEmpty() && type != UnitType.Zerg_Hatchery && type != UnitType.Zerg_Extractor) {
-                    println("!!")
-                }
-
+    private fun orderBuild(worker: SUnit, buildAt: TilePosition, travelFrames: Int, buildPosition: Position) {
+        when {
+            costLock.satisfied -> {
                 buildPlan.plannedUnits += PlannedUnit(type, 0)
                 hysteresisFrames = 0
                 BasicActions.build(worker, type, buildAt)
-                NodeStatus.RUNNING
-            } else if (costLock.willBeSatisfied) {
+            }
+            costLock.willBeSatisfied -> {
                 buildPlan.plannedUnits += PlannedUnit(type, travelFrames)
                 if (hysteresisFrames == 0 && Config.logEnabled) {
                     diag.traceLog("Build ${type} with ${worker.diag()} at ${buildAt.toWalkPosition().diag()} - GMS: ${resources.availableGMS}, " +
@@ -89,8 +95,8 @@ class StartBuild(private val type: UnitType,
                 hysteresisFrames--
                 BasicActions.move(worker, buildPosition)
                 if (costLock.willBeSatisfied) hysteresisFrames = Config.productionHysteresisFrames
-                NodeStatus.RUNNING
-            } else {
+            }
+            else -> {
                 buildPlan.plannedUnits += PlannedUnit(type)
                 if (hysteresisFrames > 0) {
                     diag.traceLog("Postponed build ${type} with ${worker.diag()} at ${buildAt.toWalkPosition().diag()}  - GMS: ${resources.availableGMS}, " +
@@ -98,8 +104,10 @@ class StartBuild(private val type: UnitType,
                             "$hysteresisFrames")
                 }
                 hysteresisFrames = 0
-                NodeStatus.FAILED
+                workerLock.release()
             }
+        }
+    }
 
     override fun reset() {
         super.reset()
@@ -112,21 +120,21 @@ class StartBuild(private val type: UnitType,
 }
 
 class Build(private val type: UnitType,
-            positionFinder: () -> TilePosition? = { ConstructionPosition.findPositionFor(type) }) : MemoLeaf() {
+            positionFinder: () -> TilePosition? = { ConstructionPosition.findPositionFor(type) }) : BehaviorTree("Build $type") {
     private val startBuild = StartBuild(type, positionFinder)
 
     var building: SUnit? = null
         private set
 
-    override fun tick(): NodeStatus {
-        if (building?.isCompleted == true)
-            return NodeStatus.DONE
-        val startBuildStatus = startBuild.perform()
-        if (startBuildStatus != NodeStatus.DONE)
-            return startBuildStatus
-        building = startBuild.building
-        return NodeStatus.RUNNING
-    }
-
-    override fun toString(): String = "Build $type"
+    override val root: SimpleNode = Memo(
+                Sel("Execute",
+                        Condition { building?.isCompleted == true },
+                        Seq("Execute",
+                                startBuild,
+                                NodeStatus.RUNNING.after {
+                                    building = startBuild.building
+                                }
+                        )
+                )
+        )
 }

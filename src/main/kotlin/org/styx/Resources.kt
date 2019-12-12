@@ -47,15 +47,6 @@ abstract class Lock<T : Any>(val criteria: (T) -> Boolean = { true }, val select
         }
     }
 
-    fun acquireUnlessFailed(call: (T?) -> NodeStatus) : NodeStatus {
-        acquire()
-        val result = call(item)
-        if (result == NodeStatus.FAILED) {
-            release()
-        }
-        return result
-    }
-
     abstract fun releaseItem()
     abstract fun tryReserve(item: T): Boolean
 }
@@ -86,7 +77,7 @@ class UnitLocks(criteria: (Collection<SUnit>) -> Boolean = { true }, selector: (
     }
 }
 
-class UnitLock(criteria: (SUnit) -> Boolean = { Styx.resources.availableUnits.contains(it) }, selector: () -> SUnit?) : Lock<SUnit>(criteria, selector) {
+class UnitLock(criteria: (SUnit) -> Boolean = { true }, selector: () -> SUnit?) : Lock<SUnit>({ criteria(it) && Styx.resources.availableUnits.contains(it) }, selector) {
     val unit get() = item
 
     override fun tryReserve(item: SUnit): Boolean {

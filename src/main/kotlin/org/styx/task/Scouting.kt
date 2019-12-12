@@ -17,13 +17,10 @@ object Scouting : BTNode() {
         for (base in bases.bases.filter { !game.isVisible(it.centerTile) }.sortedBy { it.lastSeenFrame ?: 0 }) {
             val ovi = remaining.minBy { it.distanceTo(base.center) } ?: return NodeStatus.RUNNING
             if (ovi.threats.isNotEmpty()) {
-                val safety = 96 + 256 - (256 * ovi.hitPoints) / ovi.unitType.maxHitPoints()
+                val safety = 196 + 256 - (256 * ovi.hitPoints) / ovi.unitType.maxHitPoints()
                 val force = Potential.airAttract(ovi, base.center) * 0.3 + Potential.avoidDanger(ovi, safety)
                 Potential.apply(ovi, force)
             } else {
-                if (Styx.units.enemy.inRadius(ovi, 300).any { it.inAttackRange(ovi, 32f) }) {
-                    println("MEH")
-                }
                 BasicActions.move(ovi, base.center)
             }
             remaining.remove(ovi)
