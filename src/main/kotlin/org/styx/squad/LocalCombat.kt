@@ -40,7 +40,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
         lastAttackHysteresis = 0
         retreatHysteresisFrames--
         val workersAndBuildingsAreSave = squad.mine.none { b ->
-            (b.unitType.isBuilding || b.unitType.isWorker) && squad.enemies.any { it.inAttackRange(b, 64f) }
+            (b.unitType.isBuilding || b.unitType.isWorker) && squad.enemies.any { it.inAttackRange(b, 64) }
         } || squad.mine.none { it.unitType.isBuilding }
         if (workersAndBuildingsAreSave) {
             workersToUse = 0
@@ -124,7 +124,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
                         if (relativeMovement < -0.3 || move.enemy.distanceTo(a) < a.maxRangeVs(move.enemy) + 32) {
                             BasicActions.attack(a, move.enemy)
                         } else {
-                            val force = Potential.collisionRepulsion(a) * 0.2 +
+                            val force = Potential.collisionRepulsion(a) * 0.4 +
                                     Potential.intercept(a, move.enemy)
                             Potential.apply(a, force)
                         }

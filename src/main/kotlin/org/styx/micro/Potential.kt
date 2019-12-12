@@ -76,12 +76,11 @@ object Potential {
     }
 
     fun reach(u: SUnit, position: Position) : Vector2D {
-        return if (u.flying)
-            airAttract(u, position)
-        else if (game.isWalkable(u.walkPosition))
-            groundAttract(u, position)
-        else
-            Vector2D()
+        return when {
+            u.flying -> airAttract(u, position)
+            game.isWalkable(u.walkPosition) -> groundAttract(u, position)
+            else -> Vector2D()
+        }
     }
 
     fun intercept(u: SUnit, t: SUnit): Vector2D {
@@ -103,28 +102,29 @@ object Potential {
     }
 
     fun collisionRepulsion(u: SUnit): Vector2D {
-        val collider = units.allunits.nearest(u.x, u.y) { !it.flying && it != u && it.distanceTo(u) < 32 }?.position?.toVector2D()
+        val collider = units.allunits.nearest(u.x, u.y, 128) { !it.flying && it != u && it.distanceTo(u) < 32 }?.position?.toVector2D()
                 ?: return Vector2D()
         return (u.position.toVector2D() - collider).normalize()
     }
 
     fun keepGroundCompany(u: SUnit, distance: Int): Vector2D {
-        val company = units.allunits.nearest(u.x, u.y) { !it.flying && it != u && it.unitType.canMove() }?.position?.toVector2D()
+        val company = units.allunits.nearest(u.x, u.y, distance) { !it.flying && it != u && it.unitType.canMove() }?.position?.toVector2D()
                 ?: return Vector2D()
         val delta = u.position.toVector2D() - company
         return if (delta.length() > distance) delta.normalize().negate() else delta.normalize()
     }
 
     fun avoidDanger(u: SUnit, safety: Int): Vector2D {
-        val enemy = units.enemy.nearest(u.x, u.y) {
-            (it.hasWeaponAgainst(u) || it.unitType == UnitType.Terran_Bunker) &&
-                    it.distanceTo(u) - it.maxRangeVs(u) < safety
+        val enemy = units.enemy.nearest(u.x, u.y, safety + 384) {
+            it.inAttackRange(u, safety)
         } ?: return Vector2D()
 
         return (u.position - enemy.position).toVector2D().normalize()
     }
 
     fun apply(u: SUnit, force: Vector2D, maxTravel: Double = 128.0) {
+        if (u.sleeping)
+            return
         val nForce = force.normalize()
         val ut = u.unitType
         val minFrames = 5
@@ -140,7 +140,7 @@ object Potential {
             if (requestedTargetLimitedByCollision == requestedTargetWalkPosition) {
                 u.moveTo(requestedTargetLimitedByCollision.middlePosition())
             } else {
-                val dir8Candidates = (0 until 8).map { it * PI2 / 8 }
+                val dir8Candidates = (0 until 12).map { it * PI2 / 12 }
                         .map {
                             val v = Vector2D(forceAsPosition.length, 0.0)
                                     .rotate(it)
@@ -149,7 +149,7 @@ object Potential {
                             geography.walkRay.tracePath(currentWalkPosition, end)
                         }
                 val endPoints = dir8Candidates.filter {
-                    it.getDistance(currentWalkPosition) > 6
+                    it.getDistance(currentWalkPosition) > 3
                 }
                 val wpToMoveTo =
                         endPoints.firstOrNull {

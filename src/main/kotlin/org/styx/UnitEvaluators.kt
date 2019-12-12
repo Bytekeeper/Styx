@@ -22,8 +22,7 @@ class WaitMove() : CombatMove
 object TargetEvaluator {
     private val byEnemyType: TargetScorer = { _, e ->
         when (e.unitType) {
-            UnitType.Zerg_Egg, UnitType.Zerg_Lurker_Egg -> -5.0
-            UnitType.Zerg_Larva -> -10.0
+            UnitType.Zerg_Egg, UnitType.Zerg_Lurker_Egg, UnitType.Zerg_Larva -> -10.0
             UnitType.Zerg_Extractor, UnitType.Terran_Refinery, UnitType.Protoss_Assimilator -> -2.0
             UnitType.Zerg_Drone, UnitType.Protoss_Probe, UnitType.Terran_SCV -> 0.8
             UnitType.Terran_Medic, UnitType.Protoss_High_Templar -> 0.7
@@ -57,7 +56,7 @@ object TargetEvaluator {
                 .filter { it.detected && it.unitType != UnitType.Zerg_Larva}
         if (relevantTargets.isEmpty() || attackers.isEmpty())
             return mapOf()
-        val alreadyEngaged = relevantTargets.any { e -> attackers.any { e.inAttackRange(it, 48f) || it.inAttackRange(e, 48f) } } || relevantTargets.none { it.unitType.canAttack() }
+        val alreadyEngaged = relevantTargets.any { e -> attackers.any { e.inAttackRange(it, 48) || it.inAttackRange(e, 48) } } || relevantTargets.none { it.unitType.canAttack() }
         val averageMinimumDistanceToEnemy = if (alreadyEngaged) 0.0 else attackers.map { a -> relevantTargets.map { a.distanceTo(it) }.min()!! }.average()
         val pylons = 4.0 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
         val defensiveBuildings = targets.count {

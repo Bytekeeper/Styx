@@ -114,7 +114,7 @@ class SUnit private constructor(val unit: Unit) {
         private set
     var hatchery: SUnit? = null
         private set
-    val threats by LazyOnFrame { Styx.units.enemy.inRadius(this, 400) { it.inAttackRange(this, 96f) } }
+    val threats by LazyOnFrame { Styx.units.enemy.inRadius(this, 400) { it.inAttackRange(this, 96) } }
 
     fun predictPosition(frames: Int) = position + velocity.multiply(frames.toDouble()).toPosition()
 
@@ -331,7 +331,7 @@ class SUnit private constructor(val unit: Unit) {
     }
 
 
-    fun inAttackRange(other: SUnit, allowance: Float = 0f) = hasWeaponAgainst(other) && maxRangeVs(other) + allowance >= distanceTo(other)
+    fun inAttackRange(other: SUnit, allowance: Int = 0) = hasWeaponAgainst(other) && maxRangeVs(other) + allowance >= distanceTo(other)
 
 
     fun maxRangeVs(other: SUnit) =

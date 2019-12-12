@@ -3,6 +3,7 @@ package org.styx.squad
 import org.styx.*
 import org.styx.Styx.squads
 import org.styx.micro.Potential
+import kotlin.math.abs
 
 class SeekCombatSquad(private val squad: Squad) : BTNode() {
     private val attackerLock = UnitLocks { Styx.resources.availableUnits.filter { squad.mine.contains(it) && !it.unitType.isWorker && !it.unitType.isBuilding && it.unitType.canAttack() } }
@@ -15,10 +16,10 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
         if (attackerLock.units.isEmpty())
             return NodeStatus.RUNNING
         val attackers = attackerLock.units
-        val candidates = squads.squads.map {
-            val myAgents = (attackers + it.mine).distinct().filter { it.unitType.canAttack() && it.unitType.canMove() }.map { it.agent() }
-            val enemies = (squad.enemies + it.enemies).distinct().map { it.agent() }
-            it to Styx.evaluator.evaluate(myAgents, enemies)
+        val candidates = squads.squads.map { c ->
+            val myAgents = (c.mine + attackers).distinct().filter { it.unitType.canAttack() && it.unitType.canMove() }.map { it.agent() }
+            val enemies = (squad.enemies + c.enemies).distinct().map { it.agent() }
+            c to Styx.evaluator.evaluate(myAgents, enemies)
         }
         val targetCandidate = bestSquadToSupport(candidates)
                 ?: desperateAttemptToWinSquad(candidates)
@@ -26,11 +27,12 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
             Styx.diag.log("Squad seeking $squad - $targetCandidate")
             squad.task = "Attack"
             val targetSquad = targetCandidate.first
-            val targetPosition = targetSquad.mine.filter { !it.flying }.minBy { it.distanceTo(targetSquad.myCenter) }?.position
+            val targetGroundPosition = targetSquad.mine.filter { !it.flying }.minBy { it.distanceTo(targetSquad.myCenter) }?.position
                     ?: targetSquad.enemies.filter { !it.flying }.minBy { it.distanceTo(targetSquad.center) }?.position
+            val targetAirPosition = targetSquad.all.minBy { it.distanceTo(targetSquad.center) }!!.position
             attackers.forEach { attacker ->
-                if (targetPosition != null && attacker.threats.isEmpty()) {
-                    val force = Potential.reach(attacker, targetPosition) +
+                if (targetGroundPosition != null && attacker.threats.isEmpty()) {
+                    val force = (if (attacker.flying) Potential.reach(attacker, targetAirPosition) else Potential.reach(attacker, targetGroundPosition)) +
                             Potential.collisionRepulsion(attacker) * 0.3 +
                             Potential.keepGroundCompany(attacker, 32) * 0.2
                     Potential.apply(attacker, force)
@@ -39,6 +41,9 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
                 }
             }
         } else {
+            if (Styx.units.enemy.any { !it.flying }) {
+                println("!!")
+            }
             attackerLock.release()
         }
         return NodeStatus.RUNNING
@@ -51,8 +56,9 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
                 null
 
     private fun bestSquadToSupport(candidates: List<Pair<Squad, Double>>) =
-            candidates.maxBy { (s, eval) ->
-                (eval - 0.6) * (s.enemies.count { it.isCombatRelevant } + s.enemies.size) +
-                        (0.3 - eval) * (s.mine.count { !it.isCombatRelevant })
-            }
+            candidates.filter { it.first.enemies.isNotEmpty() && it.second != 0.5 }
+                    .maxBy { (s, eval) ->
+                        abs((eval - 0.6) * (s.enemies.count { it.isCombatRelevant } + s.enemies.size / 10.0)) +
+                                (0.7 - eval) * (s.mine.count { !it.isCombatRelevant })
+                    }
 }

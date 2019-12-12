@@ -39,13 +39,13 @@ class SquadBackOff(private val squad: Squad) : BTNode() {
         Styx.diag.log("Squad backing off ${squad.name} (${attackerLock.units.size} units) to $bestUnit")
         attackerLock.units.forEach { a ->
             when {
-                squad.enemies.any { it.inAttackRange(a, 32f) } -> {
+                squad.enemies.any { it.inAttackRange(a, 32) } -> {
                     val force = Potential.reach(a, targetSquad.myCenter) +
                             Potential.avoidDanger(a, 96) * 0.3 +
                             Potential.collisionRepulsion(a) * 0.2
                     Potential.apply(a, force)
                 }
-                squad.enemies.any { it.inAttackRange(a, 384f) } -> {
+                squad.enemies.any { it.inAttackRange(a, 384) } -> {
                     BasicActions.follow(a, bestUnit)
                 }
                 else ->
