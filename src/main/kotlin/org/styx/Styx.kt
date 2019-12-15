@@ -3,6 +3,7 @@ package org.styx
 import bwapi.*
 import bwapi.Unit
 import bwem.BWMap
+import bwem.ChokePoint
 import org.bk.ass.cluster.Cluster
 import org.bk.ass.cluster.StableDBScanner
 import org.bk.ass.grid.Grid
@@ -310,8 +311,9 @@ class Units {
         val relevantUnits = knownUnits
                 .filter {
                     it.visible ||
-                            !game.isVisible(it.tilePosition) && frame - 24 * 40 <= it.lastSeenFrame ||
-                            !it.detected
+                            !game.isVisible(it.tilePosition) && frame - 24 * 120 <= it.lastSeenFrame ||
+                            !it.detected ||
+                            it.unitType.isBuilding
                 }
         allunits = PositionQueries(relevantUnits, positionExtractor)
         ownedUnits = PositionQueries(relevantUnits.filter { it.owned }, positionExtractor)
@@ -388,9 +390,10 @@ class Bases {
             val resourceDepot = units.resourceDepots.nearest(it.center.x, it.center.y)
             if (resourceDepot != null && resourceDepot.distanceTo(it.center) < 80)
                 it.mainResourceDepot = resourceDepot
-            if (game.isVisible(it.centerTile))
+            if (game.isVisible(it.centerTile)) {
                 it.lastSeenFrame = frame
-            it.populated = units.ownedUnits.nearest(it.center.x, it.center.y) { it.unitType.isBuilding }?.distanceTo(it.center) ?: Int.MAX_VALUE < 600
+                it.populated = units.ownedUnits.nearest(it.center.x, it.center.y) { it.unitType.isBuilding }?.distanceTo(it.center) ?: Int.MAX_VALUE < 400
+            }
         }
         myBases = bases.filter { it.mainResourceDepot?.myUnit == true }
         enemyBases = (bases - myBases).filter { it.populated }

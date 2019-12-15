@@ -74,7 +74,7 @@ class SUnit private constructor(val unit: Unit) {
     val carrying: Boolean get() = carryingGas || carryingMinerals
     val owned get() = !player.isNeutral
     val ready get() = readyOnFrame < frame
-    val sleeping get() = readyOnFrame >= frame || isOnCooldown() || !interuptible
+    val sleeping get() = readyOnFrame >= frame || !canMoveWithoutBreakingAttack || !interuptible
     var target: SUnit? = null
         private set
     var orderTarget: SUnit? = null
@@ -162,7 +162,7 @@ class SUnit private constructor(val unit: Unit) {
         hatchery = unit.hatchery?.let { forUnit(it) }
 
         if (frame - lastUnstickingCommandFrame > game.latencyFrames) {
-            if (vx == 0.0 && vy == 0.0 && !isOnCooldown() && !gathering) {
+            if (vx == 0.0 && vy == 0.0 && canMoveWithoutBreakingAttack && !gathering) {
                 stuckFrames++
                 if (stuckFrames > 24) {
                     lastUnstickingCommandFrame = Int.MAX_VALUE
@@ -313,7 +313,8 @@ class SUnit private constructor(val unit: Unit) {
     }
 
     fun train(type: UnitType) {
-        if (sleeping) return
+        if (sleeping)
+            return
         unit.train(type)
         sleep()
     }
@@ -363,8 +364,11 @@ class SUnit private constructor(val unit: Unit) {
         return damagePerHit / weapon.damageCooldown().toDouble()
     }
 
-    fun isOnCooldown() = unitType.groundWeapon() != WeaponType.None && unitType.groundWeapon().damageCooldown() - unit.groundWeaponCooldown < stopFrames
-            || unitType.airWeapon() != WeaponType.None && unitType.airWeapon().damageCooldown() - unit.airWeaponCooldown < stopFrames
+    val canMoveWithoutBreakingAttack get() = (unitType.groundWeapon() == WeaponType.None || unitType.groundWeapon().damageCooldown() - unit.groundWeaponCooldown >= stopFrames)
+            && (unitType.airWeapon() == WeaponType.None || unitType.airWeapon().damageCooldown() - unit.airWeaponCooldown >= stopFrames)
+
+    val isOnCoolDown get() =  unit.groundWeaponCooldown > 0
+            || unit.airWeaponCooldown > 0
 
     override fun toString(): String = "i$id ${unitType.shortName()}${if (!visible && enemyUnit) "(H)" else ""} $position [${player.name.substring(0, 2)}]"
 

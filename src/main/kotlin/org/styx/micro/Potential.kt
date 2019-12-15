@@ -1,9 +1,6 @@
 package org.styx.micro
 
 import bwapi.Position
-import bwapi.UnitType
-import bwapi.WeaponType
-import bwem.ChokePoint
 import org.locationtech.jts.math.Vector2D
 import org.styx.*
 import org.styx.Styx.game
@@ -14,74 +11,8 @@ import kotlin.math.max
 import kotlin.math.min
 
 object Potential {
-    fun groundAttract(u: SUnit, target: Position): Vector2D {
-        val unitWP = u.walkPosition
-        val targetWP = target.toWalkPosition()
 
-        if (!u.flying) {
-//            val image = geography.walkable.toBufferedImage()
-//            val g = image.createGraphics()
-//            g.color = Color.RED
-//            g.drawLine(unitWP.x, unitWP.y, targetWP.x, targetWP.y)
-//            g.color = Color.WHITE
-//            g.fillArc(unitWP.x - 2, unitWP.y - 2, 4, 4, 0, 360)
-//            val area = map.getArea(unitWP)
-//            if (area != null) {
-//                val ha = area.walkPositionWithHighestAltitude
-//                g.color = Color.BLUE
-//                g.fillArc(ha.x - 2, ha.y - 2, 4, 4, 0, 360)
-//                map.getPath(u.position, target).firstOrNull()
-//                        ?.let {
-//                            val pos = it.center
-//                            g.color = Color.CYAN
-//                            g.drawLine(unitWP.x, unitWP.y, pos.x, pos.y)
-//                        }
-//            }
-//            for (c in map.chokePoints) {
-//                g.color = Color.PINK
-//                g.fillArc(c.center.x - 2, c.center.y - 2, 4, 4, 0, 360)
-//                g.color = Color.ORANGE
-//                val a = c.getNodePosition(ChokePoint.Node.END1)
-//                g.fillArc(a.x - 2, a.y - 2, 4, 4, 0, 360)
-//                val b = c.getNodePosition(ChokePoint.Node.END2)
-//                g.fillArc(b.x - 2, b.y - 2, 4, 4, 0, 360)
-//            }
-//            diag.dump("groundAttract", image)
-        }
-        val waypoint =
-                if (geography.walkRay.noObstacle(unitWP, targetWP)) target
-                else {
-                    val myArea = map.getArea(unitWP)
-                    val path = map.getPath(u.position, target)
-                    if (!path.isEmpty) {
-                        val cp = path.first()
-                        val nextArea =
-                                if (path.size() == 1)
-                                    if (cp.areas.left == myArea) cp.areas.right else cp.areas.left
-                                else if (path[1].areas.left == cp.areas.left || path[1].areas.left == cp.areas.right) {
-                                    path[1].areas.left
-                                } else
-                                    path[1].areas.right
-                        val pos = sequenceOf(ChokePoint.Node.END1, ChokePoint.Node.END2, ChokePoint.Node.MIDDLE)
-                                .map { node ->
-                                    cp.getNodePositionInArea(node, nextArea)
-                                }.minBy { it.getDistance(unitWP) + it.getDistance(targetWP) }!!
-
-                        pos.toPosition()
-                    } else {
-                        target
-                    }
-                }
-        return (waypoint - u.position).toVector2D().normalize()
-    }
-
-    fun reach(u: SUnit, position: Position) : Vector2D {
-        return when {
-            u.flying -> airAttract(u, position)
-            game.isWalkable(u.walkPosition) -> groundAttract(u, position)
-            else -> Vector2D()
-        }
-    }
+    fun reach(u: SUnit, position: Position) : Vector2D = attract(u, position)
 
     fun intercept(u: SUnit, t: SUnit): Vector2D {
         val framesDistance = 2.0 * u.distanceTo(t) / (u.topSpeed + 0.1)
@@ -97,9 +28,11 @@ object Potential {
     }
 
 
-    fun airAttract(u: SUnit, target: Position): Vector2D {
-        return (target - u.position).toVector2D().normalize()
-    }
+    fun repelFrom(u: SUnit, other: SUnit): Vector2D =
+            (u.position - other.position).toVector2D().normalize()
+
+    fun attract(u: SUnit, target: Position): Vector2D =
+        (target - u.position).toVector2D().normalize()
 
     fun collisionRepulsion(u: SUnit): Vector2D {
         val collider = units.allunits.nearest(u.x, u.y, 128) { !it.flying && it != u && it.distanceTo(u) < 32 }?.position?.toVector2D()
@@ -140,7 +73,7 @@ object Potential {
             if (requestedTargetLimitedByCollision == requestedTargetWalkPosition) {
                 u.moveTo(requestedTargetLimitedByCollision.middlePosition())
             } else {
-                val dir8Candidates = (0 until 12).map { it * PI2 / 12 }
+                val dir8Candidates = (0 until 8).map { it * PI2 / 8 }
                         .map {
                             val v = Vector2D(forceAsPosition.length, 0.0)
                                     .rotate(it)
@@ -154,8 +87,8 @@ object Potential {
                 val wpToMoveTo =
                         endPoints.firstOrNull {
                             geography.walkRay.noObstacle(it, requestedTargetWalkPosition)
-                        } ?: endPoints.minBy {
-                            requestedTargetWalkPosition.getDistance(it)
+                        } ?: endPoints.maxBy {
+                            currentWalkPosition.getDistance(it)
                         } ?: dir8Candidates.minBy {
                             requestedTargetWalkPosition.getDistance(it)
                         }!!

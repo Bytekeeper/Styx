@@ -15,8 +15,7 @@ object Scouting : BTNode() {
         val remaining = ovis.units.toMutableList()
         for (base in bases.bases.filter { !game.isVisible(it.centerTile) }.sortedBy { it.lastSeenFrame ?: 0 }) {
             val ovi = remaining.minBy { it.distanceTo(base.center) } ?: return NodeStatus.RUNNING
-            val safety = 196 + 256 - (256 * ovi.hitPoints) / ovi.unitType.maxHitPoints()
-            val force = Potential.airAttract(ovi, base.center) * 0.3 + Potential.avoidDanger(ovi, safety)
+            val force = Potential.attract(ovi, base.center) * 0.3 + Potential.avoidDanger(ovi, 300)
             Potential.apply(ovi, force)
 
             remaining.remove(ovi)

@@ -9,6 +9,7 @@ import org.styx.Styx.fleeSim
 import org.styx.Styx.ft
 import org.styx.Styx.sim
 import org.styx.action.BasicActions
+import org.styx.micro.Combat
 import org.styx.micro.Potential
 import kotlin.math.max
 import kotlin.math.min
@@ -83,7 +84,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
 
             val valuesAfterCombat = sim.agentsA.map { it to agentValueForPlayer.applyAsInt(it) }
             val attackersToKeep = valuesAfterCombat.filter { (a, v) ->
-                a.attackCounter > 0 && v * 4.0 > (valuesBeforeCombat[a] ?: Int.MAX_VALUE)
+                a.attackCounter > 0 && v * 4.0 > (valuesBeforeCombat[a] ?: error("More units after combat? Not really..."))
             }.map { it.first.userObject as SUnit }
 
             // Keep units that'd die anyway
@@ -118,18 +119,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
         diag.log("Squad combat moves ${squad.name} $combatMoves")
         attackers.forEach { a ->
             when (val move = combatMoves[a]) {
-                is AttackMove ->
-                    if (move.enemy.visible) {
-                        val relativeMovement = a.velocity.normalize().dot(move.enemy.velocity.normalize())
-                        if (relativeMovement < -0.3 || move.enemy.distanceTo(a) < a.maxRangeVs(move.enemy) + 32) {
-                            BasicActions.attack(a, move.enemy)
-                        } else {
-                            val force = Potential.collisionRepulsion(a) * 0.4 +
-                                    Potential.intercept(a, move.enemy)
-                            Potential.apply(a, force)
-                        }
-                    } else
-                        BasicActions.move(a, move.enemy.position)
+                is AttackMove -> Combat.attack(a, move.enemy)
                 is WaitMove ->
                     a.stop()
                 // TODO fix releasing in locks - don't use lock.release! It will crash with ConcurrentModification
@@ -170,10 +160,10 @@ class LocalCombat(private val squad: Squad) : BTNode() {
         fleeSim.reset()
         val agentsBeforeCombat = squad.mine.map(unitToAgentMapper)
         agentsBeforeCombat
-                .forEach { Styx.fleeSim.addAgentA(it) }
+                .forEach { fleeSim.addAgentA(it) }
         squad.enemies.map(unitToAgentMapper)
-                .forEach { Styx.fleeSim.addAgentB(it) }
-        ft("flee sim") { Styx.fleeSim.simulate(Config.simHorizon) }
+                .forEach { fleeSim.addAgentB(it) }
+        ft("flee sim") { fleeSim.simulate(Config.fleeSimHorizon) }
         val lostUnits = agentsBeforeCombat.filter { it.health <= 0 }.map { it.userObject as SUnit }
         val eval = fleeSim.evalToInt(agentValueForPlayer)
         return SimResult(lostUnits, eval)

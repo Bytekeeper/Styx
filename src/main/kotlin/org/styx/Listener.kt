@@ -71,8 +71,8 @@ class Listener : DefaultBWListener() {
     }
 
     override fun onEnd(isWinner: Boolean) {
-        Styx.onEnd(isWinner)
         aiTree.saveLearned()
+        Styx.onEnd(isWinner)
     }
 }
 

@@ -6,6 +6,7 @@ import bwapi.WeaponType
 import org.bk.ass.sim.Agent
 import org.bk.ass.sim.Simulator
 import org.locationtech.jts.math.DD.EPS
+import org.styx.Config.dpfThreatValueFactor
 import org.styx.Config.evalFramesToKillFactor
 import org.styx.Config.evalFramesToReach
 import org.styx.Config.evalFramesToTurnFactor
@@ -24,7 +25,7 @@ object TargetEvaluator {
         when (e.unitType) {
             UnitType.Zerg_Egg, UnitType.Zerg_Lurker_Egg, UnitType.Zerg_Larva -> -10.0
             UnitType.Zerg_Extractor, UnitType.Terran_Refinery, UnitType.Protoss_Assimilator -> -2.0
-            UnitType.Zerg_Drone, UnitType.Protoss_Probe, UnitType.Terran_SCV -> 0.8
+            UnitType.Zerg_Drone, UnitType.Protoss_Probe, UnitType.Terran_SCV -> 1.0
             UnitType.Terran_Medic, UnitType.Protoss_High_Templar -> 0.7
             else -> 0.0
         }
@@ -45,11 +46,16 @@ object TargetEvaluator {
         e.maxRangeVs(a) / 600.0
     }
 
-    private val byEnemyDamageCapabilities: TargetScorer = { a, e ->
-        if (e.hasPower) e.damagePerFrameVs(a) * 1.6 else 0.0
+    private val byEnemySpeed: TargetScorer = { a, e ->
+        -e.topSpeed / 10
     }
 
-    private val defaultScorers = listOf(byEnemyType, byTimeToAttack, byTimeToKillEnemy, byEnemyRange, byEnemyDamageCapabilities)
+    private val byEnemyDamageCapabilities: TargetScorer = { a, e ->
+        (if (e.hasPower) e.damagePerFrameVs(a) * 1.6 else 0.0) *
+                (if (e.weaponAgainst(a).isSplash) 2.0 else 1.0)
+    }
+
+    private val defaultScorers = listOf(byEnemyType, byTimeToAttack, byTimeToKillEnemy, byEnemyRange, byEnemySpeed, byEnemyDamageCapabilities)
 
     fun bestCombatMoves(attackers: Collection<SUnit>, targets: Collection<SUnit>): Map<SUnit, CombatMove?> {
         val relevantTargets = targets
@@ -110,23 +116,24 @@ fun unitThreatValueToEnemy(sUnit: SUnit): Int {
     if (unitType == UnitType.Terran_Bunker) {
         val bunkerWeapon = WeaponType.Gauss_Rifle
         val bunkerDPF = ((bunkerWeapon.damageAmount() * 4) / bunkerWeapon.damageCooldown().toDouble()).orZero()
-        return (bunkerDPF * 41).toInt()
+        return (bunkerDPF * dpfThreatValueFactor).toInt()
     }
     val airWeapon = unitType.airWeapon()
     val airDPF = ((airWeapon.damageAmount() * unitType.maxAirHits()) / airWeapon.damageCooldown().toDouble()).orZero() *
-            (if (airWeapon.isSplash) 3 else 1)
+            (if (airWeapon.isSplash) 2 else 1)
     val groundWeapon = unitType.groundWeapon()
     val groundDPF = ((groundWeapon.damageAmount() * unitType.maxGroundHits()) / groundWeapon.damageCooldown().toDouble()).orZero() *
-            (if (groundWeapon.isSplash) 3 else 1)
-    return (max(airDPF, groundDPF) * 41).toInt()
+            (if (groundWeapon.isSplash) 2 else 1)
+    return (max(airDPF, groundDPF) * dpfThreatValueFactor).toInt()
 }
 
 fun agentHealthAndShieldValue(agent: Agent): Int =
         Simulator.HEALTH_AND_HALFED_SHIELD.applyAsInt(agent) / 15
 
 fun unitTypeValue(sUnit: SUnit) = when (sUnit.unitType) {
-    UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 5
+    UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 8
     UnitType.Terran_Medic, UnitType.Protoss_High_Templar, UnitType.Terran_Science_Vessel -> 3
+    UnitType.Terran_Vulture_Spider_Mine -> 0
     else -> 2
 }
 

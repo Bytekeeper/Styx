@@ -40,6 +40,10 @@ open class Strat(
         println("Info for strategy $name: winrate: $xj, tried: $nj/$n; bound: $priority")
         diag.log("Info for strategy $name: winrate: $xj, tried: $nj/$n; bound: $priority")
     }
+
+    override fun reset() {
+        error("ERROR!")
+    }
 }
 
 object TwoHatchMuta : Strat("2HatchMuta",

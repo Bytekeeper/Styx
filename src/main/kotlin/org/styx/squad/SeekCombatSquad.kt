@@ -2,6 +2,7 @@ package org.styx.squad
 
 import org.styx.*
 import org.styx.Styx.squads
+import org.styx.action.BasicActions
 import org.styx.micro.Potential
 import kotlin.math.abs
 
@@ -17,7 +18,7 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
             return NodeStatus.RUNNING
         val attackers = attackerLock.units
         val candidates = squads.squads.map { c ->
-            val myAgents = (c.mine + attackers).distinct().filter { it.unitType.canAttack() && it.unitType.canMove() }.map { it.agent() }
+            val myAgents = (c.mine + attackers).distinct().filter { it.isCombatRelevant && it.unitType.canMove() }.map { it.agent() }
             val enemies = (squad.enemies + c.enemies).distinct().map { it.agent() }
             c to Styx.evaluator.evaluate(myAgents, enemies)
         }
@@ -32,18 +33,16 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
             val targetAirPosition = targetSquad.all.minBy { it.distanceTo(targetSquad.center) }!!.position
             attackers.forEach { attacker ->
                 if (targetGroundPosition != null && attacker.threats.isEmpty()) {
-                    val force = (if (attacker.flying) Potential.reach(attacker, targetAirPosition) else Potential.reach(attacker, targetGroundPosition)) +
-                            Potential.collisionRepulsion(attacker) * 0.3 +
-                            Potential.keepGroundCompany(attacker, 32) * 0.2
-                    Potential.apply(attacker, force)
+                    if (attacker.flying) {
+                        BasicActions.move(attacker, targetAirPosition)
+                    } else {
+                        BasicActions.move(attacker, targetGroundPosition)
+                    }
                 } else {
                     Styx.resources.releaseUnit(attacker)
                 }
             }
         } else {
-            if (Styx.units.enemy.any { !it.flying }) {
-                println("!!")
-            }
             attackerLock.release()
         }
         return NodeStatus.RUNNING
@@ -56,9 +55,9 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
                 null
 
     private fun bestSquadToSupport(candidates: List<Pair<Squad, Double>>) =
-            candidates.filter { it.first.enemies.isNotEmpty() && it.second != 0.5 }
+            candidates.filter { it.first.enemies.isNotEmpty() && it.second != 0.5 && it.first.fastEval < it.second }
                     .maxBy { (s, eval) ->
                         abs((eval - 0.6) * (s.enemies.count { it.isCombatRelevant } + s.enemies.size / 10.0)) +
-                                (0.7 - eval) * (s.mine.count { !it.isCombatRelevant })
+                                (0.7 - eval) * (s.mine.count { !it.isCombatRelevant } * 3)
                     }
 }
