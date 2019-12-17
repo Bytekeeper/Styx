@@ -3,6 +3,7 @@ package org.styx
 import bwapi.Position
 import bwapi.UnitType
 import bwapi.WeaponType
+import com.sun.jna.platform.win32.COM.util.annotation.ComMethod
 import org.bk.ass.sim.Agent
 import org.bk.ass.sim.Simulator
 import org.locationtech.jts.math.DD.EPS
@@ -19,6 +20,7 @@ typealias TargetScorer = (a: SUnit, e: SUnit) -> Double
 interface CombatMove
 data class AttackMove(val enemy: SUnit) : CombatMove
 class WaitMove() : CombatMove
+class DisengageMove() : CombatMove
 
 object TargetEvaluator {
     private val byEnemyType: TargetScorer = { _, e ->
@@ -62,6 +64,9 @@ object TargetEvaluator {
                 .filter { it.detected && it.unitType != UnitType.Zerg_Larva}
         if (relevantTargets.isEmpty() || attackers.isEmpty())
             return mapOf()
+
+
+
         val alreadyEngaged = relevantTargets.any { e -> attackers.any { e.inAttackRange(it, 48) || it.inAttackRange(e, 48) } } || relevantTargets.none { it.unitType.canAttack() }
         val averageMinimumDistanceToEnemy = if (alreadyEngaged) 0.0 else attackers.map { a -> relevantTargets.map { a.distanceTo(it) }.min()!! }.average()
         val pylons = 4.0 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))

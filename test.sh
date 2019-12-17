@@ -48,14 +48,14 @@ play McRave
 # play Flash
 #play 'Simon Prins'
 #play 'Andrew Smith'
-# play Bereaver
+play Bereaver
 #play WillBot
 # play Crona
 # play Ecgberht
-play Microwave
+#play Microwave
 #play ZNZZBot
 # play GuiBot
-# play AntigaZ
+#play AntigaZ
 #play Feint
 #play PurpleSwarm
 #play Steamhammer
