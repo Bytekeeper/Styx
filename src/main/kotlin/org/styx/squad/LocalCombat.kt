@@ -8,9 +8,7 @@ import org.styx.Styx.diag
 import org.styx.Styx.fleeSim
 import org.styx.Styx.ft
 import org.styx.Styx.sim
-import org.styx.action.BasicActions
-import org.styx.micro.Combat
-import org.styx.micro.Potential
+import org.styx.micro.Attack
 import kotlin.math.max
 import kotlin.math.min
 
@@ -119,7 +117,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
         diag.log("Squad combat moves ${squad.name} $combatMoves")
         attackers.forEach { a ->
             when (val move = combatMoves[a]) {
-                is AttackMove -> Combat.attack(a, move.enemy)
+                is AttackMove -> Attack(a, move.enemy)()
                 is WaitMove ->
                     a.stop()
                 // TODO fix releasing in locks - don't use lock.release! It will crash with ConcurrentModification

@@ -2,6 +2,8 @@
 docker rm -vf $(docker ps -a -f name=GAME -q)
 cp build/libs/FFT_TER-all-1.0-SNAPSHOT.jar ~/.scbw/bots/StyxZ/AI/
 mapfile -t maps < <(find ~/.scbw/maps/sscai -name '*.sc?' -printf "sscai/%P\n")
+cp ~/.scbw/bots/StyxZ/botd.json ~/.scbw/bots/StyxZ/bot.json
+#cp ~/.scbw/bots/StyxZ/botb.json ~/.scbw/bots/StyxZ/bot.json
 
 function play() {
   (
@@ -35,20 +37,20 @@ function play() {
 #play McRaveZ
 #play 'Chris Coxe'
 # play Antiga
-play Locutus
+#play Locutus
 #play Proxy
-play BananaBrain
+#play BananaBrain
 # play tscmoo
 # play WuliBot
 #play 'Iron bot'
-play TyrProtoss
+#play TyrProtoss
 #play 'Tomas Vajda'
-play McRave
+#play McRave
 #play ZurZurZur
 # play Flash
-#play 'Simon Prins'
+play 'Simon Prins'
 #play 'Andrew Smith'
-play Bereaver
+#play Bereaver
 #play WillBot
 # play Crona
 # play Ecgberht

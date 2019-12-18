@@ -175,7 +175,7 @@ data class RelevantGames(private val results: List<List<GameResult>>) {
     val amount = results.sumBy { it.size }
     val score: Double
         get() {
-            val aggregated = generateSequence(1.0) { it * 0.6 }.take(results.size)
+            val aggregated = generateSequence(1.0) { it * 0.8 }.take(results.size)
                     .mapIndexedNotNull { index, factor ->
                         val won = results[index].map { if (it.won) 1.0 else 0.0 }
                         if (won.isEmpty())
