@@ -28,13 +28,16 @@ object Potential {
     }
 
 
-    fun repelFrom(u: SUnit, other: SUnit): Vector2D =
-            (u.position - other.position).toVector2D().normalize()
+    fun repelFrom(u: SUnit, other: SUnit): Vector2D = repelFrom(u, other.position)
+
+    fun repelFrom(u: SUnit, position: Position): Vector2D =
+            (u.position - position).toVector2D().normalize()
 
     fun attract(u: SUnit, target: Position): Vector2D =
         (target - u.position).toVector2D().normalize()
 
     fun collisionRepulsion(u: SUnit): Vector2D {
+        if (u.flying) return Vector2D()
         val collider = units.allunits.nearest(u.x, u.y, 128) { !it.flying && it != u && it.distanceTo(u) < 32 }?.position?.toVector2D()
                 ?: return Vector2D()
         return (u.position.toVector2D() - collider).normalize()

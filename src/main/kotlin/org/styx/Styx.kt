@@ -277,7 +277,7 @@ class BuildPlan {
     }
 }
 
-data class PlannedUnit(val type: UnitType, val framesToStart: Int? = null, val gmsWhilePlanning: GMS = resources.availableGMS)
+data class PlannedUnit(val type: UnitType, val framesToStart: Int? = null, val consumedUnit: UnitType? = null, val gmsWhilePlanning: GMS = resources.availableGMS)
 
 class Units {
     lateinit var ownedUnits: PositionQueries<SUnit>
@@ -333,9 +333,9 @@ class Units {
                     else
                         PendingUnit(it, it.position, it.buildType, it.remainingBuildTime)
                 }
-        if (game.bullets.any { it.source?.type == UnitType.Terran_Bunker }) {
-            println("GOT YA")
-        }
+//        if (game.bullets.any { it.source?.type == UnitType.Terran_Bunker || it.type == BulletType.Gauss_Rifle_Hit && it.source == null }) {
+//            println("BUNKER?")
+//        }
     }
 
     fun my(type: UnitType) = mine.filter { it.unitType == type }

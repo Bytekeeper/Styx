@@ -97,7 +97,7 @@ class StartTrain(private val type: UnitType) : BehaviorTree("Start Training $typ
     }
 
     private fun registerAsPlanned(): NodeStatus {
-        Styx.buildPlan.plannedUnits += PlannedUnit(type)
+        Styx.buildPlan.plannedUnits += PlannedUnit(type, consumedUnit = type.whatBuilds().first)
         return NodeStatus.DONE
     }
 

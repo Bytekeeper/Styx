@@ -1,6 +1,5 @@
 package org.styx.macro
 
-import bwapi.Race
 import bwapi.UnitType
 import org.bk.ass.manage.GMS
 import org.styx.*
@@ -20,7 +19,7 @@ class Get(private val amountProvider: () -> Int,
     override fun tick(): NodeStatus {
         val amount = amountProvider()
         val completedUnitsAmount = units.myCompleted(type).size
-        val lostUnitsOnPlan = if (type.isWorker && type.race == Race.Zerg) buildPlan.plannedUnits.count { it.type.isBuilding } else 0
+        val lostUnitsOnPlan = buildPlan.plannedUnits.count { it.consumedUnit == type.whatBuilds().first }
         val missingOrIncomplete = max(0, amount - completedUnitsAmount + lostUnitsOnPlan)
         if (missingOrIncomplete == 0) {
             children.clear()

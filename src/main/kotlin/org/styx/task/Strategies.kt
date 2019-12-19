@@ -36,7 +36,7 @@ open class Strat(
         val j = relevantGameResults.filteredByStrategy(name)
         val nj = j.amount
         val xj = j.score
-        priority = xj + sqrt(2 * ln(n.toDouble() + 1) / (nj + 1)) + random() * 0.0000001
+        priority = xj + sqrt(1.5 * ln(n.toDouble() + 1) / (nj + 1)) + random() * 0.0000001
         println("Info for strategy $name: winrate: $xj, tried: $nj/$n; bound: $priority")
         diag.log("Info for strategy $name: winrate: $xj, tried: $nj/$n; bound: $priority")
     }

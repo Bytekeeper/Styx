@@ -106,10 +106,8 @@ class Dispatch<T>(
 
 abstract class CompoundNode(val name: String) : BTNode() {
     protected abstract val children: Collection<SimpleNode>
-    protected val tickedChilds
-        get() = children.sortedByDescending {
-            (it as? Prioritized)?.priority ?: 0.0
-        }.asSequence().map { ft(name, it) }
+    protected open val tickedChilds
+        get() = children.asSequence().map { ft(name, it) }
 
     override fun reset() = children.filterIsInstance<Resettable>().forEach(Resettable::reset)
 
@@ -124,15 +122,20 @@ abstract class CompoundNode(val name: String) : BTNode() {
 
 class Best(name: String, vararg children: SimpleNode) : CompoundNode(name) {
     override val children = children.toList()
-    override fun tick(): NodeStatus {
-        return tickedChilds.first()
-    }
+    override fun tick(): NodeStatus = children.maxBy {
+        (it as? Prioritized)?.priority ?: 0.0
+    }?.let { ft(name, it) } ?: NodeStatus.FAILED
 
     override fun toString(): String = "Best $name"
 }
 
 open class Sel(name: String, vararg children: SimpleNode) : CompoundNode(name) {
     override val children: Collection<SimpleNode> = children.toList()
+    override val tickedChilds
+        get() = children.sortedByDescending {
+            (it as? Prioritized)?.priority ?: 0.0
+        }.asSequence().map { ft(name, it) }
+
     override fun tick(): NodeStatus =
             tickedChilds.firstOrNull { it != NodeStatus.FAILED }
                     ?: NodeStatus.FAILED

@@ -15,12 +15,12 @@ class Morph(private val type: UnitType) : MemoLeaf() {
         if (costLock.satisfied) {
             morphLock.acquire()
             val unitToMorph = morphLock.unit ?: run {
-                Styx.buildPlan.plannedUnits += PlannedUnit(type)
+                Styx.buildPlan.plannedUnits += PlannedUnit(type, consumedUnit = if (type.isBuilding) null else type.whatBuilds().first)
                 return NodeStatus.RUNNING
             }
             BasicActions.morph(unitToMorph, type)
         } else {
-            Styx.buildPlan.plannedUnits += PlannedUnit(type)
+            Styx.buildPlan.plannedUnits += PlannedUnit(type, consumedUnit = if (type.isBuilding) null else type.whatBuilds().first)
         }
         return NodeStatus.RUNNING
     }

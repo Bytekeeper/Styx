@@ -48,12 +48,12 @@ function play() {
 #play McRave
 #play ZurZurZur
 # play Flash
-play 'Simon Prins'
-#play 'Andrew Smith'
+#play 'Simon Prins'
+play 'Andrew Smith'
 #play Bereaver
 #play WillBot
-# play Crona
-# play Ecgberht
+#play Crona
+#play Ecgberht
 #play Microwave
 #play ZNZZBot
 # play GuiBot
@@ -61,4 +61,5 @@ play 'Simon Prins'
 #play Feint
 #play PurpleSwarm
 #play Steamhammer
+#play Dragon
 sleep 5

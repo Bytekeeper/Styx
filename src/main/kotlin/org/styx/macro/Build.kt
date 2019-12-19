@@ -24,7 +24,6 @@ class StartBuild(private val type: UnitType,
     }
     private val costLock = UnitCostLock(type)
     private var hysteresisFrames = 0
-    private val dependency = EnsureDependenciesFor(type)
     var building: SUnit? = null
         private set
 
@@ -46,7 +45,7 @@ class StartBuild(private val type: UnitType,
                                     if (worker != null)
                                         orderBuild(worker, at!!, travelFrames, buildPosition)
                                     else {
-                                        buildPlan.plannedUnits += PlannedUnit(type)
+                                        buildPlan.plannedUnits += PlannedUnit(type, consumedUnit = Styx.self.race.worker)
                                     }
                                     NodeStatus.RUNNING
                                 }

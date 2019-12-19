@@ -1,9 +1,11 @@
 package org.styx.squad
 
-import org.styx.*
+import org.styx.BTNode
+import org.styx.NodeStatus
+import org.styx.Styx
 import org.styx.Styx.squads
+import org.styx.UnitLocks
 import org.styx.action.BasicActions
-import org.styx.micro.Potential
 import kotlin.math.abs
 
 class SeekCombatSquad(private val squad: Squad) : BTNode() {
@@ -57,7 +59,7 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
     private fun bestSquadToSupport(candidates: List<Pair<Squad, Double>>) =
             candidates.filter { it.first.enemies.isNotEmpty() && it.second != 0.5 && it.first.fastEval < it.second }
                     .maxBy { (s, eval) ->
-                        abs((eval - 0.6) * (s.enemies.count { it.isCombatRelevant } + s.enemies.size / 10.0)) +
-                                (0.7 - eval) * (s.mine.count { !it.isCombatRelevant } * 3)
+                        abs((eval - 0.7) * (s.enemies.count { it.isCombatRelevant } + s.enemies.size / 10.0)) +
+                                (0.66 - eval) * (s.mine.count { !it.isCombatRelevant } * 6)
                     }
 }

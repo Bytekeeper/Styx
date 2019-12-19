@@ -19,6 +19,8 @@ import kotlin.math.max
 class SUnit private constructor(val unit: Unit) {
     private var readyOnFrame = 0
     private var stimTimer: Int = 0
+    var irridiated: Boolean = false
+        private set
     var shields: Int = 0
         private set
     var hitPoints: Int = 0
@@ -160,6 +162,7 @@ class SUnit private constructor(val unit: Unit) {
         morphing = unit.isMorphing
         hasPower = unit.isPowered
         hatchery = unit.hatchery?.let { forUnit(it) }
+        irridiated = unit.isIrradiated
 
         if (frame - lastUnstickingCommandFrame > game.latencyFrames) {
             if (vx == 0.0 && vy == 0.0 && canMoveWithoutBreakingAttack && !gathering) {
@@ -189,6 +192,29 @@ class SUnit private constructor(val unit: Unit) {
         var yDist = this.top - target.y - 1
         if (yDist < 0) {
             yDist = target.y - bottom - 1
+            if (yDist < 0) {
+                yDist = 0
+            }
+        }
+
+        // compute actual distance
+        return Position.Origin.getApproxDistance(Position(xDist, yDist))
+    }
+
+    fun distanceTo(pos: Position, type: UnitType): Int {
+        // compute x distance
+        var xDist = left - (pos.x + type.dimensionRight()) - 1
+        if (xDist < 0) {
+            xDist = (pos.x - type.dimensionLeft()) - right - 1
+            if (xDist < 0) {
+                xDist = 0
+            }
+        }
+
+        // compute y distance
+        var yDist = top - (pos.y + type.dimensionDown()) - 1
+        if (yDist < 0) {
+            yDist = (pos.y - type.dimensionUp()) - bottom - 1
             if (yDist < 0) {
                 yDist = 0
             }
@@ -388,6 +414,7 @@ class SUnit private constructor(val unit: Unit) {
     fun radiansTo(pos: Position): Double = position.toVector2D().angleTo(pos.toVector2D())
     fun framesToTurnTo(other: SUnit) = (abs((radiansTo(other) - angle).normalizedRadians) * 256.0 / PI2 / unitType.turnRadius()).toInt()
     fun framesToTurnTo(pos: Position) = (abs((radiansTo(pos) - angle).normalizedRadians) * 256.0 / PI2 / unitType.turnRadius()).toInt()
+    fun vectorTo(other: SUnit) = position.toVector2D() - other.position.toVector2D()
 
     companion object {
         private val units = mutableMapOf<Unit, SUnit>()

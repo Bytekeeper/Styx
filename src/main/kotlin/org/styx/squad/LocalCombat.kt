@@ -56,6 +56,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
         val attackers = attackerLock.units
 
         val agentsBeforeCombat = prepareCombatSim()
+        val beforeCombat = sim.evalToInt(agentValueForPlayer)
         val valuesBeforeCombat = agentsBeforeCombat.map { it to agentValueForPlayer.applyAsInt(it) }.toMap()
         val sims = (1..1).map { simulateCombat(agentsBeforeCombat, Config.simHorizon) }
         val afterCombat = sims.last()
@@ -84,6 +85,8 @@ class LocalCombat(private val squad: Squad) : BTNode() {
             val attackersToKeep = valuesAfterCombat.filter { (a, v) ->
                 a.attackCounter > 0 && v * 4.0 > (valuesBeforeCombat[a] ?: error("More units after combat? Not really..."))
             }.map { it.first.userObject as SUnit }
+
+            squad.fastEval = afterCombat.eval.evalA / max(beforeCombat.evalA.toDouble(), 0.001)
 
             // Keep units that'd die anyway
             attackerLock.releaseUnits(attackers - afterFlee.lostUnits - attackersToKeep)
