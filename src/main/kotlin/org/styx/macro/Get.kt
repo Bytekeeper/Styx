@@ -11,15 +11,16 @@ import kotlin.math.max
 import kotlin.math.min
 
 class Get(private val amountProvider: () -> Int,
-          val type: UnitType) : MemoLeaf() {
+          private val type: UnitType,
+          private val dynamic: Boolean = false) : MemoLeaf() {
     private val children = ArrayDeque<SimpleNode>()
 
-    constructor(amount: Int, type: UnitType) : this({ amount }, type)
+    constructor(amount: Int, type: UnitType, dynamic: Boolean = false) : this({ amount }, type, dynamic)
 
     override fun tick(): NodeStatus {
         val amount = amountProvider()
         val completedUnitsAmount = units.myCompleted(type).size
-        val lostUnitsOnPlan = buildPlan.plannedUnits.count { it.consumedUnit == type.whatBuilds().first }
+        val lostUnitsOnPlan = buildPlan.plannedUnits.count { it.consumedUnit == type }
         val missingOrIncomplete = max(0, amount - completedUnitsAmount + lostUnitsOnPlan)
         if (missingOrIncomplete == 0) {
             children.clear()
@@ -37,7 +38,10 @@ class Get(private val amountProvider: () -> Int,
                 availableBuilders +
                         determineFutureBuildersToBlockNow()
         val expectedChildCount =
-                min(builders, (remaining + pendingUnitsFactor / 2) / pendingUnitsFactor)
+                if (dynamic)
+                    min(builders, (remaining + pendingUnitsFactor / 2) / pendingUnitsFactor)
+                else
+                    (remaining + pendingUnitsFactor / 2) / pendingUnitsFactor
         if (expectedChildCount == 0)
             return NodeStatus.RUNNING
         repeat(children.size - expectedChildCount) {

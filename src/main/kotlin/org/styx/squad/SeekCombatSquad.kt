@@ -27,7 +27,7 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
         val targetCandidate = bestSquadToSupport(candidates)
                 ?: desperateAttemptToWinSquad(candidates)
         if (targetCandidate != null && targetCandidate.first != squad) {
-            Styx.diag.log("Squad seeking $squad - $targetCandidate")
+//            Styx.diag.log("Squad seeking $squad - $targetCandidate")
             squad.task = "Attack"
             val targetSquad = targetCandidate.first
             val targetGroundPosition = targetSquad.mine.filter { !it.flying }.minBy { it.distanceTo(targetSquad.myCenter) }?.position
@@ -59,7 +59,8 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
     private fun bestSquadToSupport(candidates: List<Pair<Squad, Double>>) =
             candidates.filter { it.first.enemies.isNotEmpty() && it.second != 0.5 && it.first.fastEval < it.second }
                     .maxBy { (s, eval) ->
-                        abs((eval - 0.7) * (s.enemies.count { it.isCombatRelevant } + s.enemies.size / 10.0)) +
-                                (0.66 - eval) * (s.mine.count { !it.isCombatRelevant } * 6)
+                        abs((eval - 0.7) * (s.enemies.count { it.isCombatRelevant } + s.enemies.size / 15.0)) +
+                                (0.55 - eval) * (s.mine.count { !it.isCombatRelevant } * 12
+                                )
                     }
 }

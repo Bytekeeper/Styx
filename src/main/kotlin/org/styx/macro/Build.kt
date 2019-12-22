@@ -27,7 +27,7 @@ class StartBuild(private val type: UnitType,
     var building: SUnit? = null
         private set
 
-    override val root: SimpleNode = Memo(
+    override fun buildRoot() : SimpleNode = Memo(
                 Sel("Execute",
                         this::checkForExistingBuilding,
                         Seq("Execute",
@@ -55,7 +55,7 @@ class StartBuild(private val type: UnitType,
 
     private fun findBuildSpot(): NodeStatus {
         val buildAt = at ?: positionFinder() ?: run {
-            buildPlan.plannedUnits += PlannedUnit(type)
+            buildPlan.plannedUnits += PlannedUnit(type, consumedUnit = Styx.self.race.worker)
             return NodeStatus.RUNNING
         }
         at = buildAt
@@ -80,12 +80,12 @@ class StartBuild(private val type: UnitType,
     private fun orderBuild(worker: SUnit, buildAt: TilePosition, travelFrames: Int, buildPosition: Position) {
         when {
             costLock.satisfied -> {
-                buildPlan.plannedUnits += PlannedUnit(type, 0)
+                buildPlan.plannedUnits += PlannedUnit(type, 0, consumedUnit = Styx.self.race.worker)
                 hysteresisFrames = 0
                 BasicActions.build(worker, type, buildAt)
             }
             costLock.willBeSatisfied -> {
-                buildPlan.plannedUnits += PlannedUnit(type, travelFrames)
+                buildPlan.plannedUnits += PlannedUnit(type, travelFrames, consumedUnit = Styx.self.race.worker)
                 if (hysteresisFrames == 0 && Config.logEnabled) {
                     diag.traceLog("Build ${type} with ${worker.diag()} at ${buildAt.toWalkPosition().diag()} - GMS: ${resources.availableGMS}, " +
                             "actual resources: ${economy.currentResources}, " +
@@ -96,7 +96,7 @@ class StartBuild(private val type: UnitType,
                 if (costLock.willBeSatisfied) hysteresisFrames = Config.productionHysteresisFrames
             }
             else -> {
-                buildPlan.plannedUnits += PlannedUnit(type)
+                buildPlan.plannedUnits += PlannedUnit(type, consumedUnit = Styx.self.race.worker)
                 if (hysteresisFrames > 0) {
                     diag.traceLog("Postponed build ${type} with ${worker.diag()} at ${buildAt.toWalkPosition().diag()}  - GMS: ${resources.availableGMS}, " +
                             "frames to target: $travelFrames, hysteresis frames: " +
@@ -125,7 +125,7 @@ class Build(private val type: UnitType,
     var building: SUnit? = null
         private set
 
-    override val root: SimpleNode = Memo(
+    override fun buildRoot() : SimpleNode = Memo(
                 Sel("Execute",
                         Condition { building?.isCompleted == true },
                         Seq("Execute",

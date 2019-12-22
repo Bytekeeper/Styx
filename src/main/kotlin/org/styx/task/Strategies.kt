@@ -16,8 +16,8 @@ import kotlin.math.sqrt
 
 open class Strat(
         name: String,
-        vararg nodes: SimpleNode) : BehaviorTree(name), Prioritized {
-    override val root: SimpleNode = Par("strat", true,
+        private vararg val nodes: SimpleNode) : BehaviorTree(name), Prioritized {
+    override fun buildRoot(): SimpleNode = Par("strat", true,
             {
                 if (status == NodeStatus.INITIAL) {
                     println("Selected strategy: $name with bound $priority")
@@ -73,10 +73,10 @@ object TwoHatchMuta : Strat("2HatchMuta",
 object TwoHatchHydra : Strat("2HatchHydra",
         twelveHatchBasic,
         Build(UnitType.Zerg_Extractor),
-        Repeat(delegate = Get(12, UnitType.Zerg_Drone)),
+        Get(12, UnitType.Zerg_Drone),
         Repeat(delegate = Get(6, UnitType.Zerg_Zergling)),
         Build(UnitType.Zerg_Hydralisk_Den),
-        Get(13, UnitType.Zerg_Drone),
+        Repeat(delegate = Get(13, UnitType.Zerg_Drone)),
         Train(UnitType.Zerg_Overlord),
         Upgrade(hydraRangeUpgrade, 1),
         ensureSupply(),
@@ -87,8 +87,33 @@ object TwoHatchHydra : Strat("2HatchHydra",
         pumpHydras()
 )
 
+object ThirteenPoolMuta : Strat("13PoolMuta",
+        Get(9, UnitType.Zerg_Drone),
+        Get(2, UnitType.Zerg_Overlord),
+        Get(13, UnitType.Zerg_Drone),
+        Build(UnitType.Zerg_Spawning_Pool),
+        Build(UnitType.Zerg_Extractor),
+        Get(13, UnitType.Zerg_Drone),
+        Expand(),
+        Morph(UnitType.Zerg_Lair),
+        Get(13, UnitType.Zerg_Drone),
+        Repeat(delegate = Get(4, UnitType.Zerg_Zergling)),
+        Get(14, UnitType.Zerg_Drone),
+        Get(3, UnitType.Zerg_Overlord),
+        Repeat(delegate = Get(16, UnitType.Zerg_Drone)),
+        Build(UnitType.Zerg_Spire),
+        Get(1, UnitType.Zerg_Creep_Colony),
+        Morph(UnitType.Zerg_Sunken_Colony),
+        Repeat(delegate = Get(18, UnitType.Zerg_Drone)),
+        Get(5, UnitType.Zerg_Overlord),
+        Build(UnitType.Zerg_Extractor),
+        ensureSupply(),
+        pumpMutas()
+)
+
 object Nine734 : Strat("9734",
         overPoolBasic,
+        Get(2, UnitType.Zerg_Zergling),
         Get(12, UnitType.Zerg_Drone),
         Expand(),
         Build(UnitType.Zerg_Extractor),
@@ -101,7 +126,7 @@ object Nine734 : Strat("9734",
         Repeat(delegate = Get(22, UnitType.Zerg_Drone)),
         ensureSupply(),
         Get(5, UnitType.Zerg_Hydralisk),
-        Upgrade(UpgradeType.Grooved_Spines, 1),
+        Upgrade(hydraRangeUpgrade, 1),
         Expand(),
         Get(15, UnitType.Zerg_Hydralisk),
         Build(UnitType.Zerg_Hatchery),
@@ -112,7 +137,7 @@ object Nine734 : Strat("9734",
         Build(UnitType.Zerg_Hatchery),
         Upgrade(UpgradeType.Zerg_Missile_Attacks, 1),
         Upgrade(UpgradeType.Metabolic_Boost, 1),
-        Repeat(delegate = Get({ units.my(UnitType.Zerg_Hydralisk).size * 7 / 10 }, UnitType.Zerg_Zergling)),
+        Repeat(delegate = Get({ units.my(UnitType.Zerg_Hydralisk).size * 7 / 10 }, UnitType.Zerg_Zergling, true)),
         pumpHydras()
 )
 
@@ -141,8 +166,7 @@ val overPoolBasic = Par("Overpool", true,
         Train(UnitType.Zerg_Overlord),
         Build(UnitType.Zerg_Spawning_Pool),
         Get(11, UnitType.Zerg_Drone),
-        Expand(),
-        Get(2, UnitType.Zerg_Zergling)
+        Expand()
 )
 
 val twelveHatchBasic = Par("12 Hatch", true,
@@ -154,9 +178,9 @@ val twelveHatchBasic = Par("12 Hatch", true,
 )
 
 
-private fun pumpLings() = Repeat(delegate = Get(200, UnitType.Zerg_Zergling))
-private fun pumpHydras() = Repeat(delegate = Get(200, UnitType.Zerg_Hydralisk))
-private fun pumpMutas() = Repeat(delegate = Get(200, UnitType.Zerg_Mutalisk))
+private fun pumpLings() = Repeat(delegate = Get(200, UnitType.Zerg_Zergling, true))
+private fun pumpHydras() = Repeat(delegate = Get(200, UnitType.Zerg_Hydralisk, true))
+private fun pumpMutas() = Repeat(delegate = Get(200, UnitType.Zerg_Mutalisk, true))
 private fun haveBasicZerglingSquad() = Repeat(delegate = Get(6, UnitType.Zerg_Zergling))
 private fun ensureSupply() = Repeat(delegate = Seq("Supply", WaitFor {
     economy.supplyWithPlanned < 4

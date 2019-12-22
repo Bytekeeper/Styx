@@ -74,7 +74,8 @@ class Diagnose : Closeable {
     }
 
     fun log(message: String, logLevel: Level = Level.INFO) {
-        if (logLevel.intValue() < Config.minLevel.intValue()) return
+        if (logLevel.intValue() < Config.minLevel.intValue())
+            return
         logOut.println("${logLevel.name} - ${Styx.frame}: $message")
     }
 

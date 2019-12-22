@@ -9,14 +9,13 @@ import org.styx.Styx.game
 import org.styx.Styx.geography
 import org.styx.Styx.units
 import org.styx.action.BasicActions
-import java.util.*
 
 class Attack(private val attacker: SUnit,
              private val enemy: SUnit) : BehaviorTree("Attack") {
-    private val prng = SplittableRandom()
     val kiteEnemy = Seq("Kite enemy",
             Condition {
-                attacker.maxRangeVs(enemy) > enemy.maxRangeVs(attacker) &&
+                attacker.couldTurnAwayAndBackBeforeCooldownEnds(enemy) &&
+                        attacker.maxRangeVs(enemy) > enemy.maxRangeVs(attacker) &&
                         enemy.inAttackRange(attacker, 64) &&
                         attacker.inAttackRange(enemy, -16)
             },
@@ -45,7 +44,7 @@ class Attack(private val attacker: SUnit,
     )
 
     private val evadeOtherEnemies = Seq("Evasive maneuvers",
-            Condition { attacker.weaponAgainst(enemy).damageCooldown() >= 10 },
+            Condition { attacker.couldTurnAwayAndBackBeforeCooldownEnds(enemy) },
             {
                 val evadeTo = (0..8).asSequence()
                         .map {
@@ -83,7 +82,7 @@ class Attack(private val attacker: SUnit,
     private val evadeScarab = EvadeScarabs(attacker)
     private val evadeStorms = EvadeStorms(attacker)
 
-    override val root: SimpleNode = Sel("Attack",
+    override fun buildRoot(): SimpleNode = Sel("Attack",
             findEnemy,
             evadeScarab,
             evadeStorms,
@@ -102,7 +101,7 @@ class Attack(private val attacker: SUnit,
 
 class EvadeStorms(private val unit: SUnit) : BehaviorTree("Evade Storm") {
     private var storm: Bullet? = null
-    override val root = Seq("Evade Storm",
+    override fun buildRoot(): SimpleNode = Seq("Evade Storm",
             Condition {
                 storm = game.bullets.firstOrNull { it.type == BulletType.Psionic_Storm && it.position.getDistance(unit.position) <= 64 }
                 storm != null
@@ -118,7 +117,7 @@ class EvadeStorms(private val unit: SUnit) : BehaviorTree("Evade Storm") {
 
 class EvadeScarabs(private val unit: SUnit) : BehaviorTree("Evade Scarabs") {
     private var scarab: SUnit? = null
-    override val root: SimpleNode = Seq("Evade Scarabs",
+    override fun buildRoot(): SimpleNode = Seq("Evade Scarabs",
             Condition {
                 if (unit.flying)
                     return@Condition false
@@ -136,5 +135,10 @@ class EvadeScarabs(private val unit: SUnit) : BehaviorTree("Evade Scarabs") {
                     NodeStatus.FAILED
             }
     )
+
+}
+
+class Stop(private val unit: SUnit) : BehaviorTree("Unit Stop") {
+    override fun buildRoot(): SimpleNode = NodeStatus.RUNNING.after { unit.unit.stop() }
 
 }

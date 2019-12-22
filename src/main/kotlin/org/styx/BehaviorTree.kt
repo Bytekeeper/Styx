@@ -30,9 +30,10 @@ interface Learner {
 }
 
 abstract class BehaviorTree(val name: String) : SimpleNode, Resettable, Learner {
-    abstract val root: SimpleNode
+    private val root: SimpleNode by lazy { buildRoot() }
     var status: NodeStatus = NodeStatus.INITIAL
         private set
+    protected abstract fun buildRoot() : SimpleNode
 
     override fun invoke(): NodeStatus {
         status = root()

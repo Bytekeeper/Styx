@@ -4,7 +4,7 @@ import bwapi.*
 import bwapi.Unit
 import org.bk.ass.info.BWMirrorUnitInfo
 import org.bk.ass.sim.Agent
-import org.bk.ass.sim.BWMirrorAgentFactory
+import org.bk.ass.sim.JBWAPIAgentFactory
 import org.locationtech.jts.geom.Coordinate
 import org.locationtech.jts.geom.Envelope
 import org.locationtech.jts.geom.Geometry
@@ -14,6 +14,7 @@ import org.styx.Styx.frame
 import org.styx.Styx.game
 import org.styx.Styx.self
 import kotlin.math.abs
+import kotlin.math.ceil
 import kotlin.math.max
 
 class SUnit private constructor(val unit: Unit) {
@@ -396,6 +397,11 @@ class SUnit private constructor(val unit: Unit) {
     val isOnCoolDown get() =  unit.groundWeaponCooldown > 0
             || unit.airWeaponCooldown > 0
 
+    val cooldownRemaining get() = max(unit.groundWeaponCooldown, unit.airWeaponCooldown)
+
+    fun couldTurnAwayAndBackBeforeCooldownEnds(target: SUnit) =
+            cooldownRemaining > unitType.revolutionFrames - framesToTurnTo(target)
+
     override fun toString(): String = "i$id ${unitType.shortName()}${if (!visible && enemyUnit) "(H)" else ""} $position [${player.name.substring(0, 2)}]"
 
     fun canBuildHere(at: TilePosition, type: UnitType) = game.canBuildHere(at, type, unit)
@@ -419,13 +425,14 @@ class SUnit private constructor(val unit: Unit) {
     companion object {
         private val units = mutableMapOf<Unit, SUnit>()
         private val geometryFactory = GeometryFactory()
-        private val agentFactory = BWMirrorAgentFactory()
+        private val agentFactory = JBWAPIAgentFactory()
 
         fun forUnit(unit: Unit) = units.computeIfAbsent(unit) { SUnit(it) }
     }
 }
 
 fun UnitType.shortName() = toString().substringAfter('_')
+val UnitType.revolutionFrames get() = ceil(256.0 / turnRadius()).toInt()
 
 class Controller {
     fun reset() {

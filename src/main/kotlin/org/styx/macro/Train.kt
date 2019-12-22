@@ -55,7 +55,7 @@ class StartTrain(private val type: UnitType) : BehaviorTree("Start Training $typ
     var unitBeingTrained: SUnit? = null
         private set
 
-    override val root: SimpleNode = Memo(
+    override fun buildRoot() : SimpleNode = Memo(
             Seq(name,
                     Par("Requirements", false,
                             EnsureDependenciesFor(type),
@@ -118,7 +118,7 @@ class Train(type: UnitType) : BehaviorTree("Train $type") {
     var trainedUnit: SUnit? = null
         private set
 
-    override val root: SimpleNode = Memo(
+    override fun buildRoot() : SimpleNode = Memo(
             Seq(name,
                     startTrain,
                     NodeStatus.DONE.after {

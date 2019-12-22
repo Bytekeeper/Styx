@@ -17,10 +17,12 @@ class Expand(private val requireGas: Boolean = true) : MemoLeaf() {
                             (!requireGas || it.hasGas) &&
                             game.canBuildHere(it.centerTile, self.race.resourceDepot)
                 }.minBy { candidate ->
-                            Styx.bases.myBases.map { Styx.map.getPathLength(it.center, candidate.center) }.min()
-                                    ?: Int.MAX_VALUE
-                        }
-                        ?.centerTile
+                    (Styx.bases.myBases.map { Styx.map.getPathLength(it.center, candidate.center) }.min()
+                            ?: Int.MAX_VALUE) -
+                            3 * (Styx.units.enemy.nearest(candidate.center.x, candidate.center.y) { it.unitType.isBuilding }?.distanceTo(candidate.center)
+                                    ?: 0)
+
+                }?.centerTile
             }
         }
         return build()
