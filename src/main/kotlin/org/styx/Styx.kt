@@ -1,11 +1,7 @@
 package org.styx
 
 import bwapi.*
-import bwapi.Unit
 import bwem.BWMap
-import bwem.ChokePoint
-import org.bk.ass.cluster.Cluster
-import org.bk.ass.cluster.StableDBScanner
 import org.bk.ass.grid.Grid
 import org.bk.ass.grid.RayCaster
 import org.bk.ass.manage.GMS
@@ -14,16 +10,10 @@ import org.bk.ass.sim.Evaluator
 import org.bk.ass.sim.RetreatBehavior
 import org.bk.ass.sim.Simulator
 import org.locationtech.jts.math.Vector2D
-import org.styx.Styx.buildPlan
-import org.styx.Styx.diag
-import org.styx.Styx.evaluator
-import org.styx.Styx.frame
 import org.styx.Styx.game
-import org.styx.Styx.resources
-import org.styx.Styx.units
 import org.styx.Timed.Companion.time
+import org.styx.global.*
 import org.styx.info.Geography
-import org.styx.squad.Squad
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.nio.file.Files
@@ -168,6 +158,8 @@ object Styx {
                         println("Possible shitty strategy: $strat - it was played ${winLoss.size} times but has a winrate of $successRate!")
                     }
                 }
+
+        update()
     }
 }
 
@@ -191,229 +183,6 @@ data class RelevantGames(private val results: List<List<GameResult>>) {
         }
 
     fun filteredByStrategy(strategy: String) = RelevantGames(results.map { it.filter { it.strategy == strategy } })
-}
-
-class Economy {
-    // "Stolen" from PurpleWave
-    private val perWorkerPerFrameMinerals = 0.046
-    private val perWorkerPerFrameGas = 0.069
-    private var workersOnMinerals: Int = 0
-    private var workersOnGas: Int = 0
-    lateinit var currentResources: GMS
-        private set
-
-    private val supplyWithPending: Int by LazyOnFrame {
-        Styx.self.supplyTotal() - Styx.self.supplyUsed() +
-                units.myPending.sumBy { it.unitType.supplyProvided() - it.unitType.supplyRequired() }
-    }
-
-    val supplyWithPlanned: Int
-        get() =
-            supplyWithPending + buildPlan.plannedUnits.sumBy {
-                val u = it.type
-                u.supplyProvided() +
-                        -u.supplyRequired() +
-                        (if (u.whatBuilds().first == UnitType.Zerg_Drone) 1 else 0)
-            }
-
-    // TODO: Missing additional supply in the given time
-    fun estimatedAdditionalGMSIn(frames: Int): GMS {
-        require(frames >= 0)
-        val lostWorkers = buildPlan.plannedUnits
-                .filter { it.type.isBuilding }
-                .mapNotNull { if (it.framesToStart != null && it.framesToStart <= frames) it.framesToStart else null }
-                .sortedBy { it }
-        var frame = 0
-        var gasWorkers = workersOnGas
-        var mineralWorkers = workersOnMinerals
-        val estimatedAfterWorkerloss = lostWorkers.fold(GMS(0, 0, 0)) { acc, f ->
-            val deltaFrames = f - frame
-            if (mineralWorkers > 0)
-                mineralWorkers--
-            else if (gasWorkers > 0)
-                gasWorkers--
-            frame = f
-            acc + GMS((perWorkerPerFrameGas * deltaFrames * gasWorkers).toInt(), (perWorkerPerFrameMinerals * deltaFrames * mineralWorkers).toInt(), 0)
-        }
-        val deltaFrames = frames - frame
-        return estimatedAfterWorkerloss +
-                GMS((perWorkerPerFrameGas * deltaFrames * gasWorkers).toInt(), (perWorkerPerFrameMinerals * deltaFrames * mineralWorkers).toInt(), 0)
-    }
-
-    fun update() {
-        workersOnMinerals = units.myWorkers.count { it.gatheringMinerals }
-        workersOnGas = units.myWorkers.count { it.gatheringGas }
-        currentResources = GMS(Styx.self.gas(), Styx.self.minerals(), Styx.self.supplyTotal() - Styx.self.supplyUsed())
-    }
-}
-
-class Squads {
-    private val dbScanner = StableDBScanner<SUnit>(2)
-
-    private var clusters: Collection<Cluster<SUnit>> = emptyList()
-        private set
-    private val _squads = mutableMapOf<Cluster<SUnit>, Squad>()
-    val squads = _squads.values
-
-    fun update() {
-        clusters = dbScanner.updateDB(units.ownedUnits, 400)
-                .scan(-1)
-                .clusters
-        _squads.keys.retainAll(clusters)
-
-        Styx.squads.clusters.forEach { cluster ->
-            val units = cluster.elements.toMutableList()
-            _squads.computeIfAbsent(cluster) { Squad() }
-                    .update(units)
-        }
-    }
-}
-
-class BuildPlan {
-    val plannedUnits = mutableListOf<PlannedUnit>()
-
-    fun update() {
-        plannedUnits.clear()
-    }
-}
-
-data class PlannedUnit(val type: UnitType, val framesToStart: Int? = null, val consumedUnit: UnitType? = null, val gmsWhilePlanning: GMS = resources.availableGMS)
-
-class Units {
-    lateinit var ownedUnits: PositionQueries<SUnit>
-        private set
-    lateinit var allunits: PositionQueries<SUnit>
-        private set
-    lateinit var mine: PositionQueries<SUnit>
-        private set
-    var enemy: PositionQueries<SUnit> = PositionQueries(emptyList(), positionExtractor)
-        private set
-    lateinit var myWorkers: PositionQueries<SUnit>
-        private set
-    lateinit var myResourceDepots: PositionQueries<SUnit>
-        private set
-    lateinit var resourceDepots: PositionQueries<SUnit>
-        private set
-    lateinit var minerals: PositionQueries<SUnit>
-        private set
-    lateinit var geysers: PositionQueries<SUnit>
-        private set
-    lateinit var myPending: List<PendingUnit>
-        private set
-
-    fun update() {
-        val knownUnits = (Styx.game.allUnits.map { SUnit.forUnit(it) } + enemy).distinct()
-        knownUnits.forEach {
-            it.update()
-            if (it.firstSeenFrame == Styx.frame)
-                diag.onFirstSeen(it)
-        }
-        val relevantUnits = knownUnits
-                .filter {
-                    it.visible ||
-                            !game.isVisible(it.tilePosition) && frame - 24 * 120 <= it.lastSeenFrame ||
-                            !it.detected ||
-                            it.unitType.isBuilding
-                }
-        allunits = PositionQueries(relevantUnits, positionExtractor)
-        ownedUnits = PositionQueries(relevantUnits.filter { it.owned }, positionExtractor)
-        minerals = PositionQueries(relevantUnits.filter { it.unitType.isMineralField }, positionExtractor)
-        geysers = PositionQueries(relevantUnits.filter { it.unitType == UnitType.Resource_Vespene_Geyser }, positionExtractor)
-
-        mine = PositionQueries(relevantUnits.filter { it.myUnit }, positionExtractor)
-        resourceDepots = PositionQueries(ownedUnits.filter { it.unitType.isResourceDepot }, positionExtractor)
-        myResourceDepots = PositionQueries(resourceDepots.filter { it.unitType.isResourceDepot }, positionExtractor)
-        myWorkers = PositionQueries(mine.filter { it.unitType.isWorker }, positionExtractor)
-        enemy = PositionQueries((relevantUnits.filter { it.enemyUnit }), positionExtractor)
-        myPending = mine
-                .filter { !it.isCompleted }
-                .map {
-                    if (it.remainingBuildTime == 0 && it.unitType != UnitType.Zerg_Larva && it.unitType != UnitType.Zerg_Egg)
-                        PendingUnit(it, it.position, it.unitType, 0)
-                    else
-                        PendingUnit(it, it.position, it.buildType, it.remainingBuildTime)
-                }
-//        if (game.bullets.any { it.source?.type == UnitType.Terran_Bunker || it.type == BulletType.Gauss_Rifle_Hit && it.source == null }) {
-//            println("BUNKER?")
-//        }
-    }
-
-    fun my(type: UnitType) = mine.filter { it.unitType == type }
-
-    fun myCompleted(type: UnitType) = mine.filter { it.unitType == type && it.isCompleted }
-
-    fun onUnitDestroy(unit: Unit) {
-        val u = SUnit.forUnit(unit)
-        enemy.remove(u)
-        u.dispose()
-    }
-}
-
-class Tech {
-    private lateinit var remainingUpgradeTime: Map<UpgradeType, Int>
-
-    fun update() {
-        remainingUpgradeTime = units.mine
-                .filter { it.unit.isUpgrading }
-                .map { it.unit.upgrade to it.unit.remainingUpgradeTime }
-                .toMap()
-    }
-
-    fun timeRemainingForUpgrade(upgradeType: UpgradeType): Int? = remainingUpgradeTime[upgradeType]
-}
-
-class Base(val centerTile: TilePosition,
-           val center: Position,
-           val isStartingLocation: Boolean,
-           var mainResourceDepot: SUnit? = null,
-           var lastSeenFrame: Int? = null,
-           var hasGas: Boolean,
-           var populated: Boolean = false)
-
-class Bases {
-    lateinit var bases: List<Base>
-        private set
-    lateinit var myBases: List<Base>
-        private set
-    lateinit var enemyBases: List<Base>
-        private set
-    lateinit var potentialEnemyBases: List<Base>
-        private set
-
-    fun update() {
-        if (!this::bases.isInitialized) {
-            bases = Styx.map.bases.map {
-                Base(it.location, it.center, it.isStartingLocation, hasGas = it.geysers.isNotEmpty())
-            }
-        }
-        bases.forEach {
-            val resourceDepot = units.resourceDepots.nearest(it.center.x, it.center.y)
-            if (resourceDepot != null && resourceDepot.distanceTo(it.center) < 80)
-                it.mainResourceDepot = resourceDepot
-            if (game.isVisible(it.centerTile)) {
-                it.lastSeenFrame = frame
-                it.populated = units.ownedUnits.nearest(it.center.x, it.center.y) { it.unitType.isBuilding }?.distanceTo(it.center) ?: Int.MAX_VALUE < 400
-            }
-        }
-        myBases = bases.filter { it.mainResourceDepot?.myUnit == true }
-        enemyBases = (bases - myBases).filter { it.populated }
-        potentialEnemyBases = bases.filter {
-            it.isStartingLocation &&
-                    !it.populated &&
-                    !game.isExplored(it.centerTile)
-        }.sortedBy {
-            units.enemy.nearest(it.center)?.framesToTravelTo(it.center) ?: Int.MAX_VALUE
-        }
-    }
-}
-
-class Balance {
-    val globalFastEval by LazyOnFrame {
-        val myAgents = units.mine.map { it.agent() }
-        val enemyAgents = units.enemy.map { it.agent() }
-        evaluator.evaluate(myAgents, enemyAgents)
-    }
-    val direSituation get() = globalFastEval < 0.2
 }
 
 val UnitType.dimensions get() = Position(width(), height())

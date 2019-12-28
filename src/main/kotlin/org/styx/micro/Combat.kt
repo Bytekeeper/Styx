@@ -29,10 +29,18 @@ class Attack(private val attacker: SUnit,
     private val attackEnemy = Seq("Engage",
             Condition {
                 val relativeMovement = attacker.velocity.normalize().dot(enemy.velocity.normalize())
-                relativeMovement < -0.3 || enemy.distanceTo(attacker) < attacker.maxRangeVs(enemy) + 32 || !attacker.flying && !geography.walkRay.noObstacle(attacker.walkPosition, enemy.walkPosition)
+                relativeMovement < -0.3 ||
+                        enemy.velocity.lengthSquared() < 10 ||
+                        enemy.distanceTo(attacker) < attacker.maxRangeVs(enemy) + 16 ||
+                        !attacker.flying && !geography.walkRay.noObstacle(attacker.walkPosition, enemy.walkPosition)
             },
             NodeStatus.RUNNING.after {
-                BasicActions.attack(attacker, enemy)
+                if (attacker.flying && !attacker.inAttackRange(enemy, 8)) {
+                    val force = Potential.intercept(attacker, enemy)
+                    Potential.apply(attacker, force)
+                } else {
+                    BasicActions.attack(attacker, enemy)
+                }
             }
     )
     private val interceptEnemy = Seq("Lead to enemy",
@@ -65,8 +73,13 @@ class Attack(private val attacker: SUnit,
                     NodeStatus.FAILED
             })
 
-    private val hugEnemyWithMinRange = Seq("Hug enemy",
-            Condition { enemy.weaponAgainst(attacker).minRange() > 0 || attacker.irridiated },
+    private val homeInToEnemy = Seq("Hug enemy",
+            Condition {
+                enemy.weaponAgainst(attacker).minRange() > 0 ||
+                        attacker.irridiated ||
+                        enemy.maxRangeVs(attacker) > attacker.maxRangeVs(enemy) && attacker.maxRangeVs(enemy) + 16 > attacker.distanceTo(enemy)
+            }
+            ,
             NodeStatus.RUNNING.after {
                 val force = Potential.intercept(attacker, enemy)
                 Potential.apply(attacker, force)
@@ -80,7 +93,7 @@ class Attack(private val attacker: SUnit,
             }
     )
     private val evadeScarab = EvadeScarabs(attacker)
-    private val evadeStorms = EvadeStorms(attacker)
+    private val evadeStorms = StormDodge(attacker)
 
     override fun buildRoot(): SimpleNode = Sel("Attack",
             findEnemy,
@@ -89,7 +102,7 @@ class Attack(private val attacker: SUnit,
             Seq("Move while cooldown",
                     Condition { attacker.isOnCoolDown && attacker.canMoveWithoutBreakingAttack },
                     Sel("Sel",
-                            hugEnemyWithMinRange,
+                            homeInToEnemy,
                             evadeOtherEnemies,
                             kiteEnemy
                     )
@@ -99,7 +112,7 @@ class Attack(private val attacker: SUnit,
     )
 }
 
-class EvadeStorms(private val unit: SUnit) : BehaviorTree("Evade Storm") {
+class StormDodge(private val unit: SUnit) : BehaviorTree("Evade Storm") {
     private var storm: Bullet? = null
     override fun buildRoot(): SimpleNode = Seq("Evade Storm",
             Condition {

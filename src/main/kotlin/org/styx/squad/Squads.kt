@@ -1,6 +1,7 @@
 package org.styx.squad
 
 import bwapi.Position
+import org.bk.ass.sim.Evaluator
 import org.styx.LazyOnFrame
 import org.styx.SUnit
 import org.styx.Styx.evaluator
@@ -14,7 +15,7 @@ val nouns = listOf("squirrel", "bee", "scorpion", "coyote", "rabbit", "marine-ea
 class Squad {
     val name = "${adjectives.random()} ${nouns.random()}"
     var task = ""
-    var fastEval: Double = 0.5
+    var fastEval: Evaluator.EvaluationResult = Evaluator.EVAL_NO_COMBAT
     var mine = emptyList<SUnit>()
     var enemies = emptyList<SUnit>()
     var all = emptyList<SUnit>()

@@ -13,6 +13,7 @@ import org.locationtech.jts.math.Vector2D
 import org.styx.Styx.frame
 import org.styx.Styx.game
 import org.styx.Styx.self
+import org.styx.Styx.turnSize
 import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
@@ -88,7 +89,6 @@ class SUnit private constructor(val unit: Unit) {
     var morphing = false
         private set
 
-    val controller = Controller()
     private lateinit var lastAgent: Agent
     val firstSeenFrame = frame
     var lastSeenFrame = 0
@@ -118,6 +118,7 @@ class SUnit private constructor(val unit: Unit) {
     var hatchery: SUnit? = null
         private set
     val threats by LazyOnFrame { Styx.units.enemy.inRadius(this, 400) { it.inAttackRange(this, 96) } }
+    val safe by LazyOnFrame { Styx.units.enemy.nearest(x, y, 400) { it.inAttackRange(this, 96) } == null }
 
     fun predictPosition(frames: Int) = position + velocity.multiply(frames.toDouble()).toPosition()
 
@@ -229,7 +230,7 @@ class SUnit private constructor(val unit: Unit) {
     fun framesToTravelTo(pos: Position) =
             framesToTurnTo(pos) +
                     (if (flying) (distanceTo(pos) / topSpeed).toInt()
-                    else (Styx.map.getPathLength(position, pos) / topSpeed).toInt()) * 4 / 3 + 24
+                    else (Styx.map.getPathLength(position, pos) / topSpeed).toInt()) * 5 / 4 + 24
 
     fun distanceTo(target: SUnit): Int {
         // If target is the same as the source
@@ -358,6 +359,12 @@ class SUnit private constructor(val unit: Unit) {
         unit.stop();
     }
 
+    fun cancelBuild() {
+        if (unit.isMorphing)
+            unit.cancelMorph()
+        else
+            unit.cancelConstruction()
+    }
 
     fun inAttackRange(other: SUnit, allowance: Int = 0) = hasWeaponAgainst(other) && maxRangeVs(other) + allowance >= distanceTo(other)
 
@@ -400,7 +407,7 @@ class SUnit private constructor(val unit: Unit) {
     val cooldownRemaining get() = max(unit.groundWeaponCooldown, unit.airWeaponCooldown)
 
     fun couldTurnAwayAndBackBeforeCooldownEnds(target: SUnit) =
-            cooldownRemaining > unitType.revolutionFrames - framesToTurnTo(target)
+            cooldownRemaining >= unitType.revolutionFrames - framesToTurnTo(target) + turnSize
 
     override fun toString(): String = "i$id ${unitType.shortName()}${if (!visible && enemyUnit) "(H)" else ""} $position [${player.name.substring(0, 2)}]"
 
@@ -433,12 +440,6 @@ class SUnit private constructor(val unit: Unit) {
 
 fun UnitType.shortName() = toString().substringAfter('_')
 val UnitType.revolutionFrames get() = ceil(256.0 / turnRadius()).toInt()
-
-class Controller {
-    fun reset() {
-
-    }
-}
 
 val hydraSpeedUpgrade = UpgradeType.Muscular_Augments
 val hydraRangeUpgrade = UpgradeType.Grooved_Spines

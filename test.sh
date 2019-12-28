@@ -2,8 +2,8 @@
 docker rm -vf $(docker ps -a -f name=GAME -q)
 cp build/libs/FFT_TER-all-1.0-SNAPSHOT.jar ~/.scbw/bots/StyxZ/AI/
 mapfile -t maps < <(find ~/.scbw/maps/sscai -name '*.sc?' -printf "sscai/%P\n")
-#cp ~/.scbw/bots/StyxZ/botd.json ~/.scbw/bots/StyxZ/bot.json
-cp ~/.scbw/bots/StyxZ/botb.json ~/.scbw/bots/StyxZ/bot.json
+cp ~/.scbw/bots/StyxZ/botd.json ~/.scbw/bots/StyxZ/bot.json
+#cp ~/.scbw/bots/StyxZ/botb.json ~/.scbw/bots/StyxZ/bot.json
 
 function play() {
   (
@@ -33,22 +33,22 @@ function play() {
  #nohup scbw.play --headless --bots StyxZ tscmoo --timeout_at_frame 43200 --game_name shark&
 # nohup scbw.play --headless --bots StyxZ WuliBot --timeout_at_frame 43200 --game_name shark&
 #nohup scbw.play --headless --bots StyxZ "Andrew Smith" --timeout_at_frame 43200 --game_name shark&
-play CUBOT
+#play CUBOT
 #play Stone
 #play McRaveZ
-play 'Chris Coxe'
+#play 'Chris Coxe'
 # play Antiga
-play BananaBrain
+#play BananaBrain
 # play tscmoo
 #play tscmoop2
 # play WuliBot
 #play TyrProtoss
 #play 'Tomas Vajda'
-play McRave
+#play McRave
 #play ZurZurZur
 # play Flash
 #play 'Simon Prins'
-play Bereaver
+#play Bereaver
 #play WillBot
 #play Crona
 #play Ecgberht
@@ -59,17 +59,18 @@ play Bereaver
 #play Feint
 #play PurpleSwarm
 #play Dragon
+#play WillyT
 
 # Top 12
 #play krasi0
 play Locutus
-play PurpleWave
-play 'Hao Pan'
-play Microwave
-play 'Iron bot'
-play Steamhammer
-play 'Marian Devecka'
-play ChimeraBot
-play Antiga
-play Proxy
+#play PurpleWave
+#play 'Hao Pan'
+#play Microwave
+#play 'Iron bot'
+#play Steamhammer
+#play 'Marian Devecka'
+#play ChimeraBot
+#play Antiga
+#play Proxy
 sleep 5

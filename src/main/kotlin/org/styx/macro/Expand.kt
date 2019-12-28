@@ -1,31 +1,31 @@
 package org.styx.macro
 
-import org.styx.MemoLeaf
-import org.styx.NodeStatus
-import org.styx.Styx
+import org.styx.*
 import org.styx.Styx.game
 import org.styx.Styx.self
 
-class Expand(private val requireGas: Boolean = true) : MemoLeaf() {
-    private lateinit var build : Build
+class Expand(private val requireGas: Boolean = true) : BehaviorTree("Expand") {
 
-    override fun tick(): NodeStatus {
-        if (!::build.isInitialized) {
-            build = Build(self.race.resourceDepot) {
-                Styx.bases.bases.filter {
-                    it.mainResourceDepot == null &&
-                            (!requireGas || it.hasGas) &&
-                            game.canBuildHere(it.centerTile, self.race.resourceDepot)
-                }.minBy { candidate ->
-                    (Styx.bases.myBases.map { Styx.map.getPathLength(it.center, candidate.center) }.min()
-                            ?: Int.MAX_VALUE) -
-                            3 * (Styx.units.enemy.nearest(candidate.center.x, candidate.center.y) { it.unitType.isBuilding }?.distanceTo(candidate.center)
-                                    ?: 0)
+    override fun buildRoot(): SimpleNode = Memo(
+            Build(
+                    BuildBoard(
+                            self.race.resourceDepot,
+                            this::findExpandLocation)
+            )
+    )
 
-                }?.centerTile
-            }
+    private fun findExpandLocation(board: BuildBoard) {
+        if (board.location == null && board.workerLock.unit == null) {
+            board.location = Styx.bases.bases.filter {
+                it.mainResourceDepot == null &&
+                        (!requireGas || it.hasGas) &&
+                        game.canBuildHere(it.centerTile, self.race.resourceDepot)
+            }.minBy { candidate ->
+                Styx.bases.myBases.map { Styx.map.getPathLength(it.center, candidate.center) }.sum() -
+                        3 * (Styx.units.enemy.nearest(candidate.center.x, candidate.center.y) { it.unitType.isBuilding }?.distanceTo(candidate.center)
+                        ?: 0)
+
+            }?.centerTile
         }
-        return build()
     }
-
 }

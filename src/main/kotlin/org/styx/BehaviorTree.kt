@@ -2,7 +2,7 @@ package org.styx
 
 import org.styx.Styx.ft
 
-enum class NodeStatus {
+enum class NodeStatus : SimpleNode {
     INITIAL,
     RUNNING,
     DONE,
@@ -12,6 +12,8 @@ enum class NodeStatus {
         code()
         this
     }
+
+    override fun invoke(): NodeStatus = this
 }
 
 typealias SimpleNode = () -> NodeStatus
@@ -30,7 +32,7 @@ interface Learner {
 }
 
 abstract class BehaviorTree(val name: String) : SimpleNode, Resettable, Learner {
-    private val root: SimpleNode by lazy { buildRoot() }
+    private val root: SimpleNode by lazy(LazyThreadSafetyMode.NONE) { buildRoot() }
     var status: NodeStatus = NodeStatus.INITIAL
         private set
     protected abstract fun buildRoot() : SimpleNode
@@ -161,7 +163,7 @@ class Par(name: String, private val continueOnFail: Boolean = false, vararg chil
         val results = tickedChilds
                 .takeWhile { it != NodeStatus.FAILED || continueOnFail }
                 .toList()
-        if (results.contains(NodeStatus.FAILED))
+        if (results.contains(NodeStatus.FAILED) || results.size < children.size)
             return NodeStatus.FAILED
         if (results.contains(NodeStatus.RUNNING))
             return NodeStatus.RUNNING
@@ -176,17 +178,14 @@ class Par(name: String, private val continueOnFail: Boolean = false, vararg chil
     override fun toString(): String = "Par $name"
 }
 
-open class Memo(private val delegate: BTNode) : BTNode() {
+open class Memo(delegate: SimpleNode) : Decorator(delegate) {
     override fun tick(): NodeStatus {
         if (status != NodeStatus.INITIAL && status != NodeStatus.RUNNING)
             return status
-        return delegate()
+        return super.tick()
     }
 
-    override fun reset() {
-        super.reset()
-        delegate.reset()
-    }
+    override fun toString(): String = "MEM-" + super.toString()
 }
 
 abstract class MemoLeaf : BTNode() {
@@ -207,19 +206,54 @@ class Condition(private val condition: () -> Boolean) : BTNode() {
             if (condition()) NodeStatus.DONE else NodeStatus.FAILED
 }
 
-class Repeat(private val amount: Int = -1, private val repeatOnFailure: Boolean = true, private val delegate: BTNode) : BTNode() {
+open class Decorator(private val delegate: SimpleNode) : BTNode() {
+    override val priority: Double
+        get() = (delegate as? Prioritized)?.priority ?: super.priority
+
+    override fun tick(): NodeStatus =
+            delegate()
+
+    override fun reset() {
+        super.reset()
+        (delegate as Resettable?)?.reset()
+    }
+
+    override fun loadLearned() {
+        super.loadLearned()
+        (delegate as Learner?)?.loadLearned()
+    }
+
+    override fun saveLearned() {
+        super.saveLearned()
+        (delegate as Learner?)?.saveLearned()
+    }
+
+    override fun toString(): String = delegate.toString()
+}
+
+class DoneFilter(delegate: BTNode) : Decorator(delegate) {
+    override fun tick(): NodeStatus {
+        val result = super.tick()
+        return if (result == NodeStatus.DONE)
+            result
+        else
+            NodeStatus.FAILED
+    }
+}
+
+class Repeat(private val amount: Int = -1, private val repeatOnFailure: Boolean = true, delegate: BTNode) : Decorator(delegate) {
     private var remaining = amount
 
     override fun tick(): NodeStatus {
         if (remaining == 0) {
             return NodeStatus.DONE
         }
-        delegate()
-        if (delegate.status != NodeStatus.DONE) {
-            if (repeatOnFailure && delegate.status == NodeStatus.FAILED) {
-                delegate.reset()
+        val delegateStatus = super.tick()
+        if (delegateStatus != NodeStatus.DONE) {
+            if (repeatOnFailure && delegateStatus == NodeStatus.FAILED) {
+                super.reset()
             }
-            return delegate.status
+            return delegateStatus
         }
         if (remaining > 0) {
             remaining--
@@ -227,14 +261,14 @@ class Repeat(private val amount: Int = -1, private val repeatOnFailure: Boolean 
                 return NodeStatus.DONE
             }
         }
-        delegate.reset()
+        super.reset()
         return NodeStatus.RUNNING
     }
 
     override fun reset() {
+        super.reset()
         remaining = amount
-        delegate.reset()
     }
 
-    override fun toString(): String = "Repeat $amount times: $delegate"
+    override fun toString(): String = "Repeat $amount times: ${super.toString()}"
 }

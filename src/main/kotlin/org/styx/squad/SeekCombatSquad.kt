@@ -1,30 +1,35 @@
 package org.styx.squad
 
-import org.styx.BTNode
-import org.styx.NodeStatus
-import org.styx.Styx
+import org.bk.ass.sim.Evaluator
+import org.styx.*
+import org.styx.Styx.bases
 import org.styx.Styx.squads
-import org.styx.UnitLocks
 import org.styx.action.BasicActions
-import kotlin.math.abs
 
 class SeekCombatSquad(private val squad: Squad) : BTNode() {
     private val attackerLock = UnitLocks { Styx.resources.availableUnits.filter { squad.mine.contains(it) && !it.unitType.isWorker && !it.unitType.isBuilding && it.unitType.canAttack() } }
 
     override fun tick(): NodeStatus {
-        // 0.5 - No damage to either side; != 0.5 - Flee due to combat sim
-        if (squad.fastEval != 0.5)
+        if (squad.fastEval != Evaluator.EVAL_NO_COMBAT)
             return NodeStatus.RUNNING
         attackerLock.reacquire()
         if (attackerLock.units.isEmpty())
             return NodeStatus.RUNNING
         val attackers = attackerLock.units
-        val candidates = squads.squads.map { c ->
-            val myAgents = (c.mine + attackers).distinct().filter { it.isCombatRelevant && it.unitType.canMove() }.map { it.agent() }
-            val enemies = (squad.enemies + c.enemies).distinct().map { it.agent() }
-            c to Styx.evaluator.evaluate(myAgents, enemies)
+        val candidates = squads.squads.mapNotNull { c ->
+            if (c.enemies.isEmpty())
+                null
+            else {
+                val myAgents = (c.mine + attackers).distinct().filter { it.isCombatRelevant && it.unitType.canMove() }.map { it.agent() }
+                val enemies = (squad.enemies + c.enemies).distinct().map { it.agent() }
+                val evaluationResult = Styx.evaluator.evaluate(myAgents, enemies)
+                if (evaluationResult != Evaluator.EVAL_NO_COMBAT)
+                    c to evaluationResult.value
+                else
+                    null
+            }
         }
-        val targetCandidate = bestSquadToSupport(candidates)
+        val targetCandidate = bestSquadToSupport(squad, candidates)
                 ?: desperateAttemptToWinSquad(candidates)
         if (targetCandidate != null && targetCandidate.first != squad) {
 //            Styx.diag.log("Squad seeking $squad - $targetCandidate")
@@ -56,11 +61,12 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
             else
                 null
 
-    private fun bestSquadToSupport(candidates: List<Pair<Squad, Double>>) =
-            candidates.filter { it.first.enemies.isNotEmpty() && it.second != 0.5 && it.first.fastEval < it.second }
-                    .maxBy { (s, eval) ->
-                        abs((eval - 0.7) * (s.enemies.count { it.isCombatRelevant } + s.enemies.size / 15.0)) +
-                                (0.55 - eval) * (s.mine.count { !it.isCombatRelevant } * 12
-                                )
-                    }
+    private fun bestSquadToSupport(squad: Squad, candidates: List<Pair<Squad, Double>>) =
+            candidates.minBy { (s, eval) ->
+                bases.enemyBases.map { it.center.getDistance(s.center) }.min(0.0) / 3000.0 +
+                        s.center.getDistance(squad.center) / 3000.0 +
+                        (eval - 0.6) * (s.enemies.count { it.isCombatRelevant } + s.enemies.size / 15.0) +
+                        (eval - 0.55) * (s.mine.count { !it.isCombatRelevant } * 12
+                        )
+            }
 }

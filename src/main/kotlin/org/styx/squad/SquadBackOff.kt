@@ -1,5 +1,6 @@
 package org.styx.squad
 
+import org.bk.ass.sim.Evaluator
 import org.styx.*
 import org.styx.action.BasicActions
 import org.styx.micro.Potential
@@ -15,15 +16,14 @@ class SquadBackOff(private val squad: Squad) : BTNode() {
     }
 
     override fun tick(): NodeStatus {
-        // 0.5 - no need to run away
-        if (squad.fastEval == 0.5) {
+        if (squad.fastEval == Evaluator.EVAL_NO_COMBAT) {
             return NodeStatus.RUNNING
         }
         attackerLock.reacquire()
         if (attackerLock.units.isEmpty())
             return NodeStatus.RUNNING
         val targetSquad = Styx.squads.squads
-                .maxBy { it.fastEval - it.enemies.size / 20.0 + it.mine.size / 50.0 }
+                .maxBy { it.fastEval.value - it.enemies.size / 20.0 + it.mine.size / 50.0 }
                 ?: return NodeStatus.RUNNING
         if (targetSquad.mine.isEmpty()) {
             attackerLock.units.forEach { attacker ->

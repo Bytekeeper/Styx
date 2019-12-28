@@ -4,10 +4,11 @@ import bwapi.UnitType
 import org.styx.*
 import org.styx.Styx.units
 import org.styx.action.BasicActions
+import org.styx.global.PlannedUnit
 
 
-class AcquireUnitLock(private val lock: UnitLock) : SimpleNode {
-    override fun invoke(): NodeStatus {
+class AcquireUnitLock(private val lock: UnitLock) : BTNode() {
+    override fun tick(): NodeStatus {
         lock.acquire()
         return if (lock.satisfied)
             NodeStatus.DONE
@@ -16,8 +17,8 @@ class AcquireUnitLock(private val lock: UnitLock) : SimpleNode {
     }
 }
 
-class WaitForCostLock(private val lock: GMSLock) : SimpleNode {
-    override fun invoke(): NodeStatus {
+class WaitForCostLock(private val lock: GMSLock) : BTNode() {
+    override fun tick(): NodeStatus {
         lock.acquire()
         return if (lock.satisfied)
             NodeStatus.DONE
@@ -26,15 +27,15 @@ class WaitForCostLock(private val lock: GMSLock) : SimpleNode {
     }
 }
 
-/**
- * Trigger training of unit, don't wait for completion
- */
-class StartTrain(private val type: UnitType) : BehaviorTree("Start Training $type") {
+data class TrainBoard(
+        val type: UnitType,
+        var trainee: SUnit? = null
+) {
     init {
         require(!type.isBuilding)
     }
 
-    private val trainerLock = UnitLock({ it.unitType == type.whatBuilds().first || it.buildType == type || it.unitType == type }) {
+    val trainerLock = UnitLock({ it.unitType == type.whatBuilds().first || it.buildType == type || it.unitType == type }) {
         if (type.whatBuilds().first == UnitType.Zerg_Larva) {
             val hatcheries = Styx.resources.availableUnits
                     .filter { it.unitType == UnitType.Zerg_Larva && it.buildType == UnitType.None }
@@ -50,82 +51,88 @@ class StartTrain(private val type: UnitType) : BehaviorTree("Start Training $typ
         } else
             Styx.resources.availableUnits.firstOrNull { it.unitType == type.whatBuilds().first }
     }
+    val costLock = UnitCostLock(type)
+}
 
-    private val costLock = UnitCostLock(type)
-    var unitBeingTrained: SUnit? = null
-        private set
-
-    override fun buildRoot() : SimpleNode = Memo(
-            Seq(name,
-                    Par("Requirements", false,
-                            EnsureDependenciesFor(type),
-                            Sel("Done or reserve",
-                                    Seq("Acquire Trainer, check if done",
-                                            AcquireUnitLock(trainerLock),
-                                            this::checkDone
-                                    ),
-                                    Seq("Train",
-                                            this::registerAsPlanned,
-                                            WaitForCostLock(costLock),
-                                            WaitFor { requiredUnitsAreCompleted() },
-                                            this::performTrain
-                                    )
-                            )
+class PrepareTrain(private val board: TrainBoard) : BehaviorTree("Prepare Training of ${board.type}") {
+    override fun buildRoot(): SimpleNode =
+            Sel("Check done or prepare",
+                    this::checkStarted,
+                    Sel("Prep done, else register planned",
+                            DoneFilter(Par("Ensure deps, trainer and cost", true,
+                                    EnsureDependenciesFor(board.type),
+                                    AcquireUnitLock(board.trainerLock),
+                                    WaitForCostLock(board.costLock),
+                                    Condition { requiredUnitsAreCompleted() }
+                            )),
+                            this::registerAsPlanned
                     )
             )
-    )
-
-    private fun performTrain(): NodeStatus {
-        val trainer = trainerLock.unit ?: return NodeStatus.RUNNING
-        BasicActions.train(trainer, type)
-        return NodeStatus.RUNNING
-    }
 
     override fun reset() {
         super.reset()
-        trainerLock.reset()
-        unitBeingTrained = null
+        board.trainerLock.reset()
+        board.trainee = null
     }
 
-    private fun checkDone(): NodeStatus {
-        val trainer = trainerLock.unit!!
-        return if (trainer.buildType == type || trainer.unitType == type) {
-            unitBeingTrained = trainer
+    private fun requiredUnitsAreCompleted() =
+            board.type.requiredUnits().keys.all { reqType -> units.mine.any { it.unitType == reqType && it.isCompleted } }
+
+
+    private fun checkStarted(): NodeStatus {
+        val trainer = board.trainerLock.unit ?: return NodeStatus.FAILED
+        return if (trainer.buildType == board.type || trainer.unitType == board.type) {
+            board.trainee = trainer
             NodeStatus.DONE
         } else
             NodeStatus.FAILED
     }
 
     private fun registerAsPlanned(): NodeStatus {
-        Styx.buildPlan.plannedUnits += PlannedUnit(type, consumedUnit = type.whatBuilds().first)
-        return NodeStatus.DONE
+        Styx.buildPlan.plannedUnits += PlannedUnit(board.type, consumedUnit = board.type.whatBuilds().first)
+        return NodeStatus.RUNNING
     }
+}
 
-    private fun requiredUnitsAreCompleted() =
-            type.requiredUnits().keys.all { reqType -> units.mine.any { it.unitType == reqType && it.isCompleted } }
+class OrderTrain(private val board: TrainBoard) : BehaviorTree("Order train ${board.type}") {
+    override fun buildRoot(): SimpleNode = Sel("Start train",
+            Condition { board.trainee != null },
+            this::orderTrain
+    )
+
+    private fun orderTrain(): NodeStatus {
+        val trainer = board.trainerLock.unit ?: error("Trainer must be locked")
+        BasicActions.train(trainer, board.type)
+        return NodeStatus.RUNNING
+    }
+}
+
+/**
+ * Trigger training of unit, don't wait for completion
+ */
+class StartTrain(private val board: TrainBoard) : BehaviorTree("Start Training ${board.type}") {
+    constructor(type: UnitType) : this(TrainBoard(type))
+
+    override fun buildRoot(): SimpleNode = Memo(
+            Seq(name,
+                    PrepareTrain(board),
+                    OrderTrain(board)
+            )
+    )
 }
 
 
 /**
  * Trigger training of unit, wait for completion
  */
-class Train(type: UnitType) : BehaviorTree("Train $type") {
-    init {
-        require(!type.isBuilding)
-    }
+class Train(private val board: TrainBoard) : BehaviorTree("Train ${board.type}") {
+    constructor(type: UnitType) : this(TrainBoard(type))
 
-    private val startTrain = StartTrain(type)
-    var trainedUnit: SUnit? = null
-        private set
-
-    override fun buildRoot() : SimpleNode = Memo(
+    override fun buildRoot(): SimpleNode = Memo(
             Seq(name,
-                    startTrain,
-                    NodeStatus.DONE.after {
-                        trainedUnit = startTrain.unitBeingTrained
-                    },
+                    StartTrain(board),
                     WaitFor {
-                        trainedUnit!!.isCompleted
+                        board.trainee?.isCompleted == true
                     }
             )
     )

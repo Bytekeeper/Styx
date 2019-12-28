@@ -30,8 +30,8 @@ object TargetEvaluator {
             UnitType.Zerg_Egg, UnitType.Zerg_Lurker_Egg, UnitType.Zerg_Larva -> -10.0
             UnitType.Zerg_Extractor, UnitType.Terran_Refinery, UnitType.Protoss_Assimilator, UnitType.Protoss_Interceptor -> -2.0
             UnitType.Zerg_Drone -> 0.9
-            UnitType.Protoss_Probe, UnitType.Terran_SCV -> 0.7
-            UnitType.Terran_Medic, UnitType.Protoss_High_Templar -> 0.6
+            UnitType.Protoss_Probe, UnitType.Terran_SCV -> 0.4
+            UnitType.Terran_Medic, UnitType.Protoss_High_Templar -> 0.1
             else -> 0.0
         }
     }
@@ -48,7 +48,7 @@ object TargetEvaluator {
     }
 
     private val byEnemyRange: TargetScorer = { a, e, _ ->
-        e.maxRangeVs(a) / 1000.0
+        if (e.hasPower) e.maxRangeVs(a) / 1000.0 else 0.0
     }
 
     private val byEnemySpeed: TargetScorer = { a, e, _ ->
@@ -56,7 +56,8 @@ object TargetEvaluator {
     }
 
     private val byEnemyDamageCapabilities: TargetScorer = { a, e, _ ->
-        (if (e.hasPower) e.damagePerFrameVs(a) * 0.4 else 0.0) *
+        -e.cooldownRemaining / 100.0 +
+                (if (e.hasPower) e.damagePerFrameVs(a) * 0.4 else 0.0) *
                 (if (e.weaponAgainst(a).isSplash) 2.0 else 1.0)
     }
 
@@ -70,13 +71,13 @@ object TargetEvaluator {
 
         val alreadyEngaged = relevantTargets.any { e -> attackers.any { e.inAttackRange(it, 48) || it.inAttackRange(e, 48) } } || relevantTargets.none { it.unitType.canAttack() }
         val averageMinimumDistanceToEnemy = if (alreadyEngaged) 0.0 else attackers.map { a -> relevantTargets.map { a.distanceTo(it) }.min()!! }.average()
-        val pylons = 3.0 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
+        val pylons = 2 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
         val defensiveBuildings = targets.count {
             it.remainingBuildTime < 48 &&
                     (it.unitType == UnitType.Protoss_Photon_Cannon || it.unitType == UnitType.Protoss_Shield_Battery)
         }
 
-        val pylonScorer: TargetScorer = { _, e, _ -> if (defensiveBuildings > 1 && e.unitType == UnitType.Protoss_Pylon) pylons else 0.0 }
+        val pylonScorer: TargetScorer = { _, e, _ -> defensiveBuildings * pylons }
         val scorers = defaultScorers.asSequence() + pylonScorer
 
         return attackers.map { a ->

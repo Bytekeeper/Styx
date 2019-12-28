@@ -4,10 +4,15 @@ import bwapi.Position
 import bwapi.TilePosition
 import bwapi.UnitType
 import org.locationtech.jts.algorithm.ConvexHull
-import org.locationtech.jts.geom.*
+import org.locationtech.jts.geom.Coordinate
+import org.locationtech.jts.geom.Envelope
+import org.locationtech.jts.geom.Geometry
+import org.locationtech.jts.geom.GeometryFactory
 import org.styx.Styx.bases
 import org.styx.Styx.game
+import org.styx.Styx.map
 import org.styx.Styx.units
+import org.styx.global.Base
 
 
 object ConstructionPosition {
@@ -18,9 +23,12 @@ object ConstructionPosition {
         if (unitType.isRefinery) {
             return findPositionForGas();
         }
+        val defensiveBuilding = unitType == UnitType.Zerg_Creep_Colony || unitType.canAttack() || unitType == UnitType.Terran_Bunker
 
-        val target = near?.toTilePosition() ?: bases.myBases.mapNotNull { it.mainResourceDepot }
-                .maxBy { Styx.units.myWorkers.inRadius(it.x, it.y, 300).size }?.tilePosition ?: return null
+        val target = near?.toTilePosition()
+                ?: (if (defensiveBuilding) bestPositionForStaticDefense() else null)
+                ?: bases.myBases.mapNotNull { it.mainResourceDepot }
+                        .maxBy { units.myWorkers.inRadius(it.x, it.y, 300).size }?.tilePosition ?: return null
         var bestBuildPosition: TilePosition? = null
         var bestDistance: Int = Int.MAX_VALUE
         for (i in -15..15) {
@@ -99,4 +107,17 @@ object ConstructionPosition {
                     if (candidate.getDistance(base.centerTile) < 8) candidate else null
                 }.firstOrNull()
     }
+
+    private fun bestPositionForStaticDefense(): TilePosition? {
+        val baseCandidate = bases.myBases.map { base ->
+            base to map.getArea(base.centerTile).accessibleNeighbors.filter { a -> bases.myBases.none { base -> map.getArea(base.centerTile) == a } }
+        }.filter { it.second.isNotEmpty() }
+                .minBy { it.second.size } ?: return null
+        val base = baseCandidate.first
+        val baseArea = map.getArea(base.centerTile)
+        val chokePosition = baseArea.chokePointsByArea[baseCandidate.second.first()]
+                ?.firstOrNull()?.center?.toTilePosition() ?: return null
+        return (base.centerTile + chokePosition) / 2
+    }
+
 }

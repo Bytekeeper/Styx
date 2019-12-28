@@ -21,8 +21,11 @@ class Listener : DefaultBWListener() {
                     Nine734,
                     NinePoolCheese,
                     TwoHatchHydra,
-//                    ThirteenPoolMuta
                     TwoHatchMuta
+//                    ThreeHatchMuta
+
+                    // Actually crappy strategies:
+//                    ThirteenPoolMuta,
             ),
             Gathering(),
             Scouting

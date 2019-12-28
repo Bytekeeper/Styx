@@ -26,7 +26,7 @@ class Gathering(private val onlyRequiredGas: Boolean = false) : BTNode() {
         val extractors = units.myCompleted(UnitType.Zerg_Extractor)
         val gasWorkers = workers.count { it.gatheringGas }
         val missingGasWorkers = min((if (gatherGas) extractors.size * 3 else 0) - gasWorkers,
-                if (futureResources.minerals > futureResources.gas)
+                if (futureResources.minerals + 1500 > futureResources.gas)
                     workers.size
                 else if (futureResources.minerals < futureResources.gas - 2600)
                     -gasWorkers

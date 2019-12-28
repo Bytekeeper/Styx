@@ -23,11 +23,12 @@ abstract class Lock<T : Any>(val criteria: (T) -> Boolean = { true }, val select
 
     fun release() {
         releaseItem()
-        item = null
+        reset()
     }
 
     fun reset() {
         item = null
+        satisfied = false
     }
 
     fun acquire() {
@@ -47,8 +48,8 @@ abstract class Lock<T : Any>(val criteria: (T) -> Boolean = { true }, val select
         }
     }
 
-    abstract fun releaseItem()
-    abstract fun tryReserve(item: T): Boolean
+    protected abstract fun releaseItem()
+    protected abstract fun tryReserve(item: T): Boolean
 }
 
 class UnitLocks(criteria: (Collection<SUnit>) -> Boolean = { true }, selector: () -> Collection<SUnit>) : Lock<List<SUnit>>(criteria,{ selector().toMutableList() }) {
@@ -56,7 +57,6 @@ class UnitLocks(criteria: (Collection<SUnit>) -> Boolean = { true }, selector: (
 
     override fun tryReserve(item: List<SUnit>): Boolean {
         if (Styx.resources.tryReserveUnits(item)) {
-            item.forEach { it.controller.reset() }
             return true
         }
         return false
@@ -82,7 +82,6 @@ class UnitLock(criteria: (SUnit) -> Boolean = { true }, selector: () -> SUnit?) 
 
     override fun tryReserve(item: SUnit): Boolean {
         if (Styx.resources.tryReserveUnit(item)) {
-            item.controller.reset()
             return true
         }
         return false

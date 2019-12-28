@@ -28,7 +28,7 @@ class Get(private val amountProvider: () -> Int,
         }
         val pendingUnitsFactor = if (type.isTwoUnitsInOneEgg) 2 else 1
         val pendingUnits = units.myPending.count { it.unitType == type }
-        val remaining = max(0, missingOrIncomplete - (pendingUnits + Styx.buildPlan.plannedUnits.count { it.type == type }) * pendingUnitsFactor)
+        val remaining = max(0, missingOrIncomplete - (pendingUnits + buildPlan.plannedUnits.count { it.type == type }) * pendingUnitsFactor)
         if (remaining == 0) {
             return NodeStatus.RUNNING
         }
@@ -75,7 +75,7 @@ class Get(private val amountProvider: () -> Int,
                             .map { it.remainingTrainTime }
                             .takeWhile { frames ->
                                 estimatedCost += costPerUnit
-                                !(Styx.resources.availableGMS + Styx.economy.estimatedAdditionalGMSIn(frames)).greaterOrEqual(estimatedCost)
+                                !(resources.availableGMS + Styx.economy.estimatedAdditionalGMSIn(frames)).greaterOrEqual(estimatedCost)
                             }.count()
                 } else 0
         return predictedAdditionalBuilders

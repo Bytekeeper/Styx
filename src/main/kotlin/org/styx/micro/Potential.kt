@@ -15,7 +15,7 @@ object Potential {
     fun reach(u: SUnit, position: Position) : Vector2D = attract(u, position)
 
     fun intercept(u: SUnit, t: SUnit): Vector2D {
-        val framesDistance = 2.0 * u.distanceTo(t) / (u.topSpeed + 0.1)
+        val framesDistance = 1.4 * u.distanceTo(t) / (u.topSpeed + 0.1)
         val predictedPosition = t.predictPosition(framesDistance.toInt()).toWalkPosition().makeValid()
         val fixedPredictedPosition =
                 if (t.flying)
