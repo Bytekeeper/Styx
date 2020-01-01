@@ -1,21 +1,23 @@
 package org.styx.squad
 
+import org.bk.ass.bt.TreeNode
 import org.bk.ass.sim.Evaluator
 import org.styx.*
 import org.styx.Styx.bases
 import org.styx.Styx.squads
 import org.styx.action.BasicActions
 
-class SeekCombatSquad(private val squad: Squad) : BTNode() {
+class SeekCombatSquad(private val squad: SquadBoard) : TreeNode() {
     private val attackerLock = UnitLocks { Styx.resources.availableUnits.filter { squad.mine.contains(it) && !it.unitType.isWorker && !it.unitType.isBuilding && it.unitType.canAttack() } }
 
-    override fun tick(): NodeStatus {
+    override fun exec() {
+        running()
         if (squad.fastEval != Evaluator.EVAL_NO_COMBAT)
-            return NodeStatus.RUNNING
+            return
         attackerLock.reacquire()
-        if (attackerLock.units.isEmpty())
-            return NodeStatus.RUNNING
-        val attackers = attackerLock.units
+        if (attackerLock.item.isEmpty())
+            return
+        val attackers = attackerLock.item
         val candidates = squads.squads.mapNotNull { c ->
             if (c.enemies.isEmpty())
                 null
@@ -52,16 +54,16 @@ class SeekCombatSquad(private val squad: Squad) : BTNode() {
         } else {
             attackerLock.release()
         }
-        return NodeStatus.RUNNING
+        return
     }
 
-    private fun desperateAttemptToWinSquad(candidates: List<Pair<Squad, Double>>) =
+    private fun desperateAttemptToWinSquad(candidates: List<Pair<SquadBoard, Double>>) =
             if (Styx.balance.direSituation)
                 candidates.maxBy { it.second }?.let { if (it.second > 0.3) it.first to 0.5 else null }
             else
                 null
 
-    private fun bestSquadToSupport(squad: Squad, candidates: List<Pair<Squad, Double>>) =
+    private fun bestSquadToSupport(squad: SquadBoard, candidates: List<Pair<SquadBoard, Double>>) =
             candidates.minBy { (s, eval) ->
                 bases.enemyBases.map { it.center.getDistance(s.center) }.min(0.0) / 3000.0 +
                         s.center.getDistance(squad.center) / 3000.0 +

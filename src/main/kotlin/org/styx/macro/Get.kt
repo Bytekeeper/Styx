@@ -1,6 +1,8 @@
 package org.styx.macro
 
 import bwapi.UnitType
+import org.bk.ass.bt.NodeStatus
+import org.bk.ass.bt.TreeNode
 import org.bk.ass.manage.GMS
 import org.styx.*
 import org.styx.Styx.buildPlan
@@ -13,7 +15,7 @@ import kotlin.math.min
 class Get(private val amountProvider: () -> Int,
           private val type: UnitType,
           private val dynamic: Boolean = false) : MemoLeaf() {
-    private val children = ArrayDeque<SimpleNode>()
+    private val children = ArrayDeque<TreeNode>()
 
     constructor(amount: Int, type: UnitType, dynamic: Boolean = false) : this({ amount }, type, dynamic)
 
@@ -24,7 +26,7 @@ class Get(private val amountProvider: () -> Int,
         val missingOrIncomplete = max(0, amount - completedUnitsAmount + lostUnitsOnPlan)
         if (missingOrIncomplete == 0) {
             children.clear()
-            return NodeStatus.DONE
+            return NodeStatus.SUCCESS
         }
         val pendingUnitsFactor = if (type.isTwoUnitsInOneEgg) 2 else 1
         val pendingUnits = units.myPending.count { it.unitType == type }
@@ -48,12 +50,14 @@ class Get(private val amountProvider: () -> Int,
             children.removeFirst()
         }
         children.removeIf {
-            it() != NodeStatus.RUNNING
+            it.exec()
+            it.status != NodeStatus.RUNNING
         }
         repeat(expectedChildCount - children.size) {
-            val newNode: SimpleNode = if (type.isBuilding) StartBuild(type) else StartTrain(type)
+            val newNode = if (type.isBuilding) StartBuild(type) else StartTrain(type)
             children += newNode
-            newNode()
+            newNode.init()
+            newNode.exec()
         }
         return NodeStatus.RUNNING
     }
@@ -75,7 +79,7 @@ class Get(private val amountProvider: () -> Int,
                             .map { it.remainingTrainTime }
                             .takeWhile { frames ->
                                 estimatedCost += costPerUnit
-                                !(resources.availableGMS + Styx.economy.estimatedAdditionalGMSIn(frames)).greaterOrEqual(estimatedCost)
+                                !(resources.availableGMS + Styx.economy.estimatedAdditionalGMSIn(frames)).canAfford(estimatedCost)
                             }.count()
                 } else 0
         return predictedAdditionalBuilders

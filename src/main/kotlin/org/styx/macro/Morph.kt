@@ -1,6 +1,7 @@
 package org.styx.macro
 
 import bwapi.UnitType
+import org.bk.ass.bt.NodeStatus
 import org.styx.*
 import org.styx.action.BasicActions
 import org.styx.global.PlannedUnit
@@ -10,6 +11,7 @@ data class MorphBoard(
         var unit: SUnit?
 )
 
+/*
 class Morph2(private val board: MorphBoard) : BehaviorTree("Morphing ${board.type}") {
     override fun buildRoot(): SimpleNode = Memo(
             Sel("Execute",
@@ -18,18 +20,18 @@ class Morph2(private val board: MorphBoard) : BehaviorTree("Morphing ${board.typ
     )
 
 }
-
+*/
 class Morph(private val type: UnitType) : MemoLeaf() {
     private val morphLock = UnitLock() { Styx.resources.availableUnits.firstOrNull { it.unitType == type.whatBuilds().first && it.isCompleted } }
-    private val costLock = UnitCostLock(type)
+    private val costLock = costLocks.unitCostLock(type)
 
     override fun tick(): NodeStatus {
-        if (morphLock.unit?.unitType == type)
-            return NodeStatus.DONE
+        if (morphLock.item?.unitType == type)
+            return NodeStatus.SUCCESS
         costLock.acquire()
-        if (costLock.satisfied) {
+        if (costLock.isSatisfied) {
             morphLock.acquire()
-            val unitToMorph = morphLock.unit ?: run {
+            val unitToMorph = morphLock.item ?: run {
                 Styx.buildPlan.plannedUnits += PlannedUnit(type, consumedUnit = if (type.isBuilding) null else type.whatBuilds().first)
                 return NodeStatus.RUNNING
             }

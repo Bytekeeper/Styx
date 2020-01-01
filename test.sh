@@ -4,6 +4,7 @@ cp build/libs/FFT_TER-all-1.0-SNAPSHOT.jar ~/.scbw/bots/StyxZ/AI/
 mapfile -t maps < <(find ~/.scbw/maps/sscai -name '*.sc?' -printf "sscai/%P\n")
 cp ~/.scbw/bots/StyxZ/botd.json ~/.scbw/bots/StyxZ/bot.json
 #cp ~/.scbw/bots/StyxZ/botb.json ~/.scbw/bots/StyxZ/bot.json
+rm ~/.scbw/maps/replays/*
 
 function play() {
   (
@@ -60,15 +61,16 @@ function play() {
 #play PurpleSwarm
 #play Dragon
 #play WillyT
+#play ICELab
 
 # Top 12
 #play krasi0
-play Locutus
+#play Locutus
 #play PurpleWave
 #play 'Hao Pan'
 #play Microwave
 #play 'Iron bot'
-#play Steamhammer
+play Steamhammer
 #play 'Marian Devecka'
 #play ChimeraBot
 #play Antiga

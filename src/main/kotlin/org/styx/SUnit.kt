@@ -56,6 +56,7 @@ class SUnit private constructor(val unit: Unit) {
         private set
     lateinit var position: Position
         private set
+    val firstSeenPosition: Position = unit.position
     val walkPosition get() = position.toWalkPosition()
     val id: Int = unit.id
     var myUnit = false
@@ -118,7 +119,12 @@ class SUnit private constructor(val unit: Unit) {
     var hatchery: SUnit? = null
         private set
     val threats by LazyOnFrame { Styx.units.enemy.inRadius(this, 400) { it.inAttackRange(this, 96) } }
-    val safe by LazyOnFrame { Styx.units.enemy.nearest(x, y, 400) { it.inAttackRange(this, 96) } == null }
+    val safe by LazyOnFrame {
+        if (flying)
+            Styx.units.enemy.nearest(x, y, 400) { it.inAttackRange(this, 96) } == null
+        else
+            Styx.units.enemy.nearest(x, y, 500) { it.inAttackRange(this, 192) } == null
+    }
 
     fun predictPosition(frames: Int) = position + velocity.multiply(frames.toDouble()).toPosition()
 
@@ -180,7 +186,7 @@ class SUnit private constructor(val unit: Unit) {
         }
     }
 
-    fun distanceTo(target: Position) : Int {
+    fun distanceTo(target: Position): Int {
         // compute x distance
         var xDist = left - target.x - 1
         if (xDist < 0) {
@@ -355,7 +361,6 @@ class SUnit private constructor(val unit: Unit) {
     }
 
     fun stop() {
-        if (!unit.isMoving) return
         unit.stop();
     }
 
@@ -398,11 +403,13 @@ class SUnit private constructor(val unit: Unit) {
         return damagePerHit / weapon.damageCooldown().toDouble()
     }
 
-    val canMoveWithoutBreakingAttack get() = (unitType.groundWeapon() == WeaponType.None || unitType.groundWeapon().damageCooldown() - unit.groundWeaponCooldown >= stopFrames)
-            && (unitType.airWeapon() == WeaponType.None || unitType.airWeapon().damageCooldown() - unit.airWeaponCooldown >= stopFrames)
+    val canMoveWithoutBreakingAttack
+        get() = (unitType.groundWeapon() == WeaponType.None || unitType.groundWeapon().damageCooldown() - unit.groundWeaponCooldown >= stopFrames)
+                && (unitType.airWeapon() == WeaponType.None || unitType.airWeapon().damageCooldown() - unit.airWeaponCooldown >= stopFrames)
 
-    val isOnCoolDown get() =  unit.groundWeaponCooldown > 0
-            || unit.airWeaponCooldown > 0
+    val isOnCoolDown
+        get() = unit.groundWeaponCooldown > 0
+                || unit.airWeaponCooldown > 0
 
     val cooldownRemaining get() = max(unit.groundWeaponCooldown, unit.airWeaponCooldown)
 

@@ -5,6 +5,9 @@ import bwapi.DefaultBWListener
 import bwapi.Game
 import bwapi.Unit
 import bwem.BWEM
+import org.bk.ass.bt.Best
+import org.bk.ass.bt.ExecutionContext
+import org.bk.ass.bt.Parallel
 import org.styx.Styx.diag
 import org.styx.task.*
 
@@ -14,49 +17,45 @@ class Listener : DefaultBWListener() {
     private val client = BWClient(this)
     private var maxFrameTime = 0L;
 
-    private val aiTree = Par("Main AI Tree",
-            true,
+    private val aiTree = Parallel(Parallel.Policy.SEQUENCE,
+            Styx,
             squadDispatch,
-            Best("Strategy",
-                    Nine734,
-                    NinePoolCheese,
-                    TwoHatchHydra,
-                    TwoHatchMuta
-//                    ThreeHatchMuta
+            Best(
+                    //Nine734,
+//                    NinePoolCheese,
+//                    TwoHatchHydra,
+//                    TwoHatchMuta,
+                    ThreeHatchMuta
 
                     // Actually crappy strategies:
 //                    ThirteenPoolMuta,
             ),
             Gathering(),
             Scouting
-    )
+    ).withName("AI Tree")
 
     override fun onStart() {
         game = client.game
         Styx.game = game
-        val bwem = BWEM(game)
-        bwem.initialize()
-        Styx.map = bwem.map
-        Styx.init()
-        aiTree.loadLearned()
+        aiTree.init()
     }
 
     override fun onFrame() {
         lastFrame = game.frameCount
         try {
             val timed = Timed()
-            Styx.update()
 
-
-            aiTree()
+            val executionContext = ExecutionContext()
+            aiTree.exec(executionContext)
 //            diag.log("PLAN: " + buildPlan.plannedUnits.joinToString())
             val frameTime = timed.ms()
             if (frameTime > 42 && game.frameCount > 0) {
                 diag.log("frame ${game.frameCount} - frame time: ${frameTime}ms")
-                Styx.frameTimes
-                        .filter { it.ms() > 0 }
-                        .forEach {
-                            diag.log("${it.name} : ${it.ms()}ms")
+                executionContext.executionTime.toList()
+                        .sortedByDescending { (_, time) ->
+                            time
+                        }.forEach { (node, time) ->
+                            diag.log("${node.name} : ${time}ms")
                 }
                 maxFrameTime = frameTime
             }
@@ -75,7 +74,7 @@ class Listener : DefaultBWListener() {
     }
 
     override fun onEnd(isWinner: Boolean) {
-        aiTree.saveLearned()
+        aiTree.close()
         Styx.onEnd(isWinner)
     }
 }

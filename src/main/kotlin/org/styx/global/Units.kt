@@ -2,13 +2,14 @@ package org.styx.global
 
 import bwapi.Unit
 import bwapi.UnitType
+import org.bk.ass.bt.TreeNode
 import org.bk.ass.query.PositionQueries
 import org.styx.PendingUnit
 import org.styx.SUnit
 import org.styx.Styx
 import org.styx.positionExtractor
 
-class Units {
+class Units : TreeNode() {
     lateinit var ownedUnits: PositionQueries<SUnit>
         private set
     lateinit var allunits: PositionQueries<SUnit>
@@ -30,7 +31,8 @@ class Units {
     lateinit var myPending: List<PendingUnit>
         private set
 
-    fun update() {
+    override fun exec() {
+        success()
         val knownUnits = (Styx.game.allUnits.map { SUnit.forUnit(it) } + enemy).distinct()
         knownUnits.forEach {
             it.update()
@@ -65,9 +67,6 @@ class Units {
 //        if (game.bullets.any { it.source?.type == UnitType.Terran_Bunker || it.type == BulletType.Gauss_Rifle_Hit && it.source == null }) {
 //            println("BUNKER?")
 //        }
-        if (enemy.any { it.cooldownRemaining > 0 }) {
-            println("!!")
-        }
     }
 
     fun my(type: UnitType) = mine.filter { it.unitType == type }

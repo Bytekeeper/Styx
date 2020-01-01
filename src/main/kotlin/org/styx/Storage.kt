@@ -24,7 +24,7 @@ class Storage {
 
         learned = learnedPerBot.values
                 .fold(LearningData(null, emptyList())) { acc, next ->
-                    LearningData(null, acc.gameResults + next.gameResults)
+                    LearningData(null, acc.gameResults + next.gameResults.takeLast(100))
                 }
     }
 

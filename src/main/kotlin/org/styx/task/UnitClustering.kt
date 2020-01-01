@@ -1,16 +1,16 @@
 package org.styx.task
 
+import org.bk.ass.bt.BehaviorTree
+import org.bk.ass.bt.Parallel
+import org.bk.ass.bt.TreeNode
 import org.styx.Dispatch
-import org.styx.Par
 import org.styx.Styx
 import org.styx.squad.*
 
 val squadDispatch = Dispatch(
-        "Squad Dispatch",
         { Styx.squads.squads }
 ) { squadBoard ->
-    Par("Squad",
-            false,
+    Parallel(Parallel.Policy.SEQUENCE,
             LocalCombat(squadBoard),
             SeekCombatSquad(squadBoard),
             SquadBackOff(squadBoard),

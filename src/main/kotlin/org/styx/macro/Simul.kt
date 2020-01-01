@@ -1,12 +1,12 @@
 package org.styx.macro
 
 import bwapi.UnitType
-import org.styx.BehaviorTree
-import org.styx.Par
-import org.styx.Seq
-import org.styx.SimpleNode
+import org.bk.ass.bt.BehaviorTree
+import org.bk.ass.bt.Parallel
+import org.bk.ass.bt.Sequence
+import org.bk.ass.bt.TreeNode
 
-class Simul(vararg types: UnitType) : BehaviorTree("At once build/train ") {
+class Simul(vararg types: UnitType) : BehaviorTree() {
     private val boards = types.map {
         when {
             it.isBuilding -> BuildBoard(it)
@@ -14,9 +14,9 @@ class Simul(vararg types: UnitType) : BehaviorTree("At once build/train ") {
         }
     }
 
-    override fun buildRoot(): SimpleNode =
-            Seq("At once",
-                    Par("Preparations", false,
+    override fun getRoot(): TreeNode =
+            Sequence(
+                    Parallel(Parallel.Policy.SEQUENCE,
                             *boards.map {
                                 when (it) {
                                     is BuildBoard -> PrepareBuild(it)
@@ -24,13 +24,13 @@ class Simul(vararg types: UnitType) : BehaviorTree("At once build/train ") {
                                     else -> error("Invalid board $it")
                                 }
                             }.toTypedArray()),
-                    Par("Build/Train", false,
+                    Parallel(Parallel.Policy.SEQUENCE,
                             *boards.map {
                                 when (it) {
                                     is BuildBoard -> OrderBuild(it)
                                     is TrainBoard -> OrderTrain(it)
                                     else -> error("Invalid board $it")
-                                } as SimpleNode
+                                } as TreeNode
                             }.toTypedArray()
                     )
             )

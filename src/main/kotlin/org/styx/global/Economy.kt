@@ -1,12 +1,13 @@
 package org.styx.global
 
 import bwapi.UnitType
+import org.bk.ass.bt.TreeNode
 import org.bk.ass.manage.GMS
 import org.styx.LazyOnFrame
 import org.styx.Styx
 import org.styx.plus
 
-class Economy {
+class Economy : TreeNode() {
     // "Stolen" from PurpleWave
     private val perWorkerPerFrameMinerals = 0.046
     private val perWorkerPerFrameGas = 0.069
@@ -53,7 +54,8 @@ class Economy {
                 GMS((perWorkerPerFrameGas * deltaFrames * gasWorkers).toInt(), (perWorkerPerFrameMinerals * deltaFrames * mineralWorkers).toInt(), 0)
     }
 
-    fun update() {
+    override fun exec() {
+        success()
         workersOnMinerals = Styx.units.myWorkers.count { it.gatheringMinerals }
         workersOnGas = Styx.units.myWorkers.count { it.gatheringGas }
         currentResources = GMS(Styx.self.gas(), Styx.self.minerals(), Styx.self.supplyTotal() - Styx.self.supplyUsed())

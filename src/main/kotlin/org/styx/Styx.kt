@@ -1,7 +1,13 @@
 package org.styx
 
 import bwapi.*
+import bwem.BWEM
 import bwem.BWMap
+import org.bk.ass.bt.BehaviorTree
+import org.bk.ass.bt.LambdaNode
+import org.bk.ass.bt.NodeStatus
+import org.bk.ass.bt.Sequence
+import org.bk.ass.bt.TreeNode
 import org.bk.ass.grid.Grid
 import org.bk.ass.grid.RayCaster
 import org.bk.ass.manage.GMS
@@ -24,7 +30,7 @@ import kotlin.math.*
 
 val positionExtractor: (SUnit) -> org.bk.ass.path.Position = { org.bk.ass.path.Position(it.x, it.y) }
 
-object Styx {
+object Styx : BehaviorTree() {
     lateinit var game: Game
     lateinit var map: BWMap
     lateinit var writePath: Path
@@ -36,7 +42,6 @@ object Styx {
         private set
     lateinit var relevantGameResults: RelevantGames
         private set
-    val frameTimes = mutableListOf<Timed>()
     var turnSize = 0
         private set
     var frame = 0
@@ -54,7 +59,6 @@ object Styx {
     var buildPlan = BuildPlan()
         private set
     lateinit var self: Player
-        private set
     var economy = Economy()
         private set
     val pendingUpgrades = PendingUpgrades()
@@ -78,27 +82,29 @@ object Styx {
     val storage = Storage()
     var strategy = ""
 
-    fun update() {
-        frameTimes.clear()
+    override fun getRoot(): TreeNode = Sequence(
+            LambdaNode(this::update),
+            units,
+            economy,
+            resources,
+            bases,
+            squads,
+            buildPlan,
+            geography
+    ).withName("Update")
+
+    private fun update(): NodeStatus {
         minRemainingLatencyFrames = min(minRemainingLatencyFrames, game.remainingLatencyFrames)
         turnSize = game.latencyFrames - minRemainingLatencyFrames + 1
-        self = game.self()
         if (frame > 0 && game.remainingLatencyFrames > minRemainingLatencyFrames && game.frameCount - frame < minRemainingLatencyFrames || game.isPaused)
-            return
+            return NodeStatus.RUNNING
         // Opponent fiddled around with speed?
         if (game.frameCount - frame > minRemainingLatencyFrames) {
             // Maybe
             minRemainingLatencyFrames = game.remainingLatencyFrames
         }
         frame = game.frameCount
-        ft("units") { units.update() }
-        ft("economy") { economy.update() }
-        ft("resources") { resources.update() }
-        ft("bases") { bases.update() }
-        ft("squads") { squads.update() }
-        ft("buildPlan") { buildPlan.update() }
-        ft("tech") { tech.update() }
-        ft("geography") { geography.update() }
+        return NodeStatus.SUCCESS
     }
 
     fun onEnd(winner: Boolean) {
@@ -107,13 +113,12 @@ object Styx {
                 GameResult(fingerPrint, strategy, winner))
     }
 
-    fun <T> ft(name: String, delegate: () -> T): T {
-        var result: T? = null
-        frameTimes += time(name) { result = delegate(); Unit }
-        return result!!
-    }
+    override fun init() {
+        val bwem = BWEM(game)
+        bwem.initialize()
+        map = bwem.map
+        self = game.self()
 
-    fun init() {
         geography.init()
         var path = Paths.get("bwapi-data").resolve("write")
         if (!Files.exists(path)) {
@@ -158,8 +163,7 @@ object Styx {
                         println("Possible shitty strategy: $strat - it was played ${winLoss.size} times but has a winrate of $successRate!")
                     }
                 }
-
-        update()
+        super.init()
     }
 }
 

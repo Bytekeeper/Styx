@@ -12,7 +12,7 @@ import kotlin.math.max
 val adjectives = listOf("stinging", "red", "running", "weak", "blazing", "awful", "spiteful", "loving", "hesitant", "raving", "hunting")
 val nouns = listOf("squirrel", "bee", "scorpion", "coyote", "rabbit", "marine-eater", "void", "space-cowboy", "wallaby")
 
-class Squad {
+class SquadBoard {
     val name = "${adjectives.random()} ${nouns.random()}"
     var task = ""
     var fastEval: Evaluator.EvaluationResult = Evaluator.EVAL_NO_COMBAT

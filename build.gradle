@@ -24,7 +24,7 @@ dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
     implementation("com.github.JavaBWAPI:JBWAPI:fail-early-SNAPSHOT").changing = true
     //implementation('com.github.Bytekeeper:ass:develop-SNAPSHOT').changing = true
-    implementation(files('lib/ass-1.1.jar'))
+    implementation(files('lib/ass-1.2.jar'))
     implementation 'org.locationtech.jts:jts-core:1.16.1'
     implementation 'com.github.luben:zstd-jni:1.4.3-1'
     implementation 'com.jsoniter:jsoniter:0.9.19'

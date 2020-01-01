@@ -1,17 +1,19 @@
 package org.styx.macro
 
 import bwapi.UnitType
-import org.styx.BehaviorTree
-import org.styx.Par
-import org.styx.SimpleNode
+import org.bk.ass.bt.BehaviorTree
+import org.bk.ass.bt.Parallel
+import org.bk.ass.bt.TreeNode
 import org.styx.Styx
 
-class EnsureDependenciesFor(private val type: UnitType) : BehaviorTree("Dependencies for $type") {
-    override fun buildRoot() : SimpleNode = Par("Dependencies for $type", false,
-            *type.requiredUnits()
-                    .filter { (type, _) -> type != UnitType.Zerg_Larva }
-                    .map { (type, amount) ->
-                        Get({ amount }, type)
-                    }.toTypedArray(),
-            Get({ if (type.gasPrice() > 0) 1 else 0 }, Styx.self.race.refinery))
+class EnsureDependenciesFor(private val type: UnitType) : BehaviorTree() {
+    override fun getRoot(): TreeNode =
+            Parallel(Parallel.Policy.SEQUENCE,
+                    *type.requiredUnits()
+                            .filter { (type, _) -> type != UnitType.Zerg_Larva }
+                            .map { (type, amount) ->
+                                Get({ amount }, type)
+                            }.toTypedArray(),
+                    Get({ if (type.gasPrice() > 0) 1 else 0 }, Styx.self.race.refinery))
+                    .withName("Ensuring dependencies for $type")
 }

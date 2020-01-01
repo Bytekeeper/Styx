@@ -1,16 +1,16 @@
 package org.styx.macro
 
 import bwapi.UnitType
-import org.styx.BehaviorTree
-import org.styx.Memo
-import org.styx.Seq
-import org.styx.SimpleNode
+import org.bk.ass.bt.BehaviorTree
+import org.bk.ass.bt.Memo
+import org.bk.ass.bt.Sequence
+import org.bk.ass.bt.TreeNode
 
-class ExtractorTrick() : BehaviorTree("Extractor Trick") {
+class ExtractorTrick() : BehaviorTree() {
     private val extractorBoard = BuildBoard(UnitType.Zerg_Extractor)
 
-    override fun buildRoot(): SimpleNode = Memo(
-            Seq("Start Extractor and Drone",
+    override fun getRoot(): TreeNode = Memo(
+            Sequence(
                     StartBuild(extractorBoard),
                     StartTrain(UnitType.Zerg_Drone),
                     CancelBuild(extractorBoard)

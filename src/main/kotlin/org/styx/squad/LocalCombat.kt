@@ -1,13 +1,13 @@
 package org.styx.squad
 
 import bwapi.UnitType
+import org.bk.ass.bt.TreeNode
 import org.bk.ass.sim.Agent
 import org.bk.ass.sim.IntEvaluation
 import org.styx.*
 import org.styx.Styx.diag
 import org.styx.Styx.evaluator
 import org.styx.Styx.fleeSim
-import org.styx.Styx.ft
 import org.styx.Styx.sim
 import org.styx.Styx.simFS3
 import org.styx.micro.Attack
@@ -17,12 +17,11 @@ import kotlin.math.min
 
 data class SimResult(val lostUnits: List<SUnit>, val eval: IntEvaluation)
 
-class LocalCombat(private val squad: Squad) : BTNode() {
+class LocalCombat(private val squad: SquadBoard) : TreeNode() {
     private var workersToUse = 0
     private var lastAttackHysteresis = 0
     private var combatMoves = listOf<CombatMove>()
     private val combatDispatch = Dispatch(
-            "Combat",
             { combatMoves },
             { combatMoveToTree(it) })
 
@@ -38,7 +37,8 @@ class LocalCombat(private val squad: Squad) : BTNode() {
         combatUnits + workersForCombat
     }
 
-    override fun tick(): NodeStatus {
+    override fun exec() {
+        running()
         val enemies = squad.enemies
         val attackHysteresis = lastAttackHysteresis
         lastAttackHysteresis = 0
@@ -49,22 +49,22 @@ class LocalCombat(private val squad: Squad) : BTNode() {
             workersToUse = 0
         }
         if (enemies.isEmpty() && workersAndBuildingsAreSave) {
-            return NodeStatus.RUNNING
+            return
         }
         attackerLock.reacquire()
         val maxUseableWorkers = squad.myWorkers.size
-        if (attackerLock.units.isEmpty() && maxUseableWorkers == 0) {
+        if (attackerLock.item.isEmpty() && maxUseableWorkers == 0) {
             workersToUse = 0
-            return NodeStatus.RUNNING
+            return
         }
-        val attackers = attackerLock.units
+        val attackers = attackerLock.item
 
         val agentsBeforeCombat = prepareCombatSim()
         val bestEval = evaluator.optimizeEval(attackers.map { unitToAgentMapper(it) }, sim.agentsB)
         if (bestEval.agents.isNotEmpty() && bestEval.agents.size < attackers.size) {
             val toDismiss = attackers - bestEval.agents.map { it.userObject as SUnit }
             diag.log("Dismissing $toDismiss to improve eval from ${squad.fastEval} to ${bestEval.eval}")
-            attackerLock.releaseUnits(toDismiss)
+            attackerLock.releaseItem(toDismiss)
         }
         val beforeCombat = sim.evalToInt(agentValueForPlayer)
         val valuesBeforeCombat = agentsBeforeCombat.map { it to agentValueForPlayer.applyAsInt(it) }.toMap()
@@ -78,9 +78,6 @@ class LocalCombat(private val squad: Squad) : BTNode() {
                 !shouldSnipePylon(enemies)
 
         diag.log("Squad combat score ${squad.name} after combat: $scoreAfterCombat; after fleeing: $scoreAfterFleeing")
-        if (!shouldFlee && squad.enemies.count { it.unitType == UnitType.Protoss_Dragoon } > 5 && squad.mine.count { it.unitType == UnitType.Zerg_Hydralisk } in 1..squad.enemies.count { it.unitType == UnitType.Protoss_Dragoon }) {
-            println("NOW WHAT!")
-        }
 
         var aggressiveness = 1.0
         if (workersAndBuildingsAreSave && shouldFlee) {
@@ -90,14 +87,18 @@ class LocalCombat(private val squad: Squad) : BTNode() {
             }
             lastAttackHysteresis = 0; //(-beforeCombat.evalB * Config.attackerHysteresisFactor).toInt()
 
-            val attackersToKeep = attackers.filter {
-                it.safe
+            val attackersToKeep = sim.agentsA.mapNotNull {
+                val unit = it.userObject as SUnit
+                if (it.attackCounter > 0 && unit.safe)
+                    unit
+                else
+                    null
             }
 
             // Keep units that'd die anyway or are not in danger
-            attackerLock.releaseUnits(attackers - afterFlee.lostUnits - attackersToKeep)
+            attackerLock.releaseItem(attackers - afterFlee.lostUnits - attackersToKeep)
             if (attackers.isEmpty())
-                return NodeStatus.RUNNING
+                return
             else {
                 diag.log("Will lose ${afterFlee.lostUnits} anyways, keep attacking. Will also not lose $attackers either way, so keep them going too")
             }
@@ -118,7 +119,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
             performAttack(attackers, enemies, aggressiveness)
         }
 
-        return NodeStatus.RUNNING
+        return
     }
 
     private fun shouldSnipePylon(enemies: List<SUnit>): Boolean {
@@ -136,26 +137,26 @@ class LocalCombat(private val squad: Squad) : BTNode() {
                     it.setAttackTargetPriority(Agent.TargetingPriority.HIGHEST)
                 }
             }
-            ft("Pylon sniping") { simFS3.simulate(Config.veryLongSimHorizon) }
+            simFS3.simulate(Config.veryLongSimHorizon)
             simFS3.agentsB.none { (it.userObject as SUnit).unitType == UnitType.Protoss_Pylon }
         } else
             false
     }
 
     private fun performAttack(attackers: List<SUnit>, enemies: List<SUnit>, aggressiveness: Double) {
-        combatMoves = ft("best combat moves") { TargetEvaluator.bestCombatMoves(attackers, enemies, aggressiveness) }
+        combatMoves = TargetEvaluator.bestCombatMoves(attackers, enemies, aggressiveness)
                 .mapNotNull {
                     if (it is Disengage) {
-                        attackerLock.releaseUnit(it.unit)
+                        attackerLock.releaseItem(it.unit)
                         null
                     } else
                         it
                 }
 //        diag.log("Squad combat moves ${squad.name} $combatMoves")
-        combatDispatch()
+        combatDispatch.exec()
     }
 
-    private fun combatMoveToTree(move: CombatMove): SimpleNode =
+    private fun combatMoveToTree(move: CombatMove): TreeNode =
             when (move) {
                 is AttackMove -> Attack(move.unit, move.enemy)
                 is WaitMove -> Stop(move.unit)
@@ -165,7 +166,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
     private val unitToAgentMapper = { it: SUnit ->
         val agent = it.agent()
         if (it.enemyUnit && (it.gathering ||
-                        it.unitType.isWorker && !it.visible) || (it.myUnit && !attackerLock.units.contains(it)) ||
+                        it.unitType.isWorker && !it.visible) || (it.myUnit && !attackerLock.item.contains(it)) ||
                 !it.hasPower)
             agent.setCooldown(Config.mediumSimHorizon)
         if (!it.unitType.canAttack() && it.unitType != UnitType.Terran_Bunker)
@@ -174,7 +175,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
     }
 
     private fun simulateCombat(agentsBeforeCombat: List<Agent>, frames: Int): SimResult {
-        ft("combat sim") { sim.simulate(frames) }
+        sim.simulate(frames)
         val lostUnits = agentsBeforeCombat.filter { it.health <= 0 }.map { it.userObject as SUnit }
         val eval = sim.evalToInt(agentValueForPlayer)
         return SimResult(lostUnits, eval)
@@ -202,7 +203,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
                 .forEach { fleeSim.addAgentA(it) }
         squad.enemies.map(unitToAgentMapper)
                 .forEach { fleeSim.addAgentB(it) }
-        ft("flee sim") { fleeSim.simulate(Config.longSimHorizon) }
+        fleeSim.simulate(Config.longSimHorizon)
         val lostUnits = agentsBeforeCombat.filter { it.health <= 0 }.map { it.userObject as SUnit }
         val eval = fleeSim.evalToInt(agentValueForPlayer)
         return SimResult(lostUnits, eval)
@@ -215,7 +216,7 @@ class LocalCombat(private val squad: Squad) : BTNode() {
                 .forEach { simFS3.addAgentA(it) }
         squad.enemies
                 .forEach { simFS3.addAgentB(unitToAgentMapper(it)) }
-        ft("combat sim") { simFS3.simulate(frames) }
+        simFS3.simulate(frames)
         val lostUnits = agentsBeforeCombat.filter { it.health <= 0 }.map { it.userObject as SUnit }
         val eval = sim.evalToInt(agentValueForPlayer)
         return SimResult(lostUnits, eval)

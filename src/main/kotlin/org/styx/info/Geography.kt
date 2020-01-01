@@ -3,6 +3,7 @@ package org.styx.info
 import bwapi.WalkPosition
 import bwem.Area
 import bwem.ChokePoint
+import org.bk.ass.bt.TreeNode
 import org.bk.ass.grid.Grid
 import org.bk.ass.grid.Grids
 import org.bk.ass.grid.RayCaster
@@ -12,7 +13,7 @@ import org.styx.Styx.map
 import org.styx.Timed
 import org.styx.toWalkPosition
 
-class Geography {
+class Geography : TreeNode() {
     lateinit var escapePaths: Map<Area, Map<ChokePoint, List<WalkPosition>>>
         private set
     lateinit var walkable: Grid<Boolean>
@@ -21,10 +22,12 @@ class Geography {
         private set
     lateinit var jps: PPJps
 
-    fun update() {
+    override fun exec() {
     }
 
-    fun init() {
+    override fun init() {
+        super.init()
+        success()
         walkable = Grids.fromWalkability(game)
         walkRay = RayCaster(walkable)
         jps = PPJps(walkable)

@@ -3,16 +3,18 @@ package org.styx.micro
 import bwapi.Bullet
 import bwapi.BulletType
 import bwapi.UnitType
+import org.bk.ass.bt.*
 import org.locationtech.jts.math.Vector2D
 import org.styx.*
 import org.styx.Styx.game
 import org.styx.Styx.geography
 import org.styx.Styx.units
 import org.styx.action.BasicActions
+import sun.reflect.generics.tree.Tree
 
 class Attack(private val attacker: SUnit,
-             private val enemy: SUnit) : BehaviorTree("Attack") {
-    val kiteEnemy = Seq("Kite enemy",
+             private val enemy: SUnit) : BehaviorTree() {
+    val kiteEnemy = Sequence(
             Condition {
                 attacker.couldTurnAwayAndBackBeforeCooldownEnds(enemy) &&
                         attacker.maxRangeVs(enemy) > enemy.maxRangeVs(attacker) &&
@@ -26,10 +28,11 @@ class Attack(private val attacker: SUnit,
             }
     )
 
-    private val attackEnemy = Seq("Engage",
+    private val attackEnemy = Sequence(
             Condition {
                 val relativeMovement = attacker.velocity.normalize().dot(enemy.velocity.normalize())
                 relativeMovement < -0.3 ||
+                        attacker.inAttackRange(enemy) ||
                         enemy.velocity.lengthSquared() < 10 ||
                         enemy.distanceTo(attacker) < attacker.maxRangeVs(enemy) + 16 ||
                         !attacker.flying && !geography.walkRay.noObstacle(attacker.walkPosition, enemy.walkPosition)
@@ -43,7 +46,7 @@ class Attack(private val attacker: SUnit,
                 }
             }
     )
-    private val interceptEnemy = Seq("Lead to enemy",
+    private val interceptEnemy = Sequence(
             NodeStatus.RUNNING.after {
                 val force = Potential.collisionRepulsion(attacker) * 0.4 +
                         Potential.intercept(attacker, enemy)
@@ -51,9 +54,9 @@ class Attack(private val attacker: SUnit,
             }
     )
 
-    private val evadeOtherEnemies = Seq("Evasive maneuvers",
+    private val evadeOtherEnemies = Sequence(
             Condition { attacker.couldTurnAwayAndBackBeforeCooldownEnds(enemy) },
-            {
+            LambdaNode {
                 val evadeTo = (0..8).asSequence()
                         .map {
                             Vector2D(64.0, 0.0).rotate(it * PI2 / 8)
@@ -70,23 +73,22 @@ class Attack(private val attacker: SUnit,
                     BasicActions.move(attacker, evadeTo.first.middlePosition())
                     NodeStatus.RUNNING
                 } else
-                    NodeStatus.FAILED
+                    NodeStatus.FAILURE
             })
 
-    private val homeInToEnemy = Seq("Hug enemy",
+    private val homeInToEnemy = Sequence(
             Condition {
                 enemy.weaponAgainst(attacker).minRange() > 0 ||
                         attacker.irridiated ||
-                        enemy.maxRangeVs(attacker) > attacker.maxRangeVs(enemy) && attacker.maxRangeVs(enemy) + 16 > attacker.distanceTo(enemy)
-            }
-            ,
+                        enemy.unitType.canMove() && (enemy.maxRangeVs(attacker) > attacker.maxRangeVs(enemy) && attacker.maxRangeVs(enemy) + 8 > attacker.distanceTo(enemy))
+            },
             NodeStatus.RUNNING.after {
                 val force = Potential.intercept(attacker, enemy)
                 Potential.apply(attacker, force)
             }
     )
 
-    private val findEnemy = Seq("Locate enemy",
+    private val findEnemy = Sequence(
             Condition { !enemy.visible },
             NodeStatus.RUNNING.after {
                 BasicActions.move(attacker, enemy.position)
@@ -95,13 +97,13 @@ class Attack(private val attacker: SUnit,
     private val evadeScarab = EvadeScarabs(attacker)
     private val evadeStorms = StormDodge(attacker)
 
-    override fun buildRoot(): SimpleNode = Sel("Attack",
+    override fun getRoot(): TreeNode = Selector(
             findEnemy,
             evadeScarab,
             evadeStorms,
-            Seq("Move while cooldown",
+            Sequence(
                     Condition { attacker.isOnCoolDown && attacker.canMoveWithoutBreakingAttack },
-                    Sel("Sel",
+                    Selector(
                             homeInToEnemy,
                             evadeOtherEnemies,
                             kiteEnemy
@@ -112,9 +114,10 @@ class Attack(private val attacker: SUnit,
     )
 }
 
-class StormDodge(private val unit: SUnit) : BehaviorTree("Evade Storm") {
+class StormDodge(private val unit: SUnit) : BehaviorTree() {
     private var storm: Bullet? = null
-    override fun buildRoot(): SimpleNode = Seq("Evade Storm",
+
+    override fun getRoot(): TreeNode = Sequence(
             Condition {
                 storm = game.bullets.firstOrNull { it.type == BulletType.Psionic_Storm && it.position.getDistance(unit.position) <= 64 }
                 storm != null
@@ -128,16 +131,17 @@ class StormDodge(private val unit: SUnit) : BehaviorTree("Evade Storm") {
 
 }
 
-class EvadeScarabs(private val unit: SUnit) : BehaviorTree("Evade Scarabs") {
+class EvadeScarabs(private val unit: SUnit) : BehaviorTree() {
     private var scarab: SUnit? = null
-    override fun buildRoot(): SimpleNode = Seq("Evade Scarabs",
+
+    override fun getRoot(): TreeNode = Sequence(
             Condition {
                 if (unit.flying)
                     return@Condition false
                 scarab = units.enemy.nearest(unit.x, unit.y, 128) { it.unitType == UnitType.Protoss_Scarab }
                 scarab != null
             },
-            {
+            LambdaNode {
                 val scarabTarget = scarab!!.target ?: scarab!!
                 if (scarabTarget.distanceTo(unit) < 64) {
                     val force = Potential.repelFrom(unit, scarabTarget) +
@@ -145,13 +149,15 @@ class EvadeScarabs(private val unit: SUnit) : BehaviorTree("Evade Scarabs") {
                     Potential.apply(unit, force)
                     NodeStatus.RUNNING
                 } else
-                    NodeStatus.FAILED
+                    NodeStatus.FAILURE
             }
     )
 
 }
 
-class Stop(private val unit: SUnit) : BehaviorTree("Unit Stop") {
-    override fun buildRoot(): SimpleNode = NodeStatus.RUNNING.after { unit.unit.stop() }
-
+class Stop(private val unit: SUnit) : TreeNode() {
+    override fun exec() {
+        unit.stop()
+        running()
+    }
 }

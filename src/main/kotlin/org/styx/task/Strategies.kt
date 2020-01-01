@@ -2,8 +2,8 @@ package org.styx.task
 
 import bwapi.UnitType
 import bwapi.UpgradeType
+import org.bk.ass.bt.*
 import org.styx.*
-import org.styx.Par.Companion.repeat
 import org.styx.Styx.diag
 import org.styx.Styx.economy
 import org.styx.Styx.relevantGameResults
@@ -16,29 +16,34 @@ import kotlin.math.sqrt
 
 open class Strat(
         name: String,
-        private vararg val nodes: SimpleNode) : BehaviorTree(name), Prioritized {
-    override fun buildRoot(): SimpleNode = Par("strat", true,
-            {
+        private vararg val nodes: TreeNode) : BehaviorTree() {
+    private var utility = 0.0
+    override fun getUtility(): Double = utility
+
+    init {
+        withName(name)
+    }
+
+    override fun getRoot(): TreeNode = Parallel(Parallel.Policy.SEQUENCE,
+            LambdaNode {
                 if (status == NodeStatus.INITIAL) {
-                    println("Selected strategy: $name with bound $priority")
-                    diag.log("Selected strategy: $name with bound $priority")
+                    println("Selected strategy: $name with bound $utility")
+                    diag.log("Selected strategy: $name with bound $utility")
                     Styx.strategy = name
                 }
-                NodeStatus.DONE
+                NodeStatus.SUCCESS
             },
             *nodes)
 
-    override var priority: Double = 0.0
-
-    override fun loadLearned() {
-        super.loadLearned()
+    override fun init() {
+        super.init()
         val n = relevantGameResults.amount
         val j = relevantGameResults.filteredByStrategy(name)
         val nj = j.amount
         val xj = j.score
-        priority = xj + sqrt(1.5 * ln(n.toDouble() + 1) / (nj + 1)) + random() * 0.0000001
-        println("Info for strategy $name: winrate: $xj, tried: $nj/$n; bound: $priority")
-        diag.log("Info for strategy $name: winrate: $xj, tried: $nj/$n; bound: $priority")
+        utility = xj + sqrt(1.0 * ln(n.toDouble() + 1) / (nj + 1)) + random() * 0.0000001
+        println("Info for strategy $name: winrate: $xj, tried: $nj/$n; bound: $utility")
+        diag.log("Info for strategy $name: winrate: $xj, tried: $nj/$n; bound: $utility")
     }
 
     override fun reset() {
@@ -48,9 +53,9 @@ open class Strat(
 
 object TwoHatchMuta : Strat("2HatchMuta",
         twelveHatchBasic,
-        Repeat(delegate = Get(12, UnitType.Zerg_Drone)),
+        Repeat(Get(12, UnitType.Zerg_Drone)),
         Build(UnitType.Zerg_Extractor),
-        Repeat(delegate = Get(8, UnitType.Zerg_Zergling)),
+        Repeat(Get(8, UnitType.Zerg_Zergling)),
         Morph(UnitType.Zerg_Lair),
         Get(3, UnitType.Zerg_Overlord),
         Upgrade(lingSpeedUpgrade, 1),
@@ -59,10 +64,10 @@ object TwoHatchMuta : Strat("2HatchMuta",
         Get(22, UnitType.Zerg_Drone),
         Expand(),
         Build(UnitType.Zerg_Extractor),
-        Repeat(delegate = Get(22, UnitType.Zerg_Drone)),
+        Repeat(Get(22, UnitType.Zerg_Drone)),
         Get(5, UnitType.Zerg_Overlord),
         ensureSupply(),
-        Repeat(delegate = Seq("Add Lings",
+        Repeat(Sequence(
                 WaitFor { resources.availableGMS.minerals > 800 },
                 pumpLings()
         )),
@@ -77,33 +82,37 @@ object ThreeHatchMuta : Strat("3HatchMuta",
         Build(UnitType.Zerg_Extractor),
         Get(2, UnitType.Zerg_Zergling),
         Get(15, UnitType.Zerg_Drone),
-        Get(2, UnitType.Zerg_Overlord),
+        Get(3, UnitType.Zerg_Overlord),
         Morph(UnitType.Zerg_Lair),
         Get(20, UnitType.Zerg_Drone),
         Build(UnitType.Zerg_Extractor),
         Upgrade(lingSpeedUpgrade, 1),
         Build(UnitType.Zerg_Spire),
         Get(22, UnitType.Zerg_Drone),
-        Get(3, UnitType.Zerg_Overlord),
-        Get(25, UnitType.Zerg_Drone),
+        Get(4, UnitType.Zerg_Overlord),
+        Repeat(Get(25, UnitType.Zerg_Drone)),
         Get(12, UnitType.Zerg_Zergling),
         Expand(),
         Get(6, UnitType.Zerg_Overlord),
         ensureSupply(),
+        Repeat(Sequence(
+                WaitFor { resources.availableGMS.minerals > 300 && resources.availableGMS.gas < 60 },
+                pumpLings()
+        )),
         pumpMutas()
-        )
+)
 
 object TwoHatchHydra : Strat("2HatchHydra",
         twelveHatchBasic,
         Build(UnitType.Zerg_Extractor),
         Get(12, UnitType.Zerg_Drone),
-        Repeat(delegate = Get(6, UnitType.Zerg_Zergling)),
+        Repeat(Get(6, UnitType.Zerg_Zergling)),
         Build(UnitType.Zerg_Hydralisk_Den),
-        Repeat(delegate = Get(13, UnitType.Zerg_Drone)),
+        Repeat(Get(13, UnitType.Zerg_Drone)),
         Train(UnitType.Zerg_Overlord),
         Upgrade(hydraRangeUpgrade, 1),
         ensureSupply(),
-        Repeat(delegate = Seq("More hatches",
+        Repeat(Sequence(
                 WaitFor { resources.availableGMS.minerals > 600 },
                 Build(UnitType.Zerg_Hatchery))
         ),
@@ -120,15 +129,15 @@ object ThirteenPoolMuta : Strat("13PoolMuta",
         Get(12, UnitType.Zerg_Drone),
         Expand(),
         Morph(UnitType.Zerg_Lair),
-        Repeat(delegate = Get(4, UnitType.Zerg_Zergling)),
+        Repeat(Get(4, UnitType.Zerg_Zergling)),
         Get(14, UnitType.Zerg_Drone),
         Get(3, UnitType.Zerg_Overlord),
-        Repeat(delegate = Get(15, UnitType.Zerg_Drone)),
+        Repeat(Get(15, UnitType.Zerg_Drone)),
         Build(UnitType.Zerg_Spire),
         Get(1, UnitType.Zerg_Creep_Colony),
         Morph(UnitType.Zerg_Sunken_Colony),
         Build(UnitType.Zerg_Extractor),
-        Repeat(delegate = Get(18, UnitType.Zerg_Drone)),
+        Repeat(Get(18, UnitType.Zerg_Drone)),
         Get(5, UnitType.Zerg_Overlord),
         ensureSupply(),
         pumpMutas()
@@ -145,14 +154,14 @@ object Nine734 : Strat("9734",
         Train(UnitType.Zerg_Overlord),
         Get(18, UnitType.Zerg_Drone),
         Upgrade(hydraSpeedUpgrade, 1),
-        Repeat(delegate = Get(4, UnitType.Zerg_Zergling)),
-        Repeat(delegate = Get(22, UnitType.Zerg_Drone)),
+        Repeat(Get(4, UnitType.Zerg_Zergling)),
+        Repeat(Get(22, UnitType.Zerg_Drone)),
         ensureSupply(),
         Get(5, UnitType.Zerg_Hydralisk),
         Upgrade(hydraRangeUpgrade, 1),
         Expand(),
-        Repeat(delegate = Get(10, UnitType.Zerg_Hydralisk)),
-        Repeat(delegate = Get(29, UnitType.Zerg_Drone)),
+        Repeat(Get(10, UnitType.Zerg_Hydralisk)),
+        Repeat(Get(29, UnitType.Zerg_Drone)),
         Build(UnitType.Zerg_Hatchery),
         Build(UnitType.Zerg_Extractor),
 //        Morph(UnitType.Zerg_Lair),
@@ -162,7 +171,7 @@ object Nine734 : Strat("9734",
         Build(UnitType.Zerg_Hatchery),
         Upgrade(UpgradeType.Zerg_Missile_Attacks, 1),
         Upgrade(UpgradeType.Metabolic_Boost, 1),
-        Repeat(delegate = Get({ units.my(UnitType.Zerg_Hydralisk).size * 7 / 10 }, UnitType.Zerg_Zergling, true)),
+        Repeat(Get({ units.my(UnitType.Zerg_Hydralisk).size * 7 / 10 }, UnitType.Zerg_Zergling, true)),
         pumpHydras()
 )
 
@@ -171,9 +180,9 @@ object NinePoolCheese : Strat("9 Pool Cheese",
         Build(UnitType.Zerg_Spawning_Pool),
         Train(UnitType.Zerg_Overlord),
         ensureSupply(),
-        repeat("Initial lings", 3) { Train(UnitType.Zerg_Zergling) },
+        { Train(UnitType.Zerg_Zergling) }.repeat(3),
         haveBasicZerglingSquad(),
-        Repeat(delegate = Get(7, UnitType.Zerg_Drone)),
+        Repeat(Get(7, UnitType.Zerg_Drone)),
         pumpLings(),
         Get(2, UnitType.Zerg_Hatchery),
         Build(UnitType.Zerg_Extractor),
@@ -181,12 +190,12 @@ object NinePoolCheese : Strat("9 Pool Cheese",
         Gathering(true)
 )
 
-val ninePoolBasic = Par("9 Pool", true,
+val ninePoolBasic = Parallel(Parallel.Policy.SEQUENCE,
         Get(9, UnitType.Zerg_Drone),
         Build(UnitType.Zerg_Spawning_Pool)
 )
 
-val overPoolBasic = Par("Overpool", true,
+val overPoolBasic = Parallel(Parallel.Policy.SEQUENCE,
         Get(9, UnitType.Zerg_Drone),
         Train(UnitType.Zerg_Overlord),
         Build(UnitType.Zerg_Spawning_Pool),
@@ -194,7 +203,7 @@ val overPoolBasic = Par("Overpool", true,
         Expand()
 )
 
-val twelveHatchBasic = Par("12 Hatch", true,
+val twelveHatchBasic = Parallel(Parallel.Policy.SEQUENCE,
         Get(9, UnitType.Zerg_Drone),
         Train(UnitType.Zerg_Overlord),
         Get(12, UnitType.Zerg_Drone),
@@ -203,10 +212,17 @@ val twelveHatchBasic = Par("12 Hatch", true,
 )
 
 
-private fun pumpLings() = Repeat(delegate = Get(200, UnitType.Zerg_Zergling, true))
-private fun pumpHydras() = Repeat(delegate = Get(200, UnitType.Zerg_Hydralisk, true))
-private fun pumpMutas() = Repeat(delegate = Get(200, UnitType.Zerg_Mutalisk, true))
-private fun haveBasicZerglingSquad() = Repeat(delegate = Get(6, UnitType.Zerg_Zergling))
-private fun ensureSupply() = Repeat(delegate = Seq("Supply", WaitFor {
-    economy.supplyWithPlanned < 4
-}, Train(UnitType.Zerg_Overlord)))
+private fun pumpLings() = Repeat(Get(200, UnitType.Zerg_Zergling, true))
+private fun pumpHydras() = Repeat(Get(200, UnitType.Zerg_Hydralisk, true))
+private fun pumpMutas() = Repeat(Get(200, UnitType.Zerg_Mutalisk, true))
+private fun haveBasicZerglingSquad() = Repeat(Get(6, UnitType.Zerg_Zergling))
+private fun ensureSupply() =
+        Repeat(
+                Sequence(
+                        WaitFor {
+                            economy.supplyWithPlanned < 4 ||
+                                    economy.supplyWithPlanned < 16 && resources.availableGMS.minerals > 400
+                        },
+                        Train(UnitType.Zerg_Overlord)
+                )
+        )

@@ -1,6 +1,7 @@
 package org.styx.task
 
 import bwapi.UnitType
+import org.bk.ass.bt.TreeNode
 import org.styx.*
 import org.styx.Styx.economy
 import org.styx.Styx.resources
@@ -8,18 +9,20 @@ import org.styx.Styx.units
 import org.styx.action.BasicActions
 import kotlin.math.min
 
-class Gathering(private val onlyRequiredGas: Boolean = false) : BTNode() {
+class Gathering(private val onlyRequiredGas: Boolean = false) : TreeNode() {
     private val workersLock = UnitLocks { Styx.resources.availableUnits.filter { it.unitType.isWorker } }
     private val assignment = mutableMapOf<SUnit, SUnit>()
 
-    override fun tick(): NodeStatus {
+    override fun exec() {
+        running()
         workersLock.reacquire()
-        if (workersLock.units.isEmpty()) // No workers left? We have serious problems
-            return NodeStatus.RUNNING
+        if (workersLock.item.isEmpty()) {// No workers left? We have serious problems
+            return
+        }
 
         val availableGMS = resources.availableGMS
         val gatherGas = availableGMS.gas < 0 && units.myWorkers.count() > 6 || !onlyRequiredGas
-        val workers = workersLock.units
+        val workers = workersLock.item
 
         val futureResources = economy.estimatedAdditionalGMSIn(24 * 140) +
                 availableGMS
@@ -71,6 +74,6 @@ class Gathering(private val onlyRequiredGas: Boolean = false) : BTNode() {
                 BasicActions.gather(worker, assigned)
             }
         }
-        return NodeStatus.RUNNING
+        return
     }
 }

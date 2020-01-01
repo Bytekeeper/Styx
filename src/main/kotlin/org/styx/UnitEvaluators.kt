@@ -27,10 +27,10 @@ data class Disengage(override val unit: SUnit) : CombatMove
 object TargetEvaluator {
     private val byEnemyType: TargetScorer = { _, e, _ ->
         when (e.unitType) {
-            UnitType.Zerg_Egg, UnitType.Zerg_Lurker_Egg, UnitType.Zerg_Larva -> -10.0
-            UnitType.Zerg_Extractor, UnitType.Terran_Refinery, UnitType.Protoss_Assimilator, UnitType.Protoss_Interceptor -> -2.0
-            UnitType.Zerg_Drone -> 0.9
-            UnitType.Protoss_Probe, UnitType.Terran_SCV -> 0.4
+            UnitType.Zerg_Egg, UnitType.Zerg_Lurker_Egg, UnitType.Zerg_Larva, UnitType.Protoss_Interceptor -> -10.0
+            UnitType.Zerg_Extractor, UnitType.Terran_Refinery, UnitType.Protoss_Assimilator -> -2.0
+            UnitType.Zerg_Drone, UnitType.Terran_SCV -> 0.3
+            UnitType.Protoss_Probe -> 0.1
             UnitType.Terran_Medic, UnitType.Protoss_High_Templar -> 0.1
             else -> 0.0
         }
@@ -47,10 +47,6 @@ object TargetEvaluator {
         -(e.hitPoints / (a.damagePerFrameVs(e) + EPS) - e.shields / (damageAmount + EPS)) * evalFramesToKillFactor
     }
 
-    private val byEnemyRange: TargetScorer = { a, e, _ ->
-        if (e.hasPower) e.maxRangeVs(a) / 1000.0 else 0.0
-    }
-
     private val byEnemySpeed: TargetScorer = { a, e, _ ->
         -e.topSpeed / 40
     }
@@ -58,10 +54,11 @@ object TargetEvaluator {
     private val byEnemyDamageCapabilities: TargetScorer = { a, e, _ ->
         -e.cooldownRemaining / 100.0 +
                 (if (e.hasPower) e.damagePerFrameVs(a) * 0.4 else 0.0) *
-                (if (e.weaponAgainst(a).isSplash) 2.0 else 1.0)
+                (if (e.weaponAgainst(a).isSplash) 1.3 else 1.0) *
+                (1.0 + e.maxRangeVs(a) / 20.0)
     }
 
-    private val defaultScorers = listOf(byEnemyType, byTimeToAttack, byTimeToKillEnemy, byEnemyRange, byEnemySpeed, byEnemyDamageCapabilities)
+    private val defaultScorers = listOf(byEnemyType, byTimeToAttack, byTimeToKillEnemy, byEnemySpeed, byEnemyDamageCapabilities)
 
     fun bestCombatMoves(attackers: Collection<SUnit>, targets: Collection<SUnit>, aggressiveness: Double): List<CombatMove> {
         val relevantTargets = targets
@@ -71,7 +68,7 @@ object TargetEvaluator {
 
         val alreadyEngaged = relevantTargets.any { e -> attackers.any { e.inAttackRange(it, 48) || it.inAttackRange(e, 48) } } || relevantTargets.none { it.unitType.canAttack() }
         val averageMinimumDistanceToEnemy = if (alreadyEngaged) 0.0 else attackers.map { a -> relevantTargets.map { a.distanceTo(it) }.min()!! }.average()
-        val pylons = 2 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
+        val pylons = 3 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
         val defensiveBuildings = targets.count {
             it.remainingBuildTime < 48 &&
                     (it.unitType == UnitType.Protoss_Photon_Cannon || it.unitType == UnitType.Protoss_Shield_Battery)
@@ -129,10 +126,13 @@ fun unitThreatValueToEnemy(unitType: UnitType): Int {
     }
     val airWeapon = unitType.airWeapon()
     val airDPF = ((airWeapon.damageAmount() * unitType.maxAirHits()) / airWeapon.damageCooldown().toDouble()).orZero() *
-            (if (airWeapon.isSplash) 2 else 1)
+            (if (airWeapon.isSplash) 1.3 else 1.0) *
+            (1 + airWeapon.maxRange() / 20.0)
     val groundWeapon = unitType.groundWeapon()
     val groundDPF = ((groundWeapon.damageAmount() * unitType.maxGroundHits()) / groundWeapon.damageCooldown().toDouble()).orZero() *
-            (if (groundWeapon.isSplash) 2 else 1)
+            (if (groundWeapon.isSplash) 1.3 else 1.0) *
+            (1 + groundWeapon.maxRange() / 20.0)
+
     return (max(airDPF, groundDPF) * dpfThreatValueFactor).toInt()
 }
 
