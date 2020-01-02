@@ -4,7 +4,6 @@ import bwapi.Position
 import bwapi.UnitType
 import bwapi.WeaponType
 import org.bk.ass.sim.Agent
-import org.bk.ass.sim.Simulator
 import org.locationtech.jts.math.DD.EPS
 import org.styx.Config.dpfThreatValueFactor
 import org.styx.Config.evalFramesToKillFactor
@@ -53,9 +52,9 @@ object TargetEvaluator {
 
     private val byEnemyDamageCapabilities: TargetScorer = { a, e, _ ->
         -e.cooldownRemaining / 100.0 +
-                (if (e.hasPower) e.damagePerFrameVs(a) * 0.4 else 0.0) *
-                (if (e.weaponAgainst(a).isSplash) 1.3 else 1.0) *
-                (1.0 + e.maxRangeVs(a) / 20.0)
+                (if (e.hasPower) e.damagePerFrameVs(a) * 0.01 else 0.0) *
+                (if (e.weaponAgainst(a).isSplash) 1.5 else 1.0) *
+                (1.0 + e.maxRangeVs(a) * Config.rangeValueFactor)
     }
 
     private val defaultScorers = listOf(byEnemyType, byTimeToAttack, byTimeToKillEnemy, byEnemySpeed, byEnemyDamageCapabilities)
@@ -126,21 +125,21 @@ fun unitThreatValueToEnemy(unitType: UnitType): Int {
     }
     val airWeapon = unitType.airWeapon()
     val airDPF = ((airWeapon.damageAmount() * unitType.maxAirHits()) / airWeapon.damageCooldown().toDouble()).orZero() *
-            (if (airWeapon.isSplash) 1.3 else 1.0) *
-            (1 + airWeapon.maxRange() / 20.0)
+            (if (airWeapon.isSplash) 1.5 else 1.0) *
+            (1 + airWeapon.maxRange() * Config.rangeValueFactor)
     val groundWeapon = unitType.groundWeapon()
     val groundDPF = ((groundWeapon.damageAmount() * unitType.maxGroundHits()) / groundWeapon.damageCooldown().toDouble()).orZero() *
-            (if (groundWeapon.isSplash) 1.3 else 1.0) *
-            (1 + groundWeapon.maxRange() / 20.0)
+            (if (groundWeapon.isSplash) 1.5 else 1.0) *
+            (1 + groundWeapon.maxRange() * Config.rangeValueFactor)
 
     return (max(airDPF, groundDPF) * dpfThreatValueFactor).toInt()
 }
 
-fun agentHealthAndShieldValue(agent: Agent): Int =
-        Simulator.HEALTH_AND_HALFED_SHIELD.applyAsInt(agent) / 12
+fun agentHealthAndShieldValue(agent: SUnit): Int =
+        (agent.hitPoints + agent.shields / 2) / 12
 
 fun unitTypeValue(unitType: UnitType) = when (unitType) {
-    UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 11
+    UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 17
     UnitType.Terran_Medic, UnitType.Protoss_High_Templar, UnitType.Terran_Science_Vessel -> 3
     UnitType.Terran_Vulture_Spider_Mine -> 0
     else -> 2
@@ -151,10 +150,11 @@ fun unitTypeValue(unitType: UnitType) = when (unitType) {
 val agentValueForPlayer = ToIntFunction<Agent> { agent ->
     val sUnit = agent.userObject as SUnit? ?: return@ToIntFunction 0
 //    diag.log("agentValue ${sUnit} = ${unitThreatValueToEnemy(sUnit.unitType)}, ${agentHealthAndShieldValue(agent)}, ${unitTypeValue(sUnit.unitType)}")
-    valueOfAgent(agent, sUnit.unitType)
+    valueOfUnit(sUnit)
 }
 
-fun valueOfAgent(agent: Agent, type: UnitType) =
-        unitThreatValueToEnemy(type) +
-                agentHealthAndShieldValue(agent) +
-                unitTypeValue(type)
+fun valueOfUnit(unit: SUnit): Int {
+    return unitThreatValueToEnemy(unit.unitType) +
+            agentHealthAndShieldValue(unit) +
+            unitTypeValue(unit.unitType)
+}

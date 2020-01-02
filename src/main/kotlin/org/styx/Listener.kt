@@ -21,10 +21,10 @@ class Listener : DefaultBWListener() {
             Styx,
             squadDispatch,
             Best(
-                    //Nine734,
-//                    NinePoolCheese,
-//                    TwoHatchHydra,
-//                    TwoHatchMuta,
+                    Nine734,
+                    NinePoolCheese,
+                    TwoHatchHydra,
+                    TwoHatchMuta,
                     ThreeHatchMuta
 
                     // Actually crappy strategies:

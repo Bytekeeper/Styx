@@ -14,7 +14,7 @@ import sun.reflect.generics.tree.Tree
 
 class Attack(private val attacker: SUnit,
              private val enemy: SUnit) : BehaviorTree() {
-    val kiteEnemy = Sequence(
+    private val kiteEnemy = Sequence(
             Condition {
                 attacker.couldTurnAwayAndBackBeforeCooldownEnds(enemy) &&
                         attacker.maxRangeVs(enemy) > enemy.maxRangeVs(attacker) &&
@@ -48,7 +48,7 @@ class Attack(private val attacker: SUnit,
     )
     private val interceptEnemy = Sequence(
             NodeStatus.RUNNING.after {
-                val force = Potential.collisionRepulsion(attacker) * 0.4 +
+                val force = Potential.collisionRepulsion(attacker) * 0.2 +
                         Potential.intercept(attacker, enemy)
                 Potential.apply(attacker, force)
             }

@@ -65,10 +65,9 @@ class SeekCombatSquad(private val squad: SquadBoard) : TreeNode() {
 
     private fun bestSquadToSupport(squad: SquadBoard, candidates: List<Pair<SquadBoard, Double>>) =
             candidates.minBy { (s, eval) ->
-                bases.enemyBases.map { it.center.getDistance(s.center) }.min(0.0) / 3000.0 +
-                        s.center.getDistance(squad.center) / 3000.0 +
-                        (eval - 0.6) * (s.enemies.count { it.isCombatRelevant } + s.enemies.size / 15.0) +
-                        (eval - 0.55) * (s.mine.count { !it.isCombatRelevant } * 12
-                        )
+                bases.enemyBases.map { it.center.getDistance(s.center) }.min(0.0) +
+                        s.center.getDistance(squad.center) +
+                        (eval - 0.7) * s.enemies.sumBy { valueOfUnit(it) } +
+                        (eval - 0.55) * s.mine.sumBy { valueOfUnit(it) } * 3
             }
 }
