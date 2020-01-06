@@ -119,6 +119,7 @@ class SUnit private constructor(val unit: Unit) {
     var hatchery: SUnit? = null
         private set
     val threats by LazyOnFrame { Styx.units.enemy.inRadius(this, 400) { it.inAttackRange(this, 96) } }
+    val engaged by LazyOnFrame { Styx.units.enemy.inRadius(this, 400) { it.target == this && it.inAttackRange(this, 64) } }
     val safe by LazyOnFrame {
         if (flying)
             Styx.units.enemy.nearest(x, y, 400) { it.inAttackRange(this, 96) } == null

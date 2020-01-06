@@ -4,9 +4,12 @@ import bwapi.UnitType
 import org.bk.ass.bt.*
 import org.bk.ass.manage.GMS
 import org.bk.ass.manage.Lock
-import org.styx.*
+import org.styx.SUnit
+import org.styx.Styx
 import org.styx.Styx.units
+import org.styx.UnitLock
 import org.styx.action.BasicActions
+import org.styx.costLocks
 import org.styx.global.PlannedUnit
 
 
@@ -18,26 +21,29 @@ class AcquireUnitLock(private val lock: UnitLock) : TreeNode() {
         else
             failed()
     }
-}
 
-class WaitForUnitLock(private val lock: UnitLock) : TreeNode() {
-    override fun exec() {
-        lock.acquire()
-        if (lock.isSatisfied)
-            success()
-        else
-            running()
+    override fun reset() {
+        super.reset()
+        lock.reset()
     }
 }
 
-class WaitForCostLock(private val lock: Lock<GMS>) : TreeNode() {
+class WaitForUnitLock(private val lock: UnitLock) : Decorator(
+        Repeat(Repeat.Policy.SELECTOR, AcquireUnitLock(lock))
+)
+
+class AcquireCostLock(private val lock: Lock<GMS>) : TreeNode() {
     override fun exec() {
         if (lock.acquire())
             success()
         else
-            running()
+            failed()
     }
 }
+
+class WaitForCostLock(lock: Lock<GMS>) : Decorator(
+        Repeat(Repeat.Policy.SELECTOR, AcquireCostLock(lock))
+)
 
 data class TrainBoard(
         val type: UnitType,
@@ -70,20 +76,19 @@ class PrepareTrain(private val board: TrainBoard) : BehaviorTree() {
     override fun getRoot(): TreeNode =
             Selector(
                     LambdaNode(this::checkStarted),
-                    Selector(
-                            DoneFilter(Parallel(Parallel.Policy.SEQUENCE,
+                    Parallel(Parallel.Policy.SELECTOR,
+                            Parallel(Parallel.Policy.SEQUENCE,
                                     EnsureDependenciesFor(board.type),
                                     WaitForUnitLock(board.trainerLock),
                                     WaitForCostLock(board.costLock),
-                                    WaitFor { requiredUnitsAreCompleted() }
-                            )),
+                                    Repeat(Repeat.Policy.SELECTOR, Condition { requiredUnitsAreCompleted() })
+                            ),
                             LambdaNode(this::registerAsPlanned)
                     )
             )
 
     override fun reset() {
         super.reset()
-        board.trainerLock.reset()
         board.trainee = null
     }
 
@@ -144,9 +149,9 @@ class Train(private val board: TrainBoard) : BehaviorTree() {
     override fun getRoot(): TreeNode = Memo(
             Sequence(
                     StartTrain(board),
-                    WaitFor {
+                    Repeat(Repeat.Policy.SELECTOR, Condition {
                         board.trainee?.isCompleted == true
-                    }
+                    })
             )
     )
 }

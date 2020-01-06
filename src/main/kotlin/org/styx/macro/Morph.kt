@@ -1,51 +1,56 @@
 package org.styx.macro
 
 import bwapi.UnitType
-import org.bk.ass.bt.NodeStatus
-import org.styx.*
+import org.bk.ass.bt.*
+import org.bk.ass.manage.GMS
+import org.bk.ass.manage.Lock
+import org.styx.SUnit
+import org.styx.Styx
+import org.styx.UnitLock
 import org.styx.action.BasicActions
+import org.styx.costLocks
 import org.styx.global.PlannedUnit
 
 data class MorphBoard(
         val type: UnitType,
-        var unit: SUnit?
-)
-
-/*
-class Morph2(private val board: MorphBoard) : BehaviorTree("Morphing ${board.type}") {
-    override fun buildRoot(): SimpleNode = Memo(
-            Sel("Execute",
-                    Condition { board.unit?.isCompleted == true }
-                    )
-    )
-
+        var unit: SUnit? = null
+) {
+    val morphLock = UnitLock() { Styx.resources.availableUnits.firstOrNull { it.unitType == type.whatBuilds().first && it.isCompleted } }
+    val costLock: Lock<GMS> = costLocks.unitCostLock(type)
 }
-*/
-class Morph(private val type: UnitType) : MemoLeaf() {
-    private val morphLock = UnitLock() { Styx.resources.availableUnits.firstOrNull { it.unitType == type.whatBuilds().first && it.isCompleted } }
-    private val costLock = costLocks.unitCostLock(type)
 
-    override fun tick(): NodeStatus {
-        if (morphLock.item?.unitType == type)
-            return NodeStatus.SUCCESS
-        costLock.acquire()
-        if (costLock.isSatisfied) {
-            morphLock.acquire()
-            val unitToMorph = morphLock.item ?: run {
-                Styx.buildPlan.plannedUnits += PlannedUnit(type, consumedUnit = if (type.isBuilding) null else type.whatBuilds().first)
-                return NodeStatus.RUNNING
-            }
-            BasicActions.morph(unitToMorph, type)
-        } else {
-            Styx.buildPlan.plannedUnits += PlannedUnit(type, consumedUnit = if (type.isBuilding) null else type.whatBuilds().first)
-        }
-        return NodeStatus.RUNNING
-    }
+class StartMorph(private val board: MorphBoard) : BehaviorTree() {
+    override fun getRoot(): TreeNode =
+            Selector(
+                    Sequence(
+                            AcquireCostLock(board.costLock),
+                            AcquireUnitLock(board.morphLock),
+                            LambdaNode {
+                                board.unit = board.morphLock.item
+                                BasicActions.morph(board.morphLock.item, board.type)
+                                return@LambdaNode NodeStatus.RUNNING
+                            }
+                    ),
+                    NodeStatus.RUNNING.after() {
+                        board.unit = null
+                        val type = board.type
+                        Styx.buildPlan.plannedUnits += PlannedUnit(type, consumedUnit = if (type.isBuilding) null else type.whatBuilds().first)
+                    }
+            )
 
     override fun reset() {
         super.reset()
-        morphLock.reset()
+        board.unit = null
     }
+}
 
-    override fun toString(): String = "Morph $type"
+class Morph(private val board: MorphBoard) : BehaviorTree() {
+    constructor(type: UnitType) : this(MorphBoard(type))
+
+    override fun getRoot(): TreeNode = Memo(
+            Selector(
+                    Condition { board.unit?.unitType == board.type },
+                    StartMorph(board)
+            )
+    )
 }

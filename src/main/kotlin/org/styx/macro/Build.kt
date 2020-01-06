@@ -3,6 +3,8 @@ package org.styx.macro
 import bwapi.TilePosition
 import bwapi.UnitType
 import org.bk.ass.bt.*
+import org.bk.ass.manage.GMS
+import org.bk.ass.manage.Lock
 import org.styx.*
 import org.styx.Styx.buildPlan
 import org.styx.Styx.resources
@@ -24,7 +26,7 @@ data class BuildBoard(
         val eval = closeTo(location!!.toPosition())
         resources.availableUnits.filter { it.unitType.isWorker }.minBy { eval(it) }
     }
-    val costLock = costLocks.unitCostLock(type)
+    val costLock: Lock<GMS> = costLocks.unitCostLock(type)
 
     init {
         require(type.isBuilding)
@@ -34,11 +36,11 @@ data class BuildBoard(
 class CancelBuild(private val board: BuildBoard) : BehaviorTree() {
     override fun getRoot(): TreeNode =
             Selector(
-            Condition { board.building?.exists != true },
-            NodeStatus.RUNNING.after {
-                board.building?.cancelBuild()
-            }
-    )
+                    Condition { board.building?.exists != true },
+                    NodeStatus.RUNNING.after {
+                        board.building?.cancelBuild()
+                    }
+            )
 }
 
 class FindBuildSpot(private val board: BuildBoard) : TreeNode() {
@@ -96,6 +98,9 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
                 board.building = candidate
                 return NodeStatus.SUCCESS
             } else // Maybe destroyed/Cancelled?
+                if (board.building != null) {
+                    println("WTF")
+                }
                 board.building = null
             if (board.workerLock.item?.canBuildHere(targetLocation, board.type) == false || candidate?.tilePosition == targetLocation && candidate.unitType.isBuilding)
                 board.location = null
@@ -136,6 +141,14 @@ class OrderBuild(private val board: BuildBoard) : BehaviorTree() {
             }
         }
         return NodeStatus.RUNNING
+    }
+
+    override fun abort() {
+        if (board.workerLock.isSatisfied && board.workerLock.item.orderTarget?.unitType?.isResourceContainer == false) {
+            System.err.println("!")
+        }
+        println("Aborted Build of ${board.type}")
+        super.abort()
     }
 }
 

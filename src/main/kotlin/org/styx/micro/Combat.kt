@@ -10,14 +10,15 @@ import org.styx.Styx.game
 import org.styx.Styx.geography
 import org.styx.Styx.units
 import org.styx.action.BasicActions
-import sun.reflect.generics.tree.Tree
 
 class Attack(private val attacker: SUnit,
              private val enemy: SUnit) : BehaviorTree() {
     private val kiteEnemy = Sequence(
             Condition {
+                val enemyRangeVsUs = enemy.maxRangeVs(attacker)
+                val ourRangeVsEnemy = attacker.maxRangeVs(enemy)
                 attacker.couldTurnAwayAndBackBeforeCooldownEnds(enemy) &&
-                        attacker.maxRangeVs(enemy) > enemy.maxRangeVs(attacker) &&
+                        (ourRangeVsEnemy > enemyRangeVsUs || ourRangeVsEnemy == enemyRangeVsUs && attacker.topSpeed > enemy.topSpeed) &&
                         enemy.inAttackRange(attacker, 64) &&
                         attacker.inAttackRange(enemy, -16)
             },
@@ -33,7 +34,7 @@ class Attack(private val attacker: SUnit,
                 val relativeMovement = attacker.velocity.normalize().dot(enemy.velocity.normalize())
                 relativeMovement < -0.3 ||
                         attacker.inAttackRange(enemy) ||
-                        enemy.velocity.lengthSquared() < 10 ||
+//                        enemy.velocity.lengthSquared() < 10 ||
                         enemy.distanceTo(attacker) < attacker.maxRangeVs(enemy) + 16 ||
                         !attacker.flying && !geography.walkRay.noObstacle(attacker.walkPosition, enemy.walkPosition)
             },
@@ -67,10 +68,11 @@ class Attack(private val attacker: SUnit,
                                     (attacker.flying || geography.walkRay.noObstacle(attacker.walkPosition, it))
 
                         }.map {
-                            it to attacker.threats.count { t -> t == enemy || t.distanceTo(it.toPosition(), attacker.unitType) <= t.maxRangeVs(attacker) }
+                            val position = it.middlePosition()
+                            position to attacker.engaged.count { t -> t == enemy || t.distanceTo(position, attacker.unitType) <= t.maxRangeVs(attacker) }
                         }.minBy { it.second }
-                if (evadeTo != null && evadeTo.second < attacker.threats.size) {
-                    BasicActions.move(attacker, evadeTo.first.middlePosition())
+                if (evadeTo != null && evadeTo.second < attacker.engaged.size) {
+                    BasicActions.move(attacker, evadeTo.first)
                     NodeStatus.RUNNING
                 } else
                     NodeStatus.FAILURE

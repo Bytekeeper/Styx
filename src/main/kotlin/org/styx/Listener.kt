@@ -9,6 +9,7 @@ import org.bk.ass.bt.Best
 import org.bk.ass.bt.ExecutionContext
 import org.bk.ass.bt.Parallel
 import org.styx.Styx.diag
+import org.styx.Styx.units
 import org.styx.task.*
 
 class Listener : DefaultBWListener() {
@@ -29,7 +30,7 @@ class Listener : DefaultBWListener() {
 
                     // Actually crappy strategies:
 //                    ThirteenPoolMuta,
-            ),
+            ).withName("Strategy"),
             Gathering(),
             Scouting
     ).withName("AI Tree")

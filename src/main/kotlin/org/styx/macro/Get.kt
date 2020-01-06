@@ -4,17 +4,20 @@ import bwapi.UnitType
 import org.bk.ass.bt.NodeStatus
 import org.bk.ass.bt.TreeNode
 import org.bk.ass.manage.GMS
-import org.styx.*
+import org.styx.MemoLeaf
+import org.styx.Styx
 import org.styx.Styx.buildPlan
 import org.styx.Styx.resources
 import org.styx.Styx.units
+import org.styx.plus
+import org.styx.shortName
 import java.util.*
 import kotlin.math.max
 import kotlin.math.min
 
 class Get(private val amountProvider: () -> Int,
           private val type: UnitType,
-          private val dynamic: Boolean = false) : MemoLeaf() {
+          private val limitByAvailableBuilders: Boolean = false) : MemoLeaf() {
     private val children = ArrayDeque<TreeNode>()
 
     constructor(amount: Int, type: UnitType, dynamic: Boolean = false) : this({ amount }, type, dynamic)
@@ -36,11 +39,9 @@ class Get(private val amountProvider: () -> Int,
         }
 
         val availableBuilders = resources.availableUnits.count { type.whatBuilds().first == it.unitType && it.buildType == UnitType.None }
-        val builders =
-                availableBuilders +
-                        determineFutureBuildersToBlockNow()
+        val builders = availableBuilders + determineFutureBuildersToBlockNow()
         val expectedChildCount =
-                if (dynamic)
+                if (limitByAvailableBuilders)
                     min(builders, (remaining + pendingUnitsFactor / 2) / pendingUnitsFactor)
                 else
                     (remaining + pendingUnitsFactor / 2) / pendingUnitsFactor
@@ -65,6 +66,15 @@ class Get(private val amountProvider: () -> Int,
     override fun reset() {
         super.reset()
         children.clear()
+    }
+
+    override fun abort() {
+        super.abort()
+        if (type.isBuilding && children.any { it.status == NodeStatus.RUNNING }) {
+            println("!")
+        }
+        children.filter { it.status === NodeStatus.RUNNING }
+                .forEach { it.abort() }
     }
 
     // Do we have enough money when the builder arrives? If not, we should lock resources etc.

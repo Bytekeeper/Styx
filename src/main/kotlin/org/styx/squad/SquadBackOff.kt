@@ -25,7 +25,7 @@ class SquadBackOff(private val squad: SquadBoard) : TreeNode() {
         if (attackerLock.item.isEmpty())
             return
         val targetSquad = Styx.squads.squads
-                .maxBy { it.fastEval.value - it.enemies.size / 15.0 + it.mine.size / 70.0 }
+                .maxBy { it.mine.count { it.unitType.isBuilding } }
                 ?: return
         if (targetSquad.mine.isEmpty()) {
             attackerLock.item.forEach { attacker ->
@@ -39,15 +39,19 @@ class SquadBackOff(private val squad: SquadBoard) : TreeNode() {
         val bestUnit = targetSquad.mine.filter { !it.flying }.minBy { it.distanceTo(targetSquad.myCenter) }
                 ?: targetSquad.mine.minBy { it.distanceTo(targetSquad.myCenter) }!!
         Styx.diag.log("Squad backing off ${squad.name} (${attackerLock.item.size} units) to $bestUnit")
-        attackerLock.item.forEach { a ->
-            if (a.flying) {
-                val force = Potential.reach(a, targetSquad.myCenter) +
-                        Potential.avoidDanger(a, 64) * 0.5
-                Potential.apply(a, force)
-            } else {
-                BasicActions.follow(a, bestUnit)
-            }
-        }
-        return
+        attackerLock.item.toList()
+                .forEach { a ->
+                    when {
+                        a.safe -> attackerLock.releaseItem(a)
+                        a.flying -> {
+                            val force = Potential.reach(a, targetSquad.myCenter) +
+                                    Potential.avoidDanger(a, 64) * 0.5
+                            Potential.apply(a, force)
+                        }
+                        else -> {
+                            BasicActions.follow(a, bestUnit)
+                        }
+                    }
+                }
     }
 }

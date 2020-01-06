@@ -42,7 +42,7 @@ function play() {
 #play BananaBrain
 # play tscmoo
 #play tscmoop2
-# play WuliBot
+#play WuliBot
 #play TyrProtoss
 #play 'Tomas Vajda'
 #play McRave
@@ -72,7 +72,7 @@ play Microwave
 play 'Iron bot'
 play Steamhammer
 play 'Marian Devecka'
-#play ChimeraBot
+play ChimeraBot
 play Antiga
-#play Proxy
+play Proxy
 sleep 5

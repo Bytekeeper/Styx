@@ -1,6 +1,8 @@
 package org.styx.squad
 
 import bwapi.UnitType
+import org.bk.ass.bt.Distributor
+import org.bk.ass.bt.Parallel
 import org.bk.ass.bt.TreeNode
 import org.bk.ass.sim.Agent
 import org.bk.ass.sim.IntEvaluation
@@ -21,7 +23,8 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
     private var workersToUse = 0
     private var lastAttackHysteresis = 0
     private var combatMoves = listOf<CombatMove>()
-    private val combatDispatch = Dispatch(
+    private val combatDispatch = Distributor(
+            Parallel.Policy.SEQUENCE,
             { combatMoves },
             { combatMoveToTree(it) })
 
@@ -74,8 +77,8 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
 
         val scoreAfterCombat = afterCombat.eval.delta()
         val scoreAfterFleeing = afterFlee.eval.delta()
-        val shouldFlee = scoreAfterFleeing > scoreAfterCombat + attackHysteresis + maxUseableWorkers * 3 &&
-                !shouldSnipePylon(enemies)
+        val shouldFlee = scoreAfterFleeing > scoreAfterCombat + attackHysteresis + maxUseableWorkers * 3
+                && !shouldSnipePylon(enemies)
 
         diag.log("Squad combat score ${squad.name} after combat: $scoreAfterCombat; after fleeing: $scoreAfterFleeing")
 
@@ -108,7 +111,7 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
 
             if (scoreAfterCombat > scoreAfterFleeing)
                 workersToUse = max(0, workersToUse - 1)
-            else if (scoreAfterFleeing > scoreAfterCombat && workersToUse < maxUseableWorkers && enemies.any { !it.flying }) {
+            else if (scoreAfterFleeing >= scoreAfterCombat && workersToUse < maxUseableWorkers && enemies.any { !it.flying }) {
                 workersToUse = min(maxUseableWorkers, workersToUse + 1)
             }
             diag.log("Squad fight ${squad.name} $scoreAfterCombat $scoreAfterFleeing")
@@ -196,7 +199,7 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
         val agentsBeforeCombat = squad.mine.map {
             val agent = unitToAgentMapper(it)
             if (!it.flying)
-                agent.setSpeedFactor(0.9f)
+                agent.setSpeedFactor(0.85f)
             agent
         }
         agentsBeforeCombat

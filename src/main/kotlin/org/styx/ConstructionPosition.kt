@@ -99,13 +99,18 @@ object ConstructionPosition {
     }
 
     private fun findPositionForGas(): TilePosition? {
-        val geysers = Styx.units.geysers
-        return bases.myBases.asSequence()
-                .mapNotNull { base ->
-                    val candidate = geysers.nearest(base.center.x, base.center.y)?.tilePosition
-                            ?: return@mapNotNull null
-                    if (candidate.getDistance(base.centerTile) < 8) candidate else null
-                }.firstOrNull()
+        val geysers = units.geysers
+        return bases.myBases
+                .mapNotNull {
+                    val geyser = geysers.nearest(it.center.x, it.center.y, 8 * 32)
+                    if (geyser != null)
+                        it.mainResourceDepot to geyser
+                    else
+                        null
+                }.minBy { (base, geyser) ->
+                    (if (base?.isCompleted != true) 24 else 0) +
+                            (base?.remainingBuildTime ?: 0)
+                }?.second?.tilePosition
     }
 
     private fun bestPositionForStaticDefense(): TilePosition? {

@@ -8,7 +8,6 @@ import org.styx.Styx.diag
 import org.styx.Styx.economy
 import org.styx.Styx.relevantGameResults
 import org.styx.Styx.resources
-import org.styx.Styx.units
 import org.styx.macro.*
 import java.lang.Math.random
 import kotlin.math.ln
@@ -53,24 +52,27 @@ open class Strat(
 
 object TwoHatchMuta : Strat("2HatchMuta",
         twelveHatchBasic,
-        Repeat(Get(12, UnitType.Zerg_Drone)),
+        Get(12, UnitType.Zerg_Drone),
         Build(UnitType.Zerg_Extractor),
         Repeat(Get(8, UnitType.Zerg_Zergling)),
+        Repeat(Get(12, UnitType.Zerg_Drone)),
         Morph(UnitType.Zerg_Lair),
         Get(3, UnitType.Zerg_Overlord),
         Upgrade(lingSpeedUpgrade, 1),
         Get(20, UnitType.Zerg_Drone),
-        Build(UnitType.Zerg_Spire),
+        Repeat(Get(1, UnitType.Zerg_Spire)),
         Get(22, UnitType.Zerg_Drone),
         Expand(),
         Build(UnitType.Zerg_Extractor),
         Repeat(Get(22, UnitType.Zerg_Drone)),
         Get(5, UnitType.Zerg_Overlord),
         ensureSupply(),
-        Repeat(Sequence(
-                WaitFor { resources.availableGMS.minerals > 800 },
-                pumpLings()
-        )),
+        Repeat(Repeat.Policy.SELECTOR,
+                Sequence(
+                        Condition { resources.availableGMS.gas < UnitType.Zerg_Mutalisk.gasPrice() },
+                        pumpLings()
+                )
+        ),
         pumpMutas(),
         Expand()
 )
@@ -87,18 +89,21 @@ object ThreeHatchMuta : Strat("3HatchMuta",
         Get(20, UnitType.Zerg_Drone),
         Build(UnitType.Zerg_Extractor),
         Upgrade(lingSpeedUpgrade, 1),
-        Build(UnitType.Zerg_Spire),
-        Get(22, UnitType.Zerg_Drone),
+        Get(23, UnitType.Zerg_Drone),
+        Repeat(Get(1, UnitType.Zerg_Spire)),
+        Get(23, UnitType.Zerg_Drone),
         Get(4, UnitType.Zerg_Overlord),
         Repeat(Get(25, UnitType.Zerg_Drone)),
         Get(12, UnitType.Zerg_Zergling),
         Expand(),
         Get(6, UnitType.Zerg_Overlord),
         ensureSupply(),
-        Repeat(Sequence(
-                WaitFor { resources.availableGMS.minerals > 300 && resources.availableGMS.gas < 60 },
-                pumpLings()
-        )),
+        Repeat(Repeat.Policy.SELECTOR,
+                Sequence(
+                        Condition { resources.availableGMS.gas < UnitType.Zerg_Mutalisk.gasPrice() },
+                        pumpLings()
+                )
+        ),
         pumpMutas()
 )
 
@@ -112,9 +117,17 @@ object TwoHatchHydra : Strat("2HatchHydra",
         Train(UnitType.Zerg_Overlord),
         Upgrade(hydraRangeUpgrade, 1),
         ensureSupply(),
-        Repeat(Sequence(
-                WaitFor { resources.availableGMS.minerals > 600 },
-                Build(UnitType.Zerg_Hatchery))
+        Repeat(Repeat.Policy.SELECTOR,
+                Sequence(
+                        Condition { resources.availableGMS.minerals > 600 },
+                        Build(UnitType.Zerg_Hatchery)
+                )
+        ),
+        Repeat(Repeat.Policy.SELECTOR,
+                Sequence(
+                        Condition { resources.availableGMS.gas < UnitType.Zerg_Hydralisk.gasPrice() },
+                        pumpLings()
+                )
         ),
         pumpHydras()
 )
@@ -171,13 +184,17 @@ object Nine734 : Strat("9734",
         Build(UnitType.Zerg_Hatchery),
         Upgrade(UpgradeType.Zerg_Missile_Attacks, 1),
         Upgrade(UpgradeType.Metabolic_Boost, 1),
-        Repeat(Get({ units.my(UnitType.Zerg_Hydralisk).size * 7 / 10 }, UnitType.Zerg_Zergling, true)),
+        Repeat(Repeat.Policy.SELECTOR,
+                Sequence(
+                        Condition { resources.availableGMS.gas < UnitType.Zerg_Hydralisk.gasPrice() },
+                        pumpLings()
+                )
+        ),
         pumpHydras()
 )
 
 object NinePoolCheese : Strat("9 Pool Cheese",
-        Get(9, UnitType.Zerg_Drone),
-        Build(UnitType.Zerg_Spawning_Pool),
+        ninePoolBasic,
         Train(UnitType.Zerg_Overlord),
         ensureSupply(),
         { Train(UnitType.Zerg_Zergling) }.repeat(3),
@@ -219,10 +236,10 @@ private fun haveBasicZerglingSquad() = Repeat(Get(6, UnitType.Zerg_Zergling))
 private fun ensureSupply() =
         Repeat(
                 Sequence(
-                        WaitFor {
+                        Repeat(Repeat.Policy.SELECTOR, Condition {
                             economy.supplyWithPlanned < 4 ||
                                     economy.supplyWithPlanned < 16 && resources.availableGMS.minerals > 400
-                        },
+                        }),
                         Train(UnitType.Zerg_Overlord)
                 )
         )

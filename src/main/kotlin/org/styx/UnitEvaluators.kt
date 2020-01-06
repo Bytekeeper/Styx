@@ -8,7 +8,6 @@ import org.locationtech.jts.math.DD.EPS
 import org.styx.Config.dpfThreatValueFactor
 import org.styx.Config.evalFramesToKillFactor
 import org.styx.Config.evalFramesToReach
-import org.styx.Config.evalFramesToTurnFactor
 import org.styx.Config.waitForReinforcementsTargetingFactor
 import java.util.function.ToIntFunction
 import kotlin.math.max
@@ -26,19 +25,20 @@ data class Disengage(override val unit: SUnit) : CombatMove
 object TargetEvaluator {
     private val byEnemyType: TargetScorer = { _, e, _ ->
         when (e.unitType) {
-            UnitType.Zerg_Egg, UnitType.Zerg_Lurker_Egg, UnitType.Zerg_Larva, UnitType.Protoss_Interceptor -> -10.0
+            UnitType.Zerg_Egg, UnitType.Zerg_Lurker_Egg, UnitType.Zerg_Larva, UnitType.Protoss_Interceptor -> -20.0
             UnitType.Zerg_Extractor, UnitType.Terran_Refinery, UnitType.Protoss_Assimilator -> -2.0
             UnitType.Zerg_Drone, UnitType.Terran_SCV -> 0.3
             UnitType.Protoss_Probe -> 0.1
             UnitType.Terran_Medic, UnitType.Protoss_High_Templar -> 0.1
+            UnitType.Protoss_Carrier -> 1.0
             else -> 0.0
         }
     }
 
     private val byTimeToAttack: TargetScorer = { a, e, aggressiveness ->
         val framesToTurnTo = a.framesToTurnTo(e)
-        -(max(0, a.distanceTo(e) - a.maxRangeVs(e)) * evalFramesToReach / max(1.0, a.topSpeed) +
-                framesToTurnTo * evalFramesToTurnFactor) / aggressiveness
+        -(max(0, a.distanceTo(e) - a.maxRangeVs(e)) / max(1.0, a.topSpeed) +
+                framesToTurnTo) * evalFramesToReach / aggressiveness
     }
 
     private val byTimeToKillEnemy: TargetScorer = { a, e, _ ->
@@ -51,9 +51,9 @@ object TargetEvaluator {
     }
 
     private val byEnemyDamageCapabilities: TargetScorer = { a, e, _ ->
-        -e.cooldownRemaining / 100.0 +
-                (if (e.hasPower) e.damagePerFrameVs(a) * 0.01 else 0.0) *
-                (if (e.weaponAgainst(a).isSplash) 1.5 else 1.0) *
+        e.cooldownRemaining / 100.0 +
+                (if (e.hasPower) e.damagePerFrameVs(a) * 1.0 else 0.0) *
+                (if (e.weaponAgainst(a).isSplash) Config.splashValueFactor else 1.0) *
                 (1.0 + e.maxRangeVs(a) * Config.rangeValueFactor)
     }
 
@@ -67,7 +67,7 @@ object TargetEvaluator {
 
         val alreadyEngaged = relevantTargets.any { e -> attackers.any { e.inAttackRange(it, 48) || it.inAttackRange(e, 48) } } || relevantTargets.none { it.unitType.canAttack() }
         val averageMinimumDistanceToEnemy = if (alreadyEngaged) 0.0 else attackers.map { a -> relevantTargets.map { a.distanceTo(it) }.min()!! }.average()
-        val pylons = 3 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
+        val pylons = 8 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
         val defensiveBuildings = targets.count {
             it.remainingBuildTime < 48 &&
                     (it.unitType == UnitType.Protoss_Photon_Cannon || it.unitType == UnitType.Protoss_Shield_Battery)
@@ -125,21 +125,21 @@ fun unitThreatValueToEnemy(unitType: UnitType): Int {
     }
     val airWeapon = unitType.airWeapon()
     val airDPF = ((airWeapon.damageAmount() * unitType.maxAirHits()) / airWeapon.damageCooldown().toDouble()).orZero() *
-            (if (airWeapon.isSplash) 1.5 else 1.0) *
+            (if (airWeapon.isSplash) Config.splashValueFactor else 1.0) *
             (1 + airWeapon.maxRange() * Config.rangeValueFactor)
     val groundWeapon = unitType.groundWeapon()
     val groundDPF = ((groundWeapon.damageAmount() * unitType.maxGroundHits()) / groundWeapon.damageCooldown().toDouble()).orZero() *
-            (if (groundWeapon.isSplash) 1.5 else 1.0) *
+            (if (groundWeapon.isSplash) Config.splashValueFactor else 1.0) *
             (1 + groundWeapon.maxRange() * Config.rangeValueFactor)
 
     return (max(airDPF, groundDPF) * dpfThreatValueFactor).toInt()
 }
 
 fun agentHealthAndShieldValue(agent: SUnit): Int =
-        (agent.hitPoints + agent.shields / 2) / 12
+        (agent.hitPoints + agent.shields / 2) / 8
 
 fun unitTypeValue(unitType: UnitType) = when (unitType) {
-    UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 17
+    UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 27
     UnitType.Terran_Medic, UnitType.Protoss_High_Templar, UnitType.Terran_Science_Vessel -> 3
     UnitType.Terran_Vulture_Spider_Mine -> 0
     else -> 2
