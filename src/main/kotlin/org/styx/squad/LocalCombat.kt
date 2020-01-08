@@ -13,6 +13,7 @@ import org.styx.Styx.fleeSim
 import org.styx.Styx.sim
 import org.styx.Styx.simFS3
 import org.styx.micro.Attack
+import org.styx.micro.KeepDistance
 import org.styx.micro.Stop
 import kotlin.math.max
 import kotlin.math.min
@@ -41,6 +42,7 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
     }
 
     override fun exec() {
+        diag.log(squad.toString())
         running()
         val enemies = squad.enemies
         val attackHysteresis = lastAttackHysteresis
@@ -80,15 +82,16 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
         val shouldFlee = scoreAfterFleeing > scoreAfterCombat + attackHysteresis + maxUseableWorkers * 3
                 && !shouldSnipePylon(enemies)
 
-        diag.log("Squad combat score ${squad.name} after combat: $scoreAfterCombat; after fleeing: $scoreAfterFleeing")
+        diag.log("COMBAT SCORE ${squad.name} after combat: $scoreAfterCombat; after fleeing: $scoreAfterFleeing; attackHysteresis $attackHysteresis")
+        diag.log("SIM RESULTS ${squad.name} after combat: ${sim.agentsA} | ${sim.agentsB}; after flee ${fleeSim.agentsA} | ${fleeSim.agentsB}")
 
         var aggressiveness = 1.0
         if (workersAndBuildingsAreSave && shouldFlee) {
-            diag.log("Squad retreat ${squad.name} $shouldFlee - ${sim.agentsA} | ${sim.agentsB} - when fleeing ${fleeSim.agentsA} | ${fleeSim.agentsB}")
+            diag.log("RETREAT ${squad.name} $shouldFlee")
             if (enemies.any { !it.flying }) {
                 workersToUse = min(maxUseableWorkers, workersToUse + 1)
             }
-            lastAttackHysteresis = 0; //(-beforeCombat.evalB * Config.attackerHysteresisFactor).toInt()
+            lastAttackHysteresis = 0
 
             val attackersToKeep = sim.agentsA.mapNotNull {
                 val unit = it.userObject as SUnit
@@ -107,6 +110,7 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
             }
             aggressiveness = 0.5
         } else {
+            diag.log("ATTACK ${squad.name}")
             squad.task = "Fight"
 
             if (scoreAfterCombat > scoreAfterFleeing)
@@ -114,7 +118,6 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
             else if (scoreAfterFleeing >= scoreAfterCombat && workersToUse < maxUseableWorkers && enemies.any { !it.flying }) {
                 workersToUse = min(maxUseableWorkers, workersToUse + 1)
             }
-            diag.log("Squad fight ${squad.name} $scoreAfterCombat $scoreAfterFleeing")
             lastAttackHysteresis = (beforeCombat.evalA * Config.attackerHysteresisFactor).toInt()
         }
 
@@ -163,6 +166,7 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
             when (move) {
                 is AttackMove -> Attack(move.unit, move.enemy)
                 is WaitMove -> Stop(move.unit)
+                is StayBack -> KeepDistance(move.unit)
                 else -> error("Invalid move: $move")
             }
 

@@ -1,12 +1,11 @@
 package org.styx.squad
 
 import bwapi.Position
+import bwapi.UnitType
+import org.bk.ass.sim.Agent
 import org.bk.ass.sim.Evaluator
-import org.styx.LazyOnFrame
-import org.styx.SUnit
+import org.styx.*
 import org.styx.Styx.evaluator
-import org.styx.div
-import org.styx.plus
 import kotlin.math.max
 
 val adjectives = listOf("stinging", "red", "running", "weak", "blazing", "awful", "spiteful", "loving", "hesitant", "raving", "hunting")
@@ -40,4 +39,16 @@ class SquadBoard {
                 mine.filter { it.remainingBuildTime < 48 }.map { it.agent() },
                 enemies.filter { it.remainingBuildTime < 48 }.map { it.agent() })
     }
+
+    private val unitToAgentMapper = { it: SUnit, available: Boolean ->
+        val agent = it.agent()
+        if (it.enemyUnit && (it.gathering ||
+                        it.unitType.isWorker && !it.visible) || (it.myUnit && available) ||
+                !it.hasPower)
+            agent.setCooldown(Config.mediumSimHorizon)
+        if (!it.unitType.canAttack() && it.unitType != UnitType.Terran_Bunker)
+            agent.setAttackTargetPriority(Agent.TargetingPriority.MEDIUM)
+        agent
+    }
+
 }

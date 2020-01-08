@@ -97,11 +97,8 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
             if (board.workerLock.item != null && candidate?.tilePosition == targetLocation && candidate.unitType == board.type) {
                 board.building = candidate
                 return NodeStatus.SUCCESS
-            } else // Maybe destroyed/Cancelled?
-                if (board.building != null) {
-                    println("WTF")
-                }
-                board.building = null
+            }
+            board.building = null
             if (board.workerLock.item?.canBuildHere(targetLocation, board.type) == false || candidate?.tilePosition == targetLocation && candidate.unitType.isBuilding)
                 board.location = null
         }
@@ -141,14 +138,6 @@ class OrderBuild(private val board: BuildBoard) : BehaviorTree() {
             }
         }
         return NodeStatus.RUNNING
-    }
-
-    override fun abort() {
-        if (board.workerLock.isSatisfied && board.workerLock.item.orderTarget?.unitType?.isResourceContainer == false) {
-            System.err.println("!")
-        }
-        println("Aborted Build of ${board.type}")
-        super.abort()
     }
 }
 

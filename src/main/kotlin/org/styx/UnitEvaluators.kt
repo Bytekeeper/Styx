@@ -21,6 +21,7 @@ interface CombatMove {
 data class AttackMove(override val unit: SUnit, val enemy: SUnit) : CombatMove
 data class WaitMove(override val unit: SUnit) : CombatMove
 data class Disengage(override val unit: SUnit) : CombatMove
+data class StayBack(override val unit: SUnit) : CombatMove
 
 object TargetEvaluator {
     private val byEnemyType: TargetScorer = { _, e, _ ->
@@ -47,12 +48,12 @@ object TargetEvaluator {
     }
 
     private val byEnemySpeed: TargetScorer = { a, e, _ ->
-        -e.topSpeed / 40
+        -e.topSpeed / 60
     }
 
     private val byEnemyDamageCapabilities: TargetScorer = { a, e, _ ->
-        e.cooldownRemaining / 100.0 +
-                (if (e.hasPower) e.damagePerFrameVs(a) * 1.0 else 0.0) *
+        e.cooldownRemaining / 500.0 +
+                (if (e.hasPower) e.damagePerFrameVs(a) * 0.3 else 0.0) *
                 (if (e.weaponAgainst(a).isSplash) Config.splashValueFactor else 1.0) *
                 (1.0 + e.maxRangeVs(a) * Config.rangeValueFactor)
     }
@@ -67,13 +68,15 @@ object TargetEvaluator {
 
         val alreadyEngaged = relevantTargets.any { e -> attackers.any { e.inAttackRange(it, 48) || it.inAttackRange(e, 48) } } || relevantTargets.none { it.unitType.canAttack() }
         val averageMinimumDistanceToEnemy = if (alreadyEngaged) 0.0 else attackers.map { a -> relevantTargets.map { a.distanceTo(it) }.min()!! }.average()
-        val pylons = 8 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
+        val healthFactor: (SUnit) -> Double = { it.hitPoints.toDouble() / it.unitType.maxHitPoints() + (it.shields / it.unitType.maxShields().toDouble()).orZero() / 4 }
+        val averageHealth = if (alreadyEngaged) 0.0 else attackers.map(healthFactor).average()
+        val pylons = 0.3 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
         val defensiveBuildings = targets.count {
             it.remainingBuildTime < 48 &&
                     (it.unitType == UnitType.Protoss_Photon_Cannon || it.unitType == UnitType.Protoss_Shield_Battery)
         }
 
-        val pylonScorer: TargetScorer = { _, e, _ -> defensiveBuildings * pylons }
+        val pylonScorer: TargetScorer = { _, e, _ -> if (e.unitType == UnitType.Protoss_Pylon) defensiveBuildings * pylons else 0.0 }
         val scorers = defaultScorers.asSequence() + pylonScorer
 
         return attackers.map { a ->
@@ -85,7 +88,9 @@ object TargetEvaluator {
                         result
                     }
             if (target != null) {
-                if (a.distanceTo(target) < averageMinimumDistanceToEnemy * waitForReinforcementsTargetingFactor && target.unitType.canAttack())
+                if (healthFactor(a) * 2.5 < averageHealth) {
+                    StayBack(a)
+                } else if (a.distanceTo(target) < averageMinimumDistanceToEnemy * waitForReinforcementsTargetingFactor)
                     WaitMove(a)
                 else
                     AttackMove(a, target)

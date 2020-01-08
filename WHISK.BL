@@ -14,7 +14,7 @@ fatjar=build_jar(name='StyxZ.jar', archives= main, main_class='org.styx.Listener
 main = kotlin_compile(
     compiler=compiler_deps,
     srcs = glob('src/main/kotlin/**.kt'),
-    exported_cp=[maven_deps, 'lib/ass-1.1.jar'])
+    exported_cp=[maven_deps, 'lib/ass-1.2.jar'])
 
 run_game = exec(command='test.sh', arguments=fatjar)
 

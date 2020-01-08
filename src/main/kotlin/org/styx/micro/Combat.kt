@@ -56,7 +56,7 @@ class Attack(private val attacker: SUnit,
     )
 
     private val evadeOtherEnemies = Sequence(
-            Condition { attacker.couldTurnAwayAndBackBeforeCooldownEnds(enemy) },
+            Condition { attacker.couldTurnAwayAndBackBeforeCooldownEnds(enemy) && enemy.engaged.isNotEmpty() },
             LambdaNode {
                 val evadeTo = (0..8).asSequence()
                         .map {
@@ -67,9 +67,10 @@ class Attack(private val attacker: SUnit,
                             enemy.distanceTo(it.toPosition(), attacker.unitType) <= attacker.maxRangeVs(enemy) &&
                                     (attacker.flying || geography.walkRay.noObstacle(attacker.walkPosition, it))
 
-                        }.map {
-                            val position = it.middlePosition()
-                            position to attacker.engaged.count { t -> t == enemy || t.distanceTo(position, attacker.unitType) <= t.maxRangeVs(attacker) }
+                        }.map { wp ->
+                            val position = wp.middlePosition()
+                            val futureThreats = units.enemy.inRadius(position.x, position.y, 400) { it == enemy || it.target == attacker && it.distanceTo(position, attacker.unitType) <= it.maxRangeVs(attacker) }
+                            position to futureThreats.size
                         }.minBy { it.second }
                 if (evadeTo != null && evadeTo.second < attacker.engaged.size) {
                     BasicActions.move(attacker, evadeTo.first)
@@ -162,4 +163,14 @@ class Stop(private val unit: SUnit) : TreeNode() {
         unit.stop()
         running()
     }
+}
+
+class KeepDistance(private val unit: SUnit) : TreeNode() {
+    override fun exec() {
+        val force = Potential.avoidDanger(unit, 96) +
+                Potential.collisionRepulsion(unit) * 0.2
+        Potential.apply(unit, force)
+        running()
+    }
+
 }

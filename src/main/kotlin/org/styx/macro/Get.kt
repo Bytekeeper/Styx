@@ -70,9 +70,6 @@ class Get(private val amountProvider: () -> Int,
 
     override fun abort() {
         super.abort()
-        if (type.isBuilding && children.any { it.status == NodeStatus.RUNNING }) {
-            println("!")
-        }
         children.filter { it.status === NodeStatus.RUNNING }
                 .forEach { it.abort() }
     }
