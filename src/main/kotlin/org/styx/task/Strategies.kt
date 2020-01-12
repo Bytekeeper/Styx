@@ -50,6 +50,20 @@ open class Strat(
     }
 }
 
+object TenHatch : Strat("10Hatch",
+        Get(9, UnitType.Zerg_Drone),
+        ExtractorTrick(),
+        Expand(),
+        Build(UnitType.Zerg_Spawning_Pool),
+        Repeat(Get(9, UnitType.Zerg_Drone)),
+        Get(2, UnitType.Zerg_Overlord),
+        ExtractorTrick(),
+        Build(UnitType.Zerg_Hatchery),
+        Get(8, UnitType.Zerg_Zergling),
+        ensureSupply(),
+        pumpLings()
+)
+
 object TwoHatchMuta : Strat("2HatchMuta",
         twelveHatchBasic,
         Get(12, UnitType.Zerg_Drone),
@@ -110,12 +124,14 @@ object ThreeHatchMuta : Strat("3HatchMuta",
 object TwoHatchHydra : Strat("2HatchHydra",
         twelveHatchBasic,
         Build(UnitType.Zerg_Extractor),
-        Get(12, UnitType.Zerg_Drone),
-        Repeat(Get(6, UnitType.Zerg_Zergling)),
+        Get(13, UnitType.Zerg_Drone),
+//        Repeat(Get(8, UnitType.Zerg_Zergling)),
         Build(UnitType.Zerg_Hydralisk_Den),
-        Repeat(Get(13, UnitType.Zerg_Drone)),
+        Repeat(Get(16, UnitType.Zerg_Drone)),
         Train(UnitType.Zerg_Overlord),
         Upgrade(hydraRangeUpgrade, 1),
+        Get(12, UnitType.Zerg_Hydralisk),
+        Upgrade(hydraSpeedUpgrade, 1),
         ensureSupply(),
         Repeat(Repeat.Policy.SELECTOR,
                 Sequence(

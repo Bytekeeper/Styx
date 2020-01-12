@@ -14,11 +14,11 @@ class Expand(private val requireGas: Boolean = true) : BehaviorTree() {
                     Build(
                             BuildBoard(
                                     self.race.resourceDepot,
-                                    this::findExpandLocation)
+                                    this::selectExpansionLocation)
                     )
             )
 
-    private fun findExpandLocation(board: BuildBoard) {
+    private fun selectExpansionLocation(board: BuildBoard) {
         if (board.location == null && board.workerLock.item == null) {
             board.location = Styx.bases.bases.filter {
                 it.mainResourceDepot == null &&

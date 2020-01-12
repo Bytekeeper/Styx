@@ -57,6 +57,9 @@ class Get(private val amountProvider: () -> Int,
         repeat(expectedChildCount - children.size) {
             val newNode = if (type.isBuilding) StartBuild(type) else StartTrain(type)
             children += newNode
+            if (type == UnitType.Zerg_Spawning_Pool && Styx.frame < 5000) {
+                println("WTF")
+            }
             newNode.init()
             newNode.exec()
         }

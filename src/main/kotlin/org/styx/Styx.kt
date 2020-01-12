@@ -17,9 +17,8 @@ import org.bk.ass.sim.RetreatBehavior
 import org.bk.ass.sim.Simulator
 import org.locationtech.jts.math.Vector2D
 import org.styx.Styx.game
-import org.styx.Timed.Companion.time
 import org.styx.global.*
-import org.styx.info.Geography
+import org.styx.global.Geography
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.nio.file.Files

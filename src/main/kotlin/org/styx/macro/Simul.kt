@@ -6,13 +6,7 @@ import org.bk.ass.bt.Parallel
 import org.bk.ass.bt.Sequence
 import org.bk.ass.bt.TreeNode
 
-class Simul(vararg types: UnitType) : BehaviorTree() {
-    private val boards = types.map {
-        when {
-            it.isBuilding -> BuildBoard(it)
-            else -> TrainBoard(it)
-        }
-    }
+class Simul(private vararg val boards: Any) : BehaviorTree() {
 
     override fun getRoot(): TreeNode =
             Sequence(

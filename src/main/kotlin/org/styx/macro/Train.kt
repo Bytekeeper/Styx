@@ -28,7 +28,7 @@ class AcquireUnitLock(private val lock: UnitLock) : TreeNode() {
     }
 }
 
-class WaitForUnitLock(private val lock: UnitLock) : Decorator(
+class WaitForUnitLock(lock: UnitLock) : Decorator(
         Repeat(Repeat.Policy.SELECTOR, AcquireUnitLock(lock))
 )
 

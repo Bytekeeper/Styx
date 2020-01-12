@@ -69,7 +69,7 @@ object TargetEvaluator {
         val alreadyEngaged = relevantTargets.any { e -> attackers.any { e.inAttackRange(it, 48) || it.inAttackRange(e, 48) } } || relevantTargets.none { it.unitType.canAttack() }
         val averageMinimumDistanceToEnemy = if (alreadyEngaged) 0.0 else attackers.map { a -> relevantTargets.map { a.distanceTo(it) }.min()!! }.average()
         val healthFactor: (SUnit) -> Double = { it.hitPoints.toDouble() / it.unitType.maxHitPoints() + (it.shields / it.unitType.maxShields().toDouble()).orZero() / 4 }
-        val averageHealth = if (alreadyEngaged) 0.0 else attackers.map(healthFactor).average()
+        val averageHealth = attackers.map(healthFactor).average()
         val pylons = 0.3 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
         val defensiveBuildings = targets.count {
             it.remainingBuildTime < 48 &&
@@ -88,7 +88,7 @@ object TargetEvaluator {
                         result
                     }
             if (target != null) {
-                if (healthFactor(a) * 2.5 < averageHealth) {
+                if (!alreadyEngaged && healthFactor(a) * 2.5 < averageHealth || healthFactor(a) * 4 < averageHealth) {
                     StayBack(a)
                 } else if (a.distanceTo(target) < averageMinimumDistanceToEnemy * waitForReinforcementsTargetingFactor)
                     WaitMove(a)

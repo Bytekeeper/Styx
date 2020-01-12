@@ -6,14 +6,14 @@ import org.bk.ass.bt.Memo
 import org.bk.ass.bt.Sequence
 import org.bk.ass.bt.TreeNode
 
-class ExtractorTrick() : BehaviorTree() {
+class ExtractorTrick : BehaviorTree() {
     private val extractorBoard = BuildBoard(UnitType.Zerg_Extractor)
+    private val trainBoard = TrainBoard(UnitType.Zerg_Drone)
 
     override fun getRoot(): TreeNode = Memo(
             Sequence(
-                    StartBuild(extractorBoard),
-                    StartTrain(UnitType.Zerg_Drone),
+                    Memo(Simul(extractorBoard, trainBoard)),
                     CancelBuild(extractorBoard)
             )
-    )
+    ).withName("Extractor Trick")
 }

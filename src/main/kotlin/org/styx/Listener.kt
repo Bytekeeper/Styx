@@ -4,12 +4,10 @@ import bwapi.BWClient
 import bwapi.DefaultBWListener
 import bwapi.Game
 import bwapi.Unit
-import bwem.BWEM
 import org.bk.ass.bt.Best
 import org.bk.ass.bt.ExecutionContext
 import org.bk.ass.bt.Parallel
 import org.styx.Styx.diag
-import org.styx.Styx.units
 import org.styx.task.*
 
 class Listener : DefaultBWListener() {
@@ -20,13 +18,17 @@ class Listener : DefaultBWListener() {
 
     private val aiTree = Parallel(Parallel.Policy.SEQUENCE,
             Styx,
-            squadDispatch,
+            SquadDispatch,
+            ReactByUpgradingOverlordSpeed(),
+            ReactWithLings(),
+            ReactByCancellingDyingBuildings(),
             Best(
                     Nine734,
                     NinePoolCheese,
                     TwoHatchHydra,
                     TwoHatchMuta,
-                    ThreeHatchMuta
+                    ThreeHatchMuta,
+                    TenHatch
 
                     // Actually crappy strategies:
 //                    ThirteenPoolMuta,

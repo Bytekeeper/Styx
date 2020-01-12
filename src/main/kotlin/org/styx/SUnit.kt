@@ -452,6 +452,7 @@ val UnitType.revolutionFrames get() = ceil(256.0 / turnRadius()).toInt()
 val hydraSpeedUpgrade = UpgradeType.Muscular_Augments
 val hydraRangeUpgrade = UpgradeType.Grooved_Spines
 val lingSpeedUpgrade = UpgradeType.Metabolic_Boost
+val overlordSpeed = UpgradeType.Pneumatized_Carapace
 
 val WeaponType.isSplash: Boolean
     get() =

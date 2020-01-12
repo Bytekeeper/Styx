@@ -1,4 +1,4 @@
-package org.styx.info
+package org.styx.global
 
 import bwapi.WalkPosition
 import bwem.Area
