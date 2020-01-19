@@ -1,6 +1,5 @@
 package org.styx.macro
 
-import bwapi.UnitType
 import org.bk.ass.bt.BehaviorTree
 import org.bk.ass.bt.Parallel
 import org.bk.ass.bt.Sequence
@@ -24,7 +23,7 @@ class Simul(private vararg val boards: Any) : BehaviorTree() {
                                     is BuildBoard -> OrderBuild(it)
                                     is TrainBoard -> OrderTrain(it)
                                     else -> error("Invalid board $it")
-                                } as TreeNode
+                                }
                             }.toTypedArray()
                     )
             )

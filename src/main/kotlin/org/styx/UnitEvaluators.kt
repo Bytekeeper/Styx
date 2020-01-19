@@ -70,7 +70,7 @@ object TargetEvaluator {
         val averageMinimumDistanceToEnemy = if (alreadyEngaged) 0.0 else attackers.map { a -> relevantTargets.map { a.distanceTo(it) }.min()!! }.average()
         val healthFactor: (SUnit) -> Double = { it.hitPoints.toDouble() / it.unitType.maxHitPoints() + (it.shields / it.unitType.maxShields().toDouble()).orZero() / 4 }
         val averageHealth = attackers.map(healthFactor).average()
-        val pylonFactor = 1.0 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
+        val pylonFactor = 0.8 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
         val defensiveBuildings = targets.count {
             it.remainingBuildTime < 48 &&
                     (it.unitType == UnitType.Protoss_Photon_Cannon || it.unitType == UnitType.Protoss_Shield_Battery)

@@ -239,7 +239,7 @@ class SUnit private constructor(val unit: Unit) {
     fun framesToTravelTo(pos: Position) =
             framesToTurnTo(pos) +
                     (if (flying) (distanceTo(pos) / topSpeed).toInt()
-                    else (Styx.map.getPathLength(position, pos) / topSpeed).toInt()) * 5 / 4 + 24
+                    else (Styx.map.getPathLength(position, pos) / topSpeed).toInt()) * 3 / 2 + 24
 
     fun distanceTo(target: SUnit): Int {
         // If target is the same as the source

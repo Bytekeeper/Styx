@@ -55,10 +55,11 @@ object TenHatch : Strat("10Hatch",
         ExtractorTrick(),
         Expand(),
         Build(UnitType.Zerg_Spawning_Pool),
-        Repeat(Get(9, UnitType.Zerg_Drone)),
+        Get(9, UnitType.Zerg_Drone),
         Get(2, UnitType.Zerg_Overlord),
         ExtractorTrick(),
         Build(UnitType.Zerg_Hatchery),
+        Repeat(Get(8, UnitType.Zerg_Drone)),
         Get(8, UnitType.Zerg_Zergling),
         ensureSupply(),
         pumpLings()
@@ -219,14 +220,14 @@ object NinePoolCheese : Strat("9 Pool Cheese",
         pumpLings(),
         Get(2, UnitType.Zerg_Hatchery),
         Build(UnitType.Zerg_Extractor),
-        Upgrade(lingSpeedUpgrade, 1),
-        Gathering(true)
+        Upgrade(lingSpeedUpgrade, 1)
 )
 
 object FourPool : Strat("4pool",
         Build(UnitType.Zerg_Spawning_Pool),
-        Repeat(Get(12, UnitType.Zerg_Zergling)),
+        Get(12, UnitType.Zerg_Zergling),
         ExtractorTrick(UnitType.Zerg_Zergling),
+        Repeat(Get(3, UnitType.Zerg_Drone)),
         ensureSupply(),
         pumpLings()
 )
@@ -255,15 +256,15 @@ val twelveHatchBasic = Parallel(Parallel.Policy.SEQUENCE,
 
 private fun pumpLings() = Repeat(Get(200, UnitType.Zerg_Zergling, true))
 private fun pumpHydras() = Repeat(Get(200, UnitType.Zerg_Hydralisk, true))
-private fun pumpMutas() = Repeat(Get(200, UnitType.Zerg_Mutalisk, true))
+fun pumpMutas() = Repeat(Get(200, UnitType.Zerg_Mutalisk, true))
 private fun haveBasicZerglingSquad() = Repeat(Get(6, UnitType.Zerg_Zergling))
-private fun ensureSupply() =
-        Repeat(
+fun ensureSupply() =
+        Repeat(Repeat.Policy.SELECTOR,
                 Sequence(
-                        Repeat(Repeat.Policy.SELECTOR, Condition {
+                        Condition {
                             economy.supplyWithPlanned < 4 ||
                                     economy.supplyWithPlanned < 16 && resources.availableGMS.minerals > 400
-                        }),
+                        },
                         Train(UnitType.Zerg_Overlord)
                 )
         )

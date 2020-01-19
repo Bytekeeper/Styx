@@ -4,7 +4,7 @@ import java.util.logging.Level
 
 object Config {
     val minLevel = Level.WARNING
-    const val logEnabled: Boolean = true
+    const val logEnabled: Boolean = false
     const val attackerHysteresisFactor = 0.8
     const val mediumSimHorizon = 8 * 24
     const val longSimHorizon = 12 * 24

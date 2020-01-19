@@ -232,7 +232,10 @@ class BetterAltitude(private val board: WithTarget<SUnit>) : TreeNode() {
             failed()
             return
         }
-        if (board.actor.maxRangeVs(target) < 32 || board.actor.altitude > target.altitude) {
+        if (board.actor.flying
+                || target.flying
+                || board.actor.maxRangeVs(target) <= 32
+                || board.actor.altitude > target.altitude) {
             failed()
         } else {
             val bestTile = board.actor.tilePosition.adjacentTiles(1)

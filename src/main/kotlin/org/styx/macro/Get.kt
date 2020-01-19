@@ -4,13 +4,11 @@ import bwapi.UnitType
 import org.bk.ass.bt.NodeStatus
 import org.bk.ass.bt.TreeNode
 import org.bk.ass.manage.GMS
-import org.styx.MemoLeaf
-import org.styx.Styx
+import org.styx.*
 import org.styx.Styx.buildPlan
 import org.styx.Styx.resources
 import org.styx.Styx.units
-import org.styx.plus
-import org.styx.shortName
+import org.styx.global.Unrealized
 import java.util.*
 import kotlin.math.max
 import kotlin.math.min
@@ -45,6 +43,7 @@ class Get(private val amountProvider: () -> Int,
                     min(builders, (remaining + pendingUnitsFactor / 2) / pendingUnitsFactor)
                 else
                     (remaining + pendingUnitsFactor / 2) / pendingUnitsFactor
+        buildPlan.unrealized += Unrealized(type,  remaining - expectedChildCount)
         if (expectedChildCount == 0)
             return NodeStatus.RUNNING
         repeat(children.size - expectedChildCount) {
@@ -57,9 +56,6 @@ class Get(private val amountProvider: () -> Int,
         repeat(expectedChildCount - children.size) {
             val newNode = if (type.isBuilding) StartBuild(type) else StartTrain(type)
             children += newNode
-            if (type == UnitType.Zerg_Spawning_Pool && Styx.frame < 5000) {
-                println("WTF")
-            }
             newNode.init()
             newNode.exec()
         }

@@ -38,7 +38,7 @@ object BasicActions {
     }
 
     fun build(worker: SUnit, type: UnitType, at: TilePosition) {
-        val targetPosition = at.toPosition() + type.dimensions / 2
+        val targetPosition = at.toPosition() + type.center
         if (worker.distanceTo(targetPosition) < 5 * 32) {
             worker.build(type, at)
             return

@@ -15,8 +15,10 @@ import org.styx.global.PlannedUnit
 
 data class BuildBoard(
         val type: UnitType,
-        val provideLocation: (BuildBoard) -> Unit = {
-            it.location = it.location ?: ConstructionPosition.findPositionFor(type)
+        val provideLocation: (BuildBoard) -> Unit = {board ->
+            if (board.location == null || board.workerLock.item?.canBuildHere(board.location!!, board.type) == false) {
+                board.location = ConstructionPosition.findPositionFor(type)
+            }
         },
         var location: TilePosition? = null,
         var building: SUnit? = null,
@@ -70,8 +72,12 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
                             Sequence(
                                     FindBuildSpot(board),
                                     LambdaNode {
+//                                        val oldWorker = board.workerLock.item
                                         board.workerLock.acquire()
-                                        val buildPosition = board.location!!.toPosition() + board.type.dimensions / 2
+//                                        if (oldWorker != null && board.workerLock.item != oldWorker) {
+//                                            println("HOLY MOLY")
+//                                        }
+                                        val buildPosition = board.location!!.toPosition() + board.type.center
                                         val worker = board.workerLock.item
                                         board.framesBeforeStartable = worker?.framesToTravelTo(buildPosition)
                                         board.costLock.setFutureFrames(
@@ -98,15 +104,16 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
 
     private fun checkForExistingBuilding(): NodeStatus {
         board.location?.let { targetLocation ->
-            val targetPos = targetLocation.toPosition() + board.type.dimensions / 2
-            val candidate = units.mine.nearest(targetPos.x, targetPos.y)
+            val targetPos = targetLocation.toPosition() + board.type.center
+            val candidate = units.mine.nearest(targetPos.x, targetPos.y, 128) { it.unitType == board.type}
             if (board.workerLock.item != null && candidate?.tilePosition == targetLocation && candidate.unitType == board.type) {
                 board.building = candidate
                 return NodeStatus.SUCCESS
             }
+//            if (board.workerLock.item?.unitType == board.type) {
+//                error("No building candidate found, although my old worker is ${board.workerLock.item}")
+//            }
             board.building = null
-            if (board.workerLock.item?.canBuildHere(targetLocation, board.type) == false || candidate?.tilePosition == targetLocation && candidate.unitType.isBuilding)
-                board.location = null
         }
         return NodeStatus.FAILURE
     }
@@ -120,14 +127,12 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
 
 }
 
-class OrderBuild(private val board: BuildBoard) : BehaviorTree() {
-    override fun getRoot(): TreeNode =
-            Selector(
-                    Condition { board.building?.exists == true },
-                    LambdaNode(this::orderBuild)
-            )
-
-    private fun orderBuild(): NodeStatus {
+class OrderBuild(private val board: BuildBoard) : TreeNode() {
+    override fun exec(executionContext: ExecutionContext) {
+        if (board.building?.exists == true) {
+            success()
+            return
+        }
         val worker = board.workerLock.item ?: error("Worker must be locked")
         when {
             board.costLock.isSatisfied -> {
@@ -143,14 +148,17 @@ class OrderBuild(private val board: BuildBoard) : BehaviorTree() {
             }
             board.costLock.isSatisfiedLater -> {
                 buildPlan.plannedUnits += PlannedUnit(board.type, board.framesBeforeStartable, consumedUnit = Styx.self.race.worker)
-                BasicActions.move(worker, board.location!!.toPosition() + board.type.dimensions / 2)
+                BasicActions.move(worker, board.location!!.toPosition() + board.type.center)
             }
             else -> {
                 buildPlan.plannedUnits += PlannedUnit(board.type, board.framesBeforeStartable, consumedUnit = Styx.self.race.worker)
                 board.workerLock.release()
             }
         }
-        return NodeStatus.RUNNING
+        running()
+    }
+
+    override fun exec() {
     }
 }
 

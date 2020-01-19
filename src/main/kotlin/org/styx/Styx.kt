@@ -189,6 +189,7 @@ data class RelevantGames(private val results: List<List<GameResult>>) {
 }
 
 val UnitType.dimensions get() = Position(width(), height())
+val UnitType.center get() = tileSize().toPosition() / 2
 
 operator fun Position.div(factor: Int) = divide(factor)
 operator fun Position.plus(other: Position) = add(other)
@@ -211,9 +212,6 @@ fun <T> Optional<T>.orNull(): T? = orElse(null)
 
 fun <T> PositionQueries<T>.inRadius(pos: Position, radius: Int) = inRadius(pos.x, pos.y, radius)
 fun <T> PositionQueries<T>.nearest(pos: Position): T? = nearest(pos.x, pos.y)
-
-operator fun GMS.minus(value: GMS) = subtract(value)
-operator fun GMS.plus(value: GMS) = add(value)
 
 fun Vector2D.toPosition() = Position(x.roundToInt(), y.roundToInt())
 operator fun Vector2D.plus(other: Vector2D) = Vector2D(x + other.x, y + other.y)

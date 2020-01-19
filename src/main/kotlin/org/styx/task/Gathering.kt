@@ -2,14 +2,15 @@ package org.styx.task
 
 import bwapi.UnitType
 import org.bk.ass.bt.TreeNode
+import org.bk.ass.manage.GMS
 import org.styx.*
-import org.styx.Styx.economy
+import org.styx.Styx.buildPlan
 import org.styx.Styx.resources
 import org.styx.Styx.units
 import org.styx.action.BasicActions
 import kotlin.math.min
 
-class Gathering(private val onlyRequiredGas: Boolean = false) : TreeNode() {
+class Gathering : TreeNode() {
     private val workersLock = UnitLocks { Styx.resources.availableUnits.filter { it.unitType.isWorker } }
     private val assignment = mutableMapOf<SUnit, SUnit>()
 
@@ -20,21 +21,17 @@ class Gathering(private val onlyRequiredGas: Boolean = false) : TreeNode() {
             return
         }
 
-        val availableGMS = resources.availableGMS
-        val gatherGas = availableGMS.gas < 0 && units.myWorkers.count() > 6 || !onlyRequiredGas
+        val availableGMS = resources.availableGMS - buildPlan.unrealized.fold(GMS.ZERO) { acc, item -> acc + GMS.unitCost(item.type) * item.amount }
+        val gatherGas = availableGMS.gas < 0 && units.myWorkers.count() > 6
         val workers = workersLock.item
 
-        val futureResources = economy.estimatedAdditionalGMSIn(24 * 140) +
-                availableGMS
         val extractors = units.myCompleted(UnitType.Zerg_Extractor)
         val gasWorkers = workers.count { it.gatheringGas }
         val missingGasWorkers = min((if (gatherGas) extractors.size * 3 else 0) - gasWorkers,
-                if (futureResources.minerals + 1500 > futureResources.gas)
+                if (availableGMS.gas < 0)
                     workers.size
-                else if (futureResources.minerals < futureResources.gas - 2600)
-                    -gasWorkers
                 else
-                    0
+                    -gasWorkers
         )
         if (missingGasWorkers > 0) {
             workers.sortedBy { it.carrying || it.gatheringGas }

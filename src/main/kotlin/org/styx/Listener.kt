@@ -18,10 +18,12 @@ class Listener : DefaultBWListener() {
 
     private val aiTree = Parallel(Parallel.Policy.SEQUENCE,
             Styx,
+            Manners,
             SquadDispatch,
-            ReactByUpgradingOverlordSpeed(),
-            ReactWithLings(),
-            ReactByCancellingDyingBuildings(),
+            ReactByUpgradingOverlordSpeed,
+            ReactWithLings,
+            ReactByCancellingDyingBuildings,
+            ReactWithMutasForTerranFlyingBuildings,
             Best(
                     Nine734,
                     NinePoolCheese,
@@ -34,6 +36,7 @@ class Listener : DefaultBWListener() {
                     // Actually crappy strategies:
 //                    ThirteenPoolMuta,
             ).withName("Strategy"),
+            WorkerAvoidDamage,
             Gathering(),
             Scouting
     ).withName("AI Tree")
