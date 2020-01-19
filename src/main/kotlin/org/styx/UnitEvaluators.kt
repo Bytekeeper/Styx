@@ -70,13 +70,15 @@ object TargetEvaluator {
         val averageMinimumDistanceToEnemy = if (alreadyEngaged) 0.0 else attackers.map { a -> relevantTargets.map { a.distanceTo(it) }.min()!! }.average()
         val healthFactor: (SUnit) -> Double = { it.hitPoints.toDouble() / it.unitType.maxHitPoints() + (it.shields / it.unitType.maxShields().toDouble()).orZero() / 4 }
         val averageHealth = attackers.map(healthFactor).average()
-        val pylons = 0.3 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
+        val pylonFactor = 1.0 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
         val defensiveBuildings = targets.count {
             it.remainingBuildTime < 48 &&
                     (it.unitType == UnitType.Protoss_Photon_Cannon || it.unitType == UnitType.Protoss_Shield_Battery)
         }
 
-        val pylonScorer: TargetScorer = { _, e, _ -> if (e.unitType == UnitType.Protoss_Pylon) defensiveBuildings * pylons else 0.0 }
+        val pylonScorer: TargetScorer = { _, e, _ -> if (e.unitType == UnitType.Protoss_Pylon)
+            defensiveBuildings * pylonFactor
+        else 0.0 }
         val scorers = defaultScorers.asSequence() + pylonScorer
 
         return attackers.map { a ->
@@ -88,7 +90,7 @@ object TargetEvaluator {
                         result
                     }
             if (target != null) {
-                if (!alreadyEngaged && healthFactor(a) * 2.5 < averageHealth || healthFactor(a) * 4 < averageHealth) {
+                if (!alreadyEngaged && healthFactor(a) * 2.5 < averageHealth || healthFactor(a) * 4 < averageHealth && a.engaged.isNotEmpty()) {
                     StayBack(a)
                 } else if (a.distanceTo(target) < averageMinimumDistanceToEnemy * waitForReinforcementsTargetingFactor)
                     WaitMove(a)
@@ -145,9 +147,9 @@ fun agentHealthAndShieldValue(agent: SUnit): Int =
 
 fun unitTypeValue(unitType: UnitType) = when (unitType) {
     UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 27
-    UnitType.Terran_Medic, UnitType.Protoss_High_Templar, UnitType.Terran_Science_Vessel -> 3
+    UnitType.Terran_Medic, UnitType.Protoss_High_Templar, UnitType.Terran_Science_Vessel -> 15
     UnitType.Terran_Vulture_Spider_Mine -> 0
-    else -> 2
+    else -> 10
 }
 
 // Simplified, but should take more stuff into account:

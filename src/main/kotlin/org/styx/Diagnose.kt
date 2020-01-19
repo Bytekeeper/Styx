@@ -27,10 +27,10 @@ class Diagnose : Closeable {
     private var firstSeen = mutableMapOf<String, MutableList<FirstSeen>>()
 
     fun init() {
-        val trace = ZstdOutputStream(Files.newOutputStream(Styx.writePath.resolve("trace.json")))
-        jsonOut = JsonStream(trace, 4096)
-        logOut = PrintWriter(Files.newBufferedWriter(Styx.writePath.resolve("log.log")), true)
         if (Config.logEnabled) {
+            val trace = ZstdOutputStream(Files.newOutputStream(Styx.writePath.resolve("trace.json")))
+            jsonOut = JsonStream(trace, 4096)
+            logOut = PrintWriter(Files.newBufferedWriter(Styx.writePath.resolve("log.log")), true)
             jsonOut.writeObjectStart()
             jsonOut.writeObjectField("_version")
             jsonOut.writeVal(0)
@@ -53,8 +53,6 @@ class Diagnose : Closeable {
             }
             jsonOut.writeObjectField("logs")
             jsonOut.writeArrayStart()
-        } else {
-            jsonOut.close()
         }
     }
 
@@ -74,7 +72,7 @@ class Diagnose : Closeable {
     }
 
     fun log(message: String, logLevel: Level = Level.INFO) {
-        if (logLevel.intValue() < Config.minLevel.intValue())
+        if (!Config.logEnabled || logLevel.intValue() < Config.minLevel.intValue())
             return
         logOut.println("${logLevel.name} - ${Styx.frame}: $message")
     }

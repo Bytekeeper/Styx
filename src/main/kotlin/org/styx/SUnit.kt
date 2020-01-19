@@ -127,6 +127,8 @@ class SUnit private constructor(val unit: Unit) {
             Styx.units.enemy.nearest(x, y, 500) { it.inAttackRange(this, 192) } == null
     }
 
+    val altitude get() = game.getGroundHeight(tilePosition)
+
     fun predictPosition(frames: Int) = position + velocity.multiply(frames.toDouble()).toPosition()
 
     fun update() {
@@ -176,7 +178,7 @@ class SUnit private constructor(val unit: Unit) {
         if (frame - lastUnstickingCommandFrame > game.latencyFrames) {
             if (vx == 0.0 && vy == 0.0 && canMoveWithoutBreakingAttack && !gathering) {
                 stuckFrames++
-                if (stuckFrames > 24) {
+                if (stuckFrames > game.latencyFrames * 3) {
                     lastUnstickingCommandFrame = Int.MAX_VALUE
                     stop()
                 }
@@ -362,7 +364,8 @@ class SUnit private constructor(val unit: Unit) {
     }
 
     fun stop() {
-        unit.stop();
+        unit.stop()
+        sleep()
     }
 
     fun cancelBuild() {
@@ -373,7 +376,6 @@ class SUnit private constructor(val unit: Unit) {
     }
 
     fun inAttackRange(other: SUnit, allowance: Int = 0) = hasWeaponAgainst(other) && maxRangeVs(other) + allowance >= distanceTo(other)
-
 
     fun maxRangeVs(other: SUnit) =
             player.weaponMaxRange(weaponAgainst(other)) +

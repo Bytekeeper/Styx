@@ -43,9 +43,9 @@ class SquadBackOff(private val squad: SquadBoard) : TreeNode() {
                 .forEach { a ->
                     when {
                         a.safe -> attackerLock.releaseItem(a)
-                        a.flying -> {
-                            val force = Potential.reach(a, targetSquad.myCenter) +
-                                    Potential.avoidDanger(a, 64) * 0.5
+                        a.flying || a.threats.any { it.inAttackRange(a, 32) } -> {
+                            val force = Potential.reach(a, targetSquad.myCenter) * 0.7 +
+                                    Potential.avoidDanger(a, 64)
                             Potential.apply(a, force)
                         }
                         else -> {

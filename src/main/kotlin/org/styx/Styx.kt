@@ -121,18 +121,18 @@ object Styx : BehaviorTree() {
         geography.init()
         var path = Paths.get("bwapi-data").resolve("write")
         if (!Files.exists(path)) {
-            path = Paths.get("")
+            path = Paths.get("").toAbsolutePath()
             while (Files.list(path).noneMatch { it.fileName.toString() == "write" }) {
-                path = path.parent ?: error("Failed to find write folder")
+                path = path.parent ?: error("Failed to find write folder, first tried ${Paths.get("bwapi-data").resolve("write")}, last tried $path")
             }
         }
         writePath = path
         println("Writing to folder $path")
-        path = Paths.get("bwapi-data").resolve("read")
+        path = writePath.parent.resolve("read")
         if (!Files.exists(path)) {
-            path = Paths.get("")
+            path = Paths.get("").toAbsolutePath()
             while (Files.list(path).noneMatch { it.fileName.toString() == "read" }) {
-                path = path.parent ?: error("Failed to find write folder")
+                path = path.parent ?: error("Failed to find write folder, first tried ${writePath.parent.resolve("read")}, last tried $path")
             }
         }
         readPath = path
@@ -201,7 +201,6 @@ operator fun TilePosition.plus(other: TilePosition) = add(other)
 operator fun WalkPosition.plus(other: WalkPosition) = add(other)
 operator fun WalkPosition.minus(other: WalkPosition) = subtract(other)
 infix fun WalkPosition.dot(other: WalkPosition) = x * other.x + y * other.y
-fun WalkPosition.middlePosition() = toPosition() + Position(4, 4)
 fun WalkPosition.makeValid() = WalkPosition(
         clamp(x, 0, game.mapWidth() * 4 - 1),
         clamp(y, 0, game.mapHeight() * 4 - 1))

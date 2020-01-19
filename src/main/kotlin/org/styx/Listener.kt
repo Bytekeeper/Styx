@@ -28,7 +28,8 @@ class Listener : DefaultBWListener() {
                     TwoHatchHydra,
                     TwoHatchMuta,
                     ThreeHatchMuta,
-                    TenHatch
+                    TenHatch,
+                    FourPool
 
                     // Actually crappy strategies:
 //                    ThirteenPoolMuta,

@@ -97,9 +97,11 @@ class Attack(private val attacker: SUnit,
             Sequence(
                     Condition { attacker.isOnCoolDown && attacker.canMoveWithoutBreakingAttack },
                     Selector(
+                            SpreadOut(attacker),
                             homeInToEnemy,
                             evadeOtherEnemies,
-                            kiteEnemy
+                            kiteEnemy,
+                            BetterAltitude(board)
                     )
             ),
             attackEnemy,
@@ -206,4 +208,44 @@ class Intercept(private val board: WithTarget<SUnit>) : TreeNode() {
         Potential.apply(board.actor, force)
         running()
     }
+}
+
+class SpreadOut(private val unit: SUnit) : TreeNode() {
+    override fun exec() {
+        if (unit.threats.any { it.weaponAgainst(unit).isSplash }) {
+            val force = Potential.collisionRepulsion(unit)
+            if (force.lengthSquared() > 0) {
+                Potential.apply(unit, force)
+                running()
+            } else {
+                failed()
+            }
+        } else {
+            failed()
+        }
+    }
+}
+
+class BetterAltitude(private val board: WithTarget<SUnit>) : TreeNode() {
+    override fun exec() {
+        val target = board.target ?: run {
+            failed()
+            return
+        }
+        if (board.actor.maxRangeVs(target) < 32 || board.actor.altitude > target.altitude) {
+            failed()
+        } else {
+            val bestTile = board.actor.tilePosition.adjacentTiles(1)
+                    .filter { it.altitude > target.altitude && target.distanceTo(it.closestTo(board.actor.position), board.actor.unitType) <= board.actor.maxRangeVs(target) }
+                    .maxBy { it.altitude } ?: run {
+                failed()
+                return
+            }
+            val force = Potential.collisionRepulsion(board.actor) +
+                    Potential.reach(board.actor, bestTile.closestTo(board.actor.position))
+            Potential.apply(board.actor, force)
+            running()
+        }
+    }
+
 }

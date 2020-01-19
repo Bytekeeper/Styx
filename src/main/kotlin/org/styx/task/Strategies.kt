@@ -223,6 +223,14 @@ object NinePoolCheese : Strat("9 Pool Cheese",
         Gathering(true)
 )
 
+object FourPool : Strat("4pool",
+        Build(UnitType.Zerg_Spawning_Pool),
+        Repeat(Get(12, UnitType.Zerg_Zergling)),
+        ExtractorTrick(UnitType.Zerg_Zergling),
+        ensureSupply(),
+        pumpLings()
+)
+
 val ninePoolBasic = Parallel(Parallel.Policy.SEQUENCE,
         Get(9, UnitType.Zerg_Drone),
         Build(UnitType.Zerg_Spawning_Pool)

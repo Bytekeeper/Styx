@@ -20,7 +20,7 @@ abstract class MemoLeaf : TreeNode() {
     abstract fun tick(): NodeStatus
 }
 
-object Running : TreeNode() {
+object Wait : TreeNode() {
     override fun init() {
         running()
     }

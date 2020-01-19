@@ -15,6 +15,7 @@ function play() {
     map=${maps[$RANDOM % ${#maps[@]} ]}
     echo "Playing vs $1 on $map"
     scbw.play --headless --read_overwrite --bots StyxZ "$1" --timeout_at_frame 28000 --game_name $game_name --map "$map"
+    #scbw.play --read_overwrite --bots StyxZ "$1" --timeout_at_frame 28000 --game_name $game_name --map "$map"
     mkdir ~/cherryvis-docker/replays/$game_name.rep.cvis
     cp ~/.scbw/games/GAME_$game_name/write_0/trace.json ~/cherryvis-docker/replays/$game_name.rep.cvis/
     cp ~/.scbw/games/GAME_$game_name/player_0.rep ~/cherryvis-docker/replays/$game_name.rep
@@ -38,8 +39,7 @@ function play() {
 #play Stone
 #play McRaveZ
 #play 'Chris Coxe'
-# play Antiga
-#play BananaBrain
+#play Antiga
 # play tscmoo
 #play tscmoop2
 #play WuliBot
@@ -56,7 +56,6 @@ function play() {
 #play Microwave
 #play ZNZZBot
 # play GuiBot
-#play AntigaZ
 #play Feint
 #play PurpleSwarm
 #play Dragon
@@ -67,9 +66,12 @@ function play() {
 #play krasi0
 play Locutus
 play PurpleWave
+play adias
+play BananaBrain
 play 'Hao Pan'
 play Microwave
 play 'Iron bot'
+play AntigaZ
 play Steamhammer
 play 'Marian Devecka'
 play ChimeraBot

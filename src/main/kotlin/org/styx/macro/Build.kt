@@ -174,7 +174,7 @@ class Build(private val board: BuildBoard) : BehaviorTree() {
                     Condition { board.building?.isCompleted == true },
                     Sequence(
                             StartBuild(board),
-                            Running
+                            Wait
                     )
             )
     )
