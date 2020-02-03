@@ -77,7 +77,7 @@ class Attack(private val attacker: SUnit,
             Condition {
                 attacker.flying && enemy.weaponAgainst(attacker).minRange() > 0 ||
                         attacker.irridiated ||
-                        enemy.unitType.canMove() && (enemy.maxRangeVs(attacker) > attacker.maxRangeVs(enemy) && attacker.maxRangeVs(enemy) + 8 > attacker.distanceTo(enemy))
+                        enemy.unitType.canMove() && (enemy.maxRangeVs(attacker) > attacker.maxRangeVs(enemy) && attacker.maxRangeVs(enemy) - attacker.distanceTo(enemy) < 8)
 
             },
             Intercept(board)

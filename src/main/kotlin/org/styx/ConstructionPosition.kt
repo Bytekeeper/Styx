@@ -45,6 +45,7 @@ object ConstructionPosition {
                         && outsideOfResourceLines(pos, unitType)
                         && hasNoAddonOrEnoughSpace(unitType, pos)
                         && willNotBlockOtherAddon(unitType, pos)
+                        && TileReservation.isAvailable(pos)
                 ) {
                     bestDistance = dist
                     bestBuildPosition = pos
@@ -102,7 +103,7 @@ object ConstructionPosition {
         val geysers = units.geysers
         return bases.myBases
                 .mapNotNull {
-                    val geyser = geysers.nearest(it.center.x, it.center.y, 8 * 32)
+                    val geyser = geysers.nearest(it.center.x, it.center.y, 8 * 32) { TileReservation.isAvailable(it.tilePosition) }
                     if (geyser != null)
                         it.mainResourceDepot to geyser
                     else

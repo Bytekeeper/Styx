@@ -8,7 +8,7 @@ import org.styx.micro.Potential
 
 class SquadBackOff(private val squad: SquadBoard) : TreeNode() {
     private val attackerLock = UnitLocks {
-        Styx.resources.availableUnits.filter {
+        UnitReservation.availableItems.filter {
             squad.mine.contains(it) &&
                     !it.unitType.isWorker &&
                     it.unitType.canMove() &&

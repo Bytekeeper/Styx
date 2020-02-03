@@ -2,17 +2,14 @@ package org.styx.task
 
 import bwapi.UnitType
 import org.bk.ass.bt.TreeNode
-import org.styx.Styx
+import org.styx.*
 import org.styx.Styx.bases
 import org.styx.Styx.game
 import org.styx.Styx.units
-import org.styx.UnitLocks
 import org.styx.micro.Potential
-import org.styx.plus
-import org.styx.times
 
 object Scouting : TreeNode() {
-    private val ovis = UnitLocks { Styx.resources.availableUnits.filter { it.unitType == UnitType.Zerg_Overlord } }
+    private val ovis = UnitLocks { UnitReservation.availableItems.filter { it.unitType == UnitType.Zerg_Overlord } }
 
     override fun exec() {
         running()

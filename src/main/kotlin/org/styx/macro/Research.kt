@@ -6,7 +6,7 @@ import org.styx.*
 
 class Research(private val tech: TechType) : MemoLeaf() {
     private val costLock = costLocks.techCostLock(tech)
-    private val researcherLock = UnitLock() { Styx.resources.availableUnits.firstOrNull { it.unitType == tech.whatResearches() } }
+    private val researcherLock = UnitLock() { UnitReservation.availableItems.firstOrNull { it.unitType == tech.whatResearches() } }
 
     override fun tick(): NodeStatus {
         if (Styx.self.hasResearched(tech))

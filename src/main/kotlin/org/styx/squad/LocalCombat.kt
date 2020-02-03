@@ -30,7 +30,7 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
             { combatMoveToTree(it) })
 
     private val attackerLock = UnitLocks {
-        val candidates = Styx.resources.availableUnits
+        val candidates = UnitReservation.availableItems
                 .filter { squad.mine.contains(it) }
         val combatUnits = candidates.filter {
             it.isCombatRelevant
@@ -69,7 +69,7 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
         if (bestEval.agents.isNotEmpty() && bestEval.agents.size < attackers.size) {
             val toDismiss = attackers - bestEval.agents.map { it.userObject as SUnit }
             diag.log("Dismissing $toDismiss to improve eval from ${squad.fastEval} to ${bestEval.eval}")
-            attackerLock.releaseItem(toDismiss)
+            attackerLock.releasePartially(toDismiss)
         }
         val beforeCombat = sim.evalToInt(agentValueForPlayer)
         val valuesBeforeCombat = agentsBeforeCombat.map { it to agentValueForPlayer.applyAsInt(it) }.toMap()
@@ -102,7 +102,7 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
             }
 
             // Keep units that'd die anyway or are not in danger
-            attackerLock.releaseItem(attackers - afterFlee.lostUnits - attackersToKeep)
+            attackerLock.releasePartially(attackers - afterFlee.lostUnits - attackersToKeep)
             if (attackers.isEmpty())
                 return
             else {

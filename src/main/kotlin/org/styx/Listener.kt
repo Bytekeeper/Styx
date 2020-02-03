@@ -31,10 +31,10 @@ class Listener : DefaultBWListener() {
                     TwoHatchMuta,
                     ThreeHatchMuta,
                     TenHatch,
-                    FourPool
+                    FourPool,
 
                     // Actually crappy strategies:
-//                    ThirteenPoolMuta,
+                    ThirteenPoolMuta
             ).withName("Strategy"),
             WorkerAvoidDamage,
             Gathering(),
@@ -67,6 +67,7 @@ class Listener : DefaultBWListener() {
                 maxFrameTime = frameTime
             }
         } catch (e: Throwable) {
+            e.printStackTrace()
             diag.crash(e)
             throw e
         }

@@ -36,7 +36,7 @@ class Get(private val amountProvider: () -> Int,
             return NodeStatus.RUNNING
         }
 
-        val availableBuilders = resources.availableUnits.count { type.whatBuilds().first == it.unitType && it.buildType == UnitType.None }
+        val availableBuilders = UnitReservation.availableItems.count { type.whatBuilds().first == it.unitType && it.buildType == UnitType.None }
         val builders = availableBuilders + determineFutureBuildersToBlockNow()
         val expectedChildCount =
                 if (limitByAvailableBuilders)
@@ -85,7 +85,7 @@ class Get(private val amountProvider: () -> Int,
                             .map { it.remainingTrainTime }
                             .takeWhile { frames ->
                                 estimatedCost += costPerUnit
-                                !(resources.availableGMS + Styx.economy.estimatedAdditionalGMSIn(frames)).canAfford(estimatedCost)
+                                !(ResourceReservation.gms + Styx.economy.estimatedAdditionalGMSIn(frames)).canAfford(estimatedCost)
                             }.count()
                 } else 0
         return predictedAdditionalBuilders

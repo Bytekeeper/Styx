@@ -84,7 +84,7 @@ object TwoHatchMuta : Strat("2HatchMuta",
         ensureSupply(),
         Repeat(Repeat.Policy.SELECTOR,
                 Sequence(
-                        Condition { resources.availableGMS.gas < UnitType.Zerg_Mutalisk.gasPrice() },
+                        Condition { ResourceReservation.gms.gas < UnitType.Zerg_Mutalisk.gasPrice() },
                         pumpLings()
                 )
         ),
@@ -115,7 +115,7 @@ object ThreeHatchMuta : Strat("3HatchMuta",
         ensureSupply(),
         Repeat(Repeat.Policy.SELECTOR,
                 Sequence(
-                        Condition { resources.availableGMS.gas < UnitType.Zerg_Mutalisk.gasPrice() },
+                        Condition { ResourceReservation.gms.gas < UnitType.Zerg_Mutalisk.gasPrice() },
                         pumpLings()
                 )
         ),
@@ -136,13 +136,13 @@ object TwoHatchHydra : Strat("2HatchHydra",
         ensureSupply(),
         Repeat(Repeat.Policy.SELECTOR,
                 Sequence(
-                        Condition { resources.availableGMS.minerals > 600 },
+                        Condition { ResourceReservation.gms.minerals > 600 },
                         Build(UnitType.Zerg_Hatchery)
                 )
         ),
         Repeat(Repeat.Policy.SELECTOR,
                 Sequence(
-                        Condition { resources.availableGMS.gas < UnitType.Zerg_Hydralisk.gasPrice() },
+                        Condition { ResourceReservation.gms.gas < UnitType.Zerg_Hydralisk.gasPrice() },
                         pumpLings()
                 )
         ),
@@ -203,7 +203,7 @@ object Nine734 : Strat("9734",
         Upgrade(UpgradeType.Metabolic_Boost, 1),
         Repeat(Repeat.Policy.SELECTOR,
                 Sequence(
-                        Condition { resources.availableGMS.gas < UnitType.Zerg_Hydralisk.gasPrice() },
+                        Condition { ResourceReservation.gms.gas < UnitType.Zerg_Hydralisk.gasPrice() },
                         pumpLings()
                 )
         ),
@@ -263,7 +263,7 @@ fun ensureSupply() =
                 Sequence(
                         Condition {
                             economy.supplyWithPlanned < 4 ||
-                                    economy.supplyWithPlanned < 16 && resources.availableGMS.minerals > 400
+                                    economy.supplyWithPlanned < 16 && ResourceReservation.gms.minerals > 400
                         },
                         Train(UnitType.Zerg_Overlord)
                 )

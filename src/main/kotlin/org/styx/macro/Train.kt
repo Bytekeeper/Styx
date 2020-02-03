@@ -4,45 +4,18 @@ import bwapi.UnitType
 import org.bk.ass.bt.*
 import org.bk.ass.manage.GMS
 import org.bk.ass.manage.Lock
-import org.styx.SUnit
-import org.styx.Styx
+import org.styx.*
 import org.styx.Styx.units
-import org.styx.UnitLock
 import org.styx.action.BasicActions
-import org.styx.costLocks
 import org.styx.global.PlannedUnit
 
 
-class AcquireUnitLock(private val lock: UnitLock) : TreeNode() {
-    override fun exec() {
-        lock.acquire()
-        if (lock.isSatisfied)
-            success()
-        else
-            failed()
-    }
-
-    override fun reset() {
-        super.reset()
-        lock.reset()
-    }
-}
-
 class WaitForUnitLock(lock: UnitLock) : Decorator(
-        Repeat(Repeat.Policy.SELECTOR, AcquireUnitLock(lock))
+        Repeat(Repeat.Policy.SELECTOR, AcquireLock(lock))
 )
 
-class AcquireCostLock(private val lock: Lock<GMS>) : TreeNode() {
-    override fun exec() {
-        if (lock.acquire())
-            success()
-        else
-            failed()
-    }
-}
-
 class WaitForCostLock(lock: Lock<GMS>) : Decorator(
-        Repeat(Repeat.Policy.SELECTOR, AcquireCostLock(lock))
+        Repeat(Repeat.Policy.SELECTOR, AcquireLock(lock))
 )
 
 data class TrainBoard(
@@ -55,7 +28,7 @@ data class TrainBoard(
 
     val trainerLock = UnitLock({ it.unitType == type.whatBuilds().first || it.buildType == type || it.unitType == type }) {
         if (type.whatBuilds().first == UnitType.Zerg_Larva) {
-            val hatcheries = Styx.resources.availableUnits
+            val hatcheries = UnitReservation.availableItems
                     .filter { it.unitType == UnitType.Zerg_Larva && it.buildType == UnitType.None }
                     .groupBy { it.hatchery }
                     .entries
@@ -67,7 +40,7 @@ data class TrainBoard(
                     }
             hatchery?.value?.first()
         } else
-            Styx.resources.availableUnits.firstOrNull { it.unitType == type.whatBuilds().first }
+            UnitReservation.availableItems.firstOrNull { it.unitType == type.whatBuilds().first }
     }
     val costLock = costLocks.unitCostLock(type)
 }

@@ -8,7 +8,7 @@ import org.styx.Styx.squads
 import org.styx.action.BasicActions
 
 class SeekCombatSquad(private val squad: SquadBoard) : TreeNode() {
-    private val attackerLock = UnitLocks { Styx.resources.availableUnits.filter { squad.mine.contains(it) && !it.unitType.isWorker && !it.unitType.isBuilding && it.unitType.canAttack() } }
+    private val attackerLock = UnitLocks { UnitReservation.availableItems.filter { squad.mine.contains(it) && !it.unitType.isWorker && !it.unitType.isBuilding && it.unitType.canAttack() } }
 
     override fun exec() {
         running()
@@ -48,7 +48,7 @@ class SeekCombatSquad(private val squad: SquadBoard) : TreeNode() {
                         BasicActions.move(attacker, targetGroundPosition)
                     }
                 } else {
-                    Styx.resources.releaseUnit(attacker)
+                    UnitReservation.release(this, attacker)
                 }
             }
         } else {

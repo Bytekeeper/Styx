@@ -32,7 +32,7 @@ fun Player.canUpgrade(upgradeType: UpgradeType): Boolean {
     val currentLevel = getUpgradeLevel(upgradeType)
     return !isUpgrading(upgradeType)
             && currentLevel < getMaxUpgradeLevel(upgradeType)
-            && resources.availableGMS.canAfford(GMS.upgradeCost(upgradeType, currentLevel + 1))
+            && ResourceReservation.gms.canAfford(GMS.upgradeCost(upgradeType, currentLevel + 1))
             && Styx.units.myCompleted(upgradeType.whatsRequired(currentLevel + 1)).isNotEmpty()
             && Styx.units.myCompleted(upgradeType.whatUpgrades()).isNotEmpty()
 }

@@ -6,7 +6,7 @@ import org.styx.*
 
 class Upgrade(private val upgrade: UpgradeType, private val level: Int) : MemoLeaf() {
     private val costLock = costLocks.upgradeCostLock(upgrade, level)
-    private val researcherLock = UnitLock() { Styx.resources.availableUnits.firstOrNull { it.unitType == upgrade.whatUpgrades() } }
+    private val researcherLock = UnitLock() { UnitReservation.availableItems.firstOrNull { it.unitType == upgrade.whatUpgrades() } }
 
     override fun tick(): NodeStatus {
         if (upgradeIsDone())

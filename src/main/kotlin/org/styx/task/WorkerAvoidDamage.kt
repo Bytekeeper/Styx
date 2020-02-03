@@ -4,10 +4,11 @@ import org.bk.ass.bt.TreeNode
 import org.styx.Styx
 import org.styx.Styx.units
 import org.styx.UnitLocks
+import org.styx.UnitReservation
 import org.styx.action.BasicActions
 
 object WorkerAvoidDamage : TreeNode() {
-    private val workersLock = UnitLocks { Styx.resources.availableUnits.filter { it.unitType.isWorker && it.engaged.isNotEmpty() } }
+    private val workersLock = UnitLocks { UnitReservation.availableItems.filter { it.unitType.isWorker && it.engaged.isNotEmpty() } }
 
     override fun exec() {
         running()

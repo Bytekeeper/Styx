@@ -6,7 +6,7 @@ import org.styx.action.BasicActions
 
 class SquadScout(private val squad: SquadBoard) : TreeNode() {
     private val attackerLock = UnitLocks {
-        Styx.resources.availableUnits.filter {
+        UnitReservation.availableItems.filter {
             squad.mine.contains(it) &&
                     !it.unitType.isWorker &&
                     it.unitType.canMove() &&

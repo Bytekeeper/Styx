@@ -11,7 +11,7 @@ import org.styx.action.BasicActions
 import kotlin.math.min
 
 class Gathering : TreeNode() {
-    private val workersLock = UnitLocks { Styx.resources.availableUnits.filter { it.unitType.isWorker } }
+    private val workersLock = UnitLocks { UnitReservation.availableItems.filter { it.unitType.isWorker } }
     private val assignment = mutableMapOf<SUnit, SUnit>()
 
     override fun exec() {
@@ -21,7 +21,7 @@ class Gathering : TreeNode() {
             return
         }
 
-        val availableGMS = resources.availableGMS - buildPlan.unrealized.fold(GMS.ZERO) { acc, item -> acc + GMS.unitCost(item.type) * item.amount }
+        val availableGMS = ResourceReservation.gms - buildPlan.unrealized.fold(GMS.ZERO) { acc, item -> acc + GMS.unitCost(item.type) * item.amount }
         val gatherGas = availableGMS.gas < 0 && units.myWorkers.count() > 6
         val workers = workersLock.item
 

@@ -6,7 +6,7 @@ import org.styx.*
 import org.styx.micro.Potential
 
 class ClusterTogether(private val squad: SquadBoard) : TreeNode() {
-    private val attackerLock = UnitLocks { Styx.resources.availableUnits.filter { squad.mine.contains(it) && !it.unitType.isWorker && !it.unitType.isBuilding && it.unitType.canAttack() } }
+    private val attackerLock = UnitLocks { UnitReservation.availableItems.filter { squad.mine.contains(it) && !it.unitType.isWorker && !it.unitType.isBuilding && it.unitType.canAttack() } }
 
     override fun exec() {
         running()
@@ -25,7 +25,7 @@ class ClusterTogether(private val squad: SquadBoard) : TreeNode() {
                         Potential.keepGroundCompany(attacker, 32) * 0.2
                 Potential.apply(attacker, force)
             } else {
-                Styx.resources.releaseUnit(attacker)
+                UnitReservation.release(this, attacker)
             }
         }
         return

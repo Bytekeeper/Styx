@@ -53,7 +53,7 @@ object TargetEvaluator {
 
     private val byEnemyDamageCapabilities: TargetScorer = { a, e, _ ->
         e.cooldownRemaining / 500.0 +
-                (if (e.hasPower) e.damagePerFrameVs(a) * 0.3 else 0.0) *
+                (if (e.hasPower) e.damagePerFrameVs(a) * 0.4 else 0.0) *
                 (if (e.weaponAgainst(a).isSplash) Config.splashValueFactor else 1.0) *
                 (1.0 + e.maxRangeVs(a) * Config.rangeValueFactor)
     }

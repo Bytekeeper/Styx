@@ -15,20 +15,16 @@ import org.styx.global.PlannedUnit
 
 data class BuildBoard(
         val type: UnitType,
-        val provideLocation: (BuildBoard) -> Unit = {board ->
-            if (board.location == null || board.workerLock.item?.canBuildHere(board.location!!, board.type) == false) {
-                board.location = ConstructionPosition.findPositionFor(type)
-            }
-        },
-        var location: TilePosition? = null,
+        val provideLocation: () -> TilePosition? = { ConstructionPosition.findPositionFor(type) },
         var building: SUnit? = null,
         var framesBeforeStartable: Int? = null
 ) {
-    val workerLock: UnitLock = UnitLock({ it.unitType.isWorker && resources.availableUnits.contains(it) }) {
-        val eval = closeTo(location!!.toPosition())
-        resources.availableUnits.filter { it.unitType.isWorker }.minBy { eval(it) }
+    val workerLock: UnitLock = UnitLock({ it.unitType.isWorker && UnitReservation.isAvailable(it) }) {
+        val eval = closeTo(positionLock.item.toPosition())
+        UnitReservation.availableItems.filter { it.unitType.isWorker }.minBy { eval(it) }
     }
     val costLock: Lock<GMS> = costLocks.unitCostLock(type)
+    val positionLock = TileLock({ workerLock.item?.canBuildHere(it, type) != false }, provideLocation)
 
     init {
         require(type.isBuilding)
@@ -45,22 +41,6 @@ class CancelBuild(private val board: BuildBoard) : BehaviorTree() {
             )
 }
 
-class FindBuildSpot(private val board: BuildBoard) : TreeNode() {
-    override fun exec() {
-        board.provideLocation(board)
-        if (board.location == null) {
-            buildPlan.plannedUnits += PlannedUnit(board.type, consumedUnit = Styx.self.race.worker)
-            running()
-        } else
-            success()
-    }
-
-    override fun reset() {
-        super.reset()
-        board.location = null
-    }
-}
-
 class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
     private var hysteresisFrames = 0
 
@@ -70,14 +50,20 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
                     Parallel(Parallel.Policy.SEQUENCE,
                             EnsureDependenciesFor(board.type),
                             Sequence(
-                                    FindBuildSpot(board),
+                                    Selector(
+                                            AcquireLock(board.positionLock),
+                                            LambdaNode {
+                                                buildPlan.plannedUnits += PlannedUnit(board.type, consumedUnit = Styx.self.race.worker)
+                                                NodeStatus.RUNNING
+                                            }
+                                    ),
                                     LambdaNode {
-//                                        val oldWorker = board.workerLock.item
+                                        //                                        val oldWorker = board.workerLock.item
                                         board.workerLock.acquire()
 //                                        if (oldWorker != null && board.workerLock.item != oldWorker) {
 //                                            println("HOLY MOLY")
 //                                        }
-                                        val buildPosition = board.location!!.toPosition() + board.type.center
+                                        val buildPosition = board.positionLock.item.toPosition() + board.type.center
                                         val worker = board.workerLock.item
                                         board.framesBeforeStartable = worker?.framesToTravelTo(buildPosition)
                                         board.costLock.setFutureFrames(
@@ -87,7 +73,7 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
                                         if (worker != null && board.costLock.isSatisfiedLater) {
                                             if (worker.unitType == UnitType.Zerg_Drone) {
                                                 // Add one supply for the lost worker
-                                                resources.releaseGMS(GMS(0, 0, UnitType.Zerg_Drone.supplyRequired()))
+                                                ResourceReservation.release(null, GMS(0, 0, UnitType.Zerg_Drone.supplyRequired()))
                                             }
                                             hysteresisFrames = Config.productionHysteresisFrames
                                             NodeStatus.SUCCESS
@@ -103,7 +89,8 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
             )
 
     private fun checkForExistingBuilding(): NodeStatus {
-        board.location?.let { targetLocation ->
+        if (board.positionLock.isSatisfied) {
+            val targetLocation = board.positionLock.item
             val targetPos = targetLocation.toPosition() + board.type.center
             val candidate = units.mine.nearest(targetPos.x, targetPos.y, 128) { it.unitType == board.type}
             if (board.workerLock.item != null && candidate?.tilePosition == targetLocation && candidate.unitType == board.type) {
@@ -141,14 +128,14 @@ class OrderBuild(private val board: BuildBoard) : TreeNode() {
                 }
                 if (worker.unitType == UnitType.Zerg_Drone) {
                     // Add one supply for the lost worker
-                    resources.releaseGMS(GMS(0, 0, UnitType.Zerg_Drone.supplyRequired()))
+                    ResourceReservation.release(null, GMS(0, 0, UnitType.Zerg_Drone.supplyRequired()))
                 }
                 buildPlan.plannedUnits += PlannedUnit(board.type, 0, consumedUnit = Styx.self.race.worker)
-                BasicActions.build(worker, board.type, board.location!!)
+                BasicActions.build(worker, board.type, board.positionLock.item)
             }
             board.costLock.isSatisfiedLater -> {
                 buildPlan.plannedUnits += PlannedUnit(board.type, board.framesBeforeStartable, consumedUnit = Styx.self.race.worker)
-                BasicActions.move(worker, board.location!!.toPosition() + board.type.center)
+                BasicActions.move(worker, board.positionLock.item.toPosition() + board.type.center)
             }
             else -> {
                 buildPlan.plannedUnits += PlannedUnit(board.type, board.framesBeforeStartable, consumedUnit = Styx.self.race.worker)
@@ -171,7 +158,7 @@ class StartBuild(private val board: BuildBoard) : BehaviorTree() {
                     OrderBuild(board)
             )
 
-    override fun toString(): String = "Start building $board.type at ${board.location}"
+    override fun toString(): String = "Start building $board.type at ${board.positionLock.item}"
 }
 
 class Build(private val board: BuildBoard) : BehaviorTree() {

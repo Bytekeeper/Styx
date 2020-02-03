@@ -1,6 +1,7 @@
 package org.styx.micro
 
 import bwapi.Position
+import bwapi.UnitType
 import org.locationtech.jts.math.Vector2D
 import org.styx.*
 import org.styx.Styx.game
@@ -61,6 +62,9 @@ object Potential {
     fun apply(u: SUnit, force: Vector2D, maxTravel: Double = 128.0) {
         if (u.sleeping)
             return
+        if (u.unitType == UnitType.Zerg_Zergling && u.threats.any { u.inAttackRange(it, 8) }) {
+//            println("w00t")
+        }
         val nForce = force.normalize()
         val ut = u.unitType
         val minFrames = 5
