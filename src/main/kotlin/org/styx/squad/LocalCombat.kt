@@ -195,6 +195,28 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
                 .forEach { sim.addAgentA(it) }
         squad.enemies
                 .forEach { sim.addAgentB(unitToAgentMapper(it)) }
+        val allAgents = sim.agentsA + sim.agentsB
+        val units = allAgents.map {
+            val u = it.userObject as SUnit
+            u to it
+        }.toMap()
+        for ((u, a) in units) {
+            if (u.unitType == UnitType.Protoss_Carrier) {
+                a.setInterceptors(
+                        u.unit.interceptors
+                                .mapNotNull { units[SUnit.forUnit(it)] }
+                )
+            }
+            val target = u.target
+            val targetAgent = units[target]
+            if (target != null && targetAgent != null) {
+                if (u.player.isAlly(target.player)) {
+                    a.setRestoreTarget(targetAgent)
+                } else {
+                    a.setAttackTarget(targetAgent)
+                }
+            }
+        }
         return agentsBeforeCombat
     }
 
@@ -203,7 +225,7 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
         val agentsBeforeCombat = squad.mine.map {
             val agent = unitToAgentMapper(it)
             if (!it.flying)
-                agent.setSpeedFactor(0.85f)
+                agent.setSpeedFactor(0.8f)
             agent
         }
         agentsBeforeCombat

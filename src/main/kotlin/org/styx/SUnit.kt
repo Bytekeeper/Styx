@@ -128,6 +128,8 @@ class SUnit private constructor(val unit: Unit) {
     }
 
     val altitude get() = game.getGroundHeight(tilePosition)
+    var targetPosition: Position = Position.None
+
 
     fun predictPosition(frames: Int) = position + velocity.multiply(frames.toDouble()).toPosition()
 
@@ -174,6 +176,7 @@ class SUnit private constructor(val unit: Unit) {
         hasPower = unit.isPowered
         hatchery = unit.hatchery?.let { forUnit(it) }
         irridiated = unit.isIrradiated
+        targetPosition = unit.targetPosition
 
         if (frame - lastUnstickingCommandFrame > game.latencyFrames) {
             if (vx == 0.0 && vy == 0.0 && canMoveWithoutBreakingAttack && !gathering) {

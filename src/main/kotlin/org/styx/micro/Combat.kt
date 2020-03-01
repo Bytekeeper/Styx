@@ -114,7 +114,7 @@ class StormDodge(private val unit: SUnit) : BehaviorTree() {
 
     override fun getRoot(): TreeNode = Sequence(
             SelectTarget(board) {
-                game.bullets.firstOrNull { it.type == BulletType.Psionic_Storm && it.position.getDistance(unit.position) <= 64 }?.position
+                game.bullets.firstOrNull { it.type == BulletType.Psionic_Storm && it.position.getDistance(unit.position) <= 72 }?.position
             },
             EvadePosition(board)
     )

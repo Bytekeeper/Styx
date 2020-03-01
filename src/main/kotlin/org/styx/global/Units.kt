@@ -43,6 +43,7 @@ class Units : TreeNode() {
                 .filter {
                     it.visible ||
                             !Styx.game.isVisible(it.tilePosition) && Styx.frame - 24 * 120 <= it.lastSeenFrame ||
+                            Styx.frame - 24 * 4 <= it.lastSeenFrame ||
                             !it.detected ||
                             it.unitType.isBuilding
                 }

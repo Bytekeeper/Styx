@@ -2,8 +2,8 @@
 docker rm -vf $(docker ps -a -f name=GAME -q)
 cp build/libs/FFT_TER-all-1.0-SNAPSHOT.jar ~/.scbw/bots/StyxZ/AI/
 mapfile -t maps < <(find ~/.scbw/maps/sscai -name '*.sc?' -printf "sscai/%P\n")
-cp ~/.scbw/bots/StyxZ/botd.json ~/.scbw/bots/StyxZ/bot.json
-#cp ~/.scbw/bots/StyxZ/botb.json ~/.scbw/bots/StyxZ/bot.json
+#cp ~/.scbw/bots/StyxZ/botd.json ~/.scbw/bots/StyxZ/bot.json
+cp ~/.scbw/bots/StyxZ/botb.json ~/.scbw/bots/StyxZ/bot.json
 rm ~/.scbw/maps/replays/*
 
 function play() {
@@ -38,14 +38,13 @@ function play() {
 #play CUBOT
 #play Stone
 #play McRaveZ
-play 'Chris Coxe'
+#play 'Chris Coxe'
 #play Antiga
 # play tscmoo
 #play tscmoop2
 #play WuliBot
 #play TyrProtoss
 #play 'Tomas Vajda'
-#play McRave
 #play ZurZurZur
 # play Flash
 #play 'Simon Prins'
@@ -63,18 +62,22 @@ play 'Chris Coxe'
 #play ICELab
 
 # Top 12
-#play krasi0
-#play Locutus
-#play PurpleWave
-#play adias
-#play BananaBrain
-#play 'Hao Pan'
-#play Microwave
-#play 'Iron bot'
-#play AntigaZ
-#play Steamhammer
-#play 'Marian Devecka'
-#play ChimeraBot
-#play Antiga
-#play Proxy
+
+play Locutus
+play ZNZZBot
+play 'Hao Pan'
+play BananaBrain
+play McRave
+play 'Iron bot'
+play Microwave
+play PurpleSwarm
+play Steamhammer
+play Dragon
+play Proxy
+play Crona
+play Randomhammer
+play PurpleDestiny
+play 'Marian Devecka'
+play MadMixP
+
 sleep 5

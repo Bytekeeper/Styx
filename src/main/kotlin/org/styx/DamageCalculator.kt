@@ -14,7 +14,7 @@ object DamageCalculator {
             damageType: DamageType,
             targetArmor: Int = 0,
             targetSize: UnitSizeType): Int {
-        val afterArmor = (damagePerHit - targetArmor) * hits
+        val afterArmor = max(0, (damagePerHit - targetArmor)) * hits
         val damageDivisor = when (damageType) {
             DamageType.Concussive -> when (targetSize) {
                 UnitSizeType.Medium -> 2

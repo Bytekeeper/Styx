@@ -13,6 +13,7 @@ import org.bk.ass.grid.RayCaster
 import org.bk.ass.manage.GMS
 import org.bk.ass.query.PositionQueries
 import org.bk.ass.sim.Evaluator
+import org.bk.ass.sim.JBWAPIAgentFactory
 import org.bk.ass.sim.RetreatBehavior
 import org.bk.ass.sim.Simulator
 import org.locationtech.jts.math.Vector2D
