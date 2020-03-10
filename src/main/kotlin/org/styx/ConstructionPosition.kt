@@ -38,7 +38,7 @@ object ConstructionPosition {
                 if (!pos.isValid(Styx.game))
                     continue
                 // Simple way to leave gaps
-                if ((i != 0 || j != 0) && (pos.x % 3 < 1 || pos.y % 5 < 2))
+                if ((i != 0 || j != 0) && (pos.x % 3 == 0 || pos.y % 5 == 0))
                     continue
                 if (dist < bestDistance
                         && game.canBuildHere(pos, unitType)

@@ -7,7 +7,6 @@ import org.styx.*
 import org.styx.Styx.diag
 import org.styx.Styx.economy
 import org.styx.Styx.relevantGameResults
-import org.styx.Styx.resources
 import org.styx.macro.*
 import java.lang.Math.random
 import kotlin.math.ln
@@ -23,7 +22,7 @@ open class Strat(
         withName(name)
     }
 
-    override fun getRoot(): TreeNode = Parallel(Parallel.Policy.SEQUENCE,
+    override fun getRoot(): TreeNode = Parallel(
             LambdaNode {
                 if (status == NodeStatus.INITIAL) {
                     println("Selected strategy: $name with bound $utility")
@@ -44,6 +43,7 @@ open class Strat(
         println("Info for strategy $name: winrate: $xj, tried: $nj/$n; bound: $utility")
         diag.log("Info for strategy $name: winrate: $xj, tried: $nj/$n; bound: $utility")
     }
+
 
     override fun reset() {
         error("ERROR!")
@@ -73,7 +73,7 @@ object TwoHatchMuta : Strat("2HatchMuta",
         Repeat(Get(12, UnitType.Zerg_Drone)),
         Morph(UnitType.Zerg_Lair),
         Get(3, UnitType.Zerg_Overlord),
-        Upgrade(lingSpeedUpgrade, 1),
+        upgradeLingSpeed,
         Get(20, UnitType.Zerg_Drone),
         Repeat(Get(1, UnitType.Zerg_Spire)),
         Get(22, UnitType.Zerg_Drone),
@@ -103,7 +103,7 @@ object ThreeHatchMuta : Strat("3HatchMuta",
         Morph(UnitType.Zerg_Lair),
         Get(20, UnitType.Zerg_Drone),
         Build(UnitType.Zerg_Extractor),
-        Upgrade(lingSpeedUpgrade, 1),
+        upgradeLingSpeed,
         Get(23, UnitType.Zerg_Drone),
         Repeat(Get(1, UnitType.Zerg_Spire)),
         Get(23, UnitType.Zerg_Drone),
@@ -126,7 +126,6 @@ object TwoHatchHydra : Strat("2HatchHydra",
         twelveHatchBasic,
         Build(UnitType.Zerg_Extractor),
         Get(13, UnitType.Zerg_Drone),
-//        Repeat(Get(8, UnitType.Zerg_Zergling)),
         Build(UnitType.Zerg_Hydralisk_Den),
         Repeat(Get(16, UnitType.Zerg_Drone)),
         Train(UnitType.Zerg_Overlord),
@@ -220,7 +219,7 @@ object NinePoolCheese : Strat("9 Pool Cheese",
         pumpLings(),
         Get(2, UnitType.Zerg_Hatchery),
         Build(UnitType.Zerg_Extractor),
-        Upgrade(lingSpeedUpgrade, 1)
+        upgradeLingSpeed
 )
 
 object FourPool : Strat("4pool",
@@ -232,12 +231,12 @@ object FourPool : Strat("4pool",
         pumpLings()
 )
 
-val ninePoolBasic = Parallel(Parallel.Policy.SEQUENCE,
+val ninePoolBasic = Parallel(
         Get(9, UnitType.Zerg_Drone),
         Build(UnitType.Zerg_Spawning_Pool)
 )
 
-val overPoolBasic = Parallel(Parallel.Policy.SEQUENCE,
+val overPoolBasic = Parallel(
         Get(9, UnitType.Zerg_Drone),
         Train(UnitType.Zerg_Overlord),
         Build(UnitType.Zerg_Spawning_Pool),
@@ -245,7 +244,7 @@ val overPoolBasic = Parallel(Parallel.Policy.SEQUENCE,
         Expand()
 )
 
-val twelveHatchBasic = Parallel(Parallel.Policy.SEQUENCE,
+val twelveHatchBasic = Parallel(
         Get(9, UnitType.Zerg_Drone),
         Train(UnitType.Zerg_Overlord),
         Get(12, UnitType.Zerg_Drone),
@@ -254,6 +253,7 @@ val twelveHatchBasic = Parallel(Parallel.Policy.SEQUENCE,
 )
 
 
+val upgradeLingSpeed = Upgrade(lingSpeedUpgrade, 1)
 private fun pumpLings() = Repeat(Get(200, UnitType.Zerg_Zergling, true))
 private fun pumpHydras() = Repeat(Get(200, UnitType.Zerg_Hydralisk, true))
 fun pumpMutas() = Repeat(Get(200, UnitType.Zerg_Mutalisk, true))

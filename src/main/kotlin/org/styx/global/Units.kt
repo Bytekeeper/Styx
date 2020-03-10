@@ -80,6 +80,7 @@ class Units : TreeNode() {
 
     fun onUnitDestroy(unit: Unit) {
         val u = SUnit.forUnit(unit)
+        u.update()
         enemy.remove(u)
         u.dispose()
     }

@@ -194,7 +194,12 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
         agentsBeforeCombat
                 .forEach { sim.addAgentA(it) }
         squad.enemies
-                .forEach { sim.addAgentB(unitToAgentMapper(it)) }
+                .forEach {
+                    if (it.unitType == UnitType.Terran_Vulture_Spider_Mine) {
+                        println("!")
+                    }
+                    sim.addAgentB(unitToAgentMapper(it))
+                }
         val allAgents = sim.agentsA + sim.agentsB
         val units = allAgents.map {
             val u = it.userObject as SUnit
@@ -225,7 +230,7 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
         val agentsBeforeCombat = squad.mine.map {
             val agent = unitToAgentMapper(it)
             if (!it.flying)
-                agent.setSpeedFactor(0.8f)
+                agent.setSpeedFactor(0.85f)
             agent
         }
         agentsBeforeCombat

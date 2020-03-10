@@ -7,7 +7,6 @@ import org.bk.ass.manage.GMS
 import org.bk.ass.manage.Lock
 import org.styx.*
 import org.styx.Styx.buildPlan
-import org.styx.Styx.resources
 import org.styx.Styx.units
 import org.styx.action.BasicActions
 import org.styx.global.PlannedUnit
@@ -41,28 +40,28 @@ class CancelBuild(private val board: BuildBoard) : BehaviorTree() {
             )
 }
 
+class SelectBuildLocation(private val board: BuildBoard) : BehaviorTree() {
+    override fun getRoot(): TreeNode = AcquireLock(board.positionLock)
+}
+
 class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
     private var hysteresisFrames = 0
 
     override fun getRoot(): TreeNode =
             Selector(
                     LambdaNode(this::checkForExistingBuilding),
-                    Parallel(Parallel.Policy.SEQUENCE,
+                    Parallel(
                             EnsureDependenciesFor(board.type),
                             Sequence(
                                     Selector(
-                                            AcquireLock(board.positionLock),
+                                            SelectBuildLocation(board),
                                             LambdaNode {
                                                 buildPlan.plannedUnits += PlannedUnit(board.type, consumedUnit = Styx.self.race.worker)
                                                 NodeStatus.RUNNING
                                             }
                                     ),
+                                    Succeeder(AcquireLock(board.workerLock)),
                                     LambdaNode {
-                                        //                                        val oldWorker = board.workerLock.item
-                                        board.workerLock.acquire()
-//                                        if (oldWorker != null && board.workerLock.item != oldWorker) {
-//                                            println("HOLY MOLY")
-//                                        }
                                         val buildPosition = board.positionLock.item.toPosition() + board.type.center
                                         val worker = board.workerLock.item
                                         board.framesBeforeStartable = worker?.framesToTravelTo(buildPosition)
@@ -97,9 +96,6 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
                 board.building = candidate
                 return NodeStatus.SUCCESS
             }
-//            if (board.workerLock.item?.unitType == board.type) {
-//                error("No building candidate found, although my old worker is ${board.workerLock.item}")
-//            }
             board.building = null
         }
         return NodeStatus.FAILURE
@@ -107,7 +103,6 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
 
     override fun reset() {
         super.reset()
-        board.workerLock.reset()
         board.building = null
         hysteresisFrames = 0
     }

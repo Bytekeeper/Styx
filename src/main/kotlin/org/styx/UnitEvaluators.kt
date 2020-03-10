@@ -9,9 +9,7 @@ import org.styx.Config.dpfThreatValueFactor
 import org.styx.Config.evalFramesToKillFactor
 import org.styx.Config.evalFramesToReach
 import org.styx.Config.waitForReinforcementsTargetingFactor
-import org.styx.Styx.diag
 import java.util.function.ToIntFunction
-import java.util.logging.Level
 import kotlin.math.max
 
 typealias TargetScorer = (a: SUnit, e: SUnit, aggressiveNess: Double) -> Double
@@ -30,18 +28,24 @@ object TargetEvaluator {
         when (e.unitType) {
             UnitType.Zerg_Egg, UnitType.Zerg_Lurker_Egg, UnitType.Zerg_Larva, UnitType.Protoss_Interceptor -> -10.0
             UnitType.Zerg_Extractor, UnitType.Terran_Refinery, UnitType.Protoss_Assimilator -> -2.0
-            UnitType.Zerg_Drone, UnitType.Terran_SCV -> 0.1
-            UnitType.Protoss_Probe -> 0.1
-            UnitType.Terran_Medic, UnitType.Protoss_High_Templar -> 0.1
+            UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 0.3
+            UnitType.Terran_Medic, UnitType.Protoss_High_Templar -> 0.5
             UnitType.Protoss_Carrier -> 1.0
             else -> 0.0
         }
     }
 
     private val byTimeToAttack: TargetScorer = { a, e, aggressiveness ->
-        val framesToTurnTo = a.framesToTurnTo(e)
-        -(max(0, a.distanceTo(e) - a.maxRangeVs(e)) / max(1.0, a.topSpeed) +
-                framesToTurnTo) * evalFramesToReach / aggressiveness
+        if (!a.hasPower) 0.0
+        else {
+            val framesToTurnTo = a.framesToTurnTo(e)
+            -(max(0, a.distanceTo(e) - a.maxRangeVs(e)) / max(1.0, a.topSpeed) +
+                    framesToTurnTo) * evalFramesToReach / aggressiveness
+        }
+    }
+
+    private val byEnemyTimeToAttack: TargetScorer = { a, e, _ ->
+        byTimeToAttack(e, a, 1.0)
     }
 
     private val byTimeToKillEnemy: TargetScorer = { a, e, _ ->
@@ -53,14 +57,7 @@ object TargetEvaluator {
         -e.topSpeed / 60
     }
 
-    private val byEnemyDamageCapabilities: TargetScorer = { a, e, _ ->
-        e.cooldownRemaining / 600.0 +
-                (if (e.hasPower) e.damagePerFrameVs(a) * 1.4 else 0.0) *
-                (if (e.weaponAgainst(a).isSplash) Config.splashValueFactor else 1.0) *
-                (1.0 + e.maxRangeVs(a) * Config.rangeValueFactor)
-    }
-
-    private val defaultScorers = listOf(byEnemyType, byTimeToAttack, byTimeToKillEnemy, byEnemySpeed, byEnemyDamageCapabilities)
+    private val defaultScorers = listOf(byEnemyType, byTimeToAttack, byTimeToKillEnemy, byEnemySpeed, byEnemyTimeToAttack)
 
     fun bestCombatMoves(attackers: Collection<SUnit>, targets: Collection<SUnit>, aggressiveness: Double): List<CombatMove> {
         val relevantTargets = targets
@@ -91,15 +88,16 @@ object TargetEvaluator {
                         val overloadAvoidance = -attackerCount.getOrDefault(e, 0) * 0.05
                         val result = scorers.sumByDouble { it(a, e, aggressiveness) } + overloadAvoidance
 //                        diag.log("combatmove scoring : $a to $e: ${scorers.map { it(a, e, aggressiveness) }.toList()}, $overloadAvoidance = $result", Level.WARNING)
+                        require(!result.isNaN())
                         result
                     }
             if (target != null) {
-                if (!alreadyEngaged && healthFactor(a) * 2.5 < averageHealth || healthFactor(a) * 4 < averageHealth && a.engaged.isNotEmpty()) {
+                if (!alreadyEngaged && healthFactor(a) * 2.8 < averageHealth || healthFactor(a) * 4 < averageHealth && a.engaged.isNotEmpty()) {
                     StayBack(a)
                 } else if (a.distanceTo(target) < averageMinimumDistanceToEnemy * waitForReinforcementsTargetingFactor)
                     WaitMove(a)
                 else {
-                    attackerCount.compute(target) { _, count -> if (count == null) 0 else count + 1}
+                    attackerCount.compute(target) { _, count -> if (count == null) 0 else count + 1 }
                     AttackMove(a, target)
                 }
             } else
@@ -155,7 +153,7 @@ fun unitTypeValue(unitType: UnitType) = when (unitType) {
     UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 27
     UnitType.Terran_Medic, UnitType.Protoss_High_Templar, UnitType.Terran_Science_Vessel -> 15
     UnitType.Terran_Vulture_Spider_Mine -> 0
-    else -> 7
+    else -> 6
 }
 
 // Simplified, but should take more stuff into account:

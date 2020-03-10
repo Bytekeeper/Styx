@@ -22,9 +22,7 @@ object Potential {
                 if (t.flying)
                     predictedPosition
                 else
-                    geography.walkRay.tracePath(
-                            t.walkPosition,
-                            predictedPosition)
+                    t.tracePath(predictedPosition)
         return reach(u, fixedPredictedPosition.middlePosition())
     }
 
@@ -74,9 +72,8 @@ object Potential {
         if (u.flying) {
             u.moveTo(dest)
         } else {
-            val currentWalkPosition = u.walkPosition
-            val requestedTargetWalkPosition = dest.toWalkPosition()
-            val requestedTargetLimitedByCollision = geography.walkRay.tracePath(currentWalkPosition, requestedTargetWalkPosition)!!
+            val requestedTargetWalkPosition = dest.toWalkPosition().makeValid()
+            val requestedTargetLimitedByCollision = u.tracePath(requestedTargetWalkPosition)!!
             if (requestedTargetLimitedByCollision == requestedTargetWalkPosition) {
                 u.moveTo(requestedTargetLimitedByCollision.middlePosition())
             } else {
@@ -85,17 +82,17 @@ object Potential {
                             val v = Vector2D(forceAsPosition.length, 0.0)
                                     .rotate(it)
                                     .toPosition().toWalkPosition()
-                            val end = (currentWalkPosition + v).makeValid()
-                            geography.walkRay.tracePath(currentWalkPosition, end)
+                            val end = (u.walkPosition + v).makeValid()
+                            u.tracePath(end)
                         }
                 val endPoints = dir8Candidates.filter {
-                    it.getDistance(currentWalkPosition) > 3
+                    it.getDistance(u.walkPosition) > 3
                 }
                 val wpToMoveTo =
                         endPoints.firstOrNull {
                             geography.walkRay.noObstacle(it, requestedTargetWalkPosition)
                         } ?: endPoints.maxBy {
-                            currentWalkPosition.getDistance(it)
+                            u.walkPosition.getDistance(it)
                         } ?: dir8Candidates.minBy {
                             requestedTargetWalkPosition.getDistance(it)
                         }!!

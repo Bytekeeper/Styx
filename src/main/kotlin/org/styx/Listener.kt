@@ -16,7 +16,7 @@ class Listener : DefaultBWListener() {
     private val client = BWClient(this)
     private var maxFrameTime = 0L;
 
-    private val aiTree = Parallel(Parallel.Policy.SEQUENCE,
+    private val aiTree = Parallel(
             Styx,
             Manners,
             SquadDispatch,
@@ -32,8 +32,6 @@ class Listener : DefaultBWListener() {
                     ThreeHatchMuta,
                     TenHatch,
                     FourPool,
-
-                    // Actually crappy strategies:
                     ThirteenPoolMuta
             ).withName("Strategy"),
             WorkerAvoidDamage,

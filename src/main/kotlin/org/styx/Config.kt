@@ -6,15 +6,15 @@ object Config {
     val minLevel = Level.WARNING
     const val logEnabled: Boolean = false
     const val attackerHysteresisFactor = 0.6
-    const val mediumSimHorizon = 8 * 24
-    const val longSimHorizon = 12 * 24
-    const val veryLongSimHorizon = 16 * 24
-    const val evalFramesToReach = 1 / 15.0
+    const val mediumSimHorizon = 17 * 12
+    const val longSimHorizon = 24 * 12
+    const val veryLongSimHorizon = 32 * 12
+    const val evalFramesToReach = 1 / 13.0
     const val evalFramesToKillFactor = 1 / 300.0
     const val productionHysteresisFrames = 60
     const val waitForReinforcementsTargetingFactor = 0.6
 
     const val dpfThreatValueFactor = 77
-    const val rangeValueFactor = 1/100.0
+    const val rangeValueFactor = 1/200.0
     const val splashValueFactor = 1.5
 }

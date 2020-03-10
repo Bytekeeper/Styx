@@ -11,7 +11,7 @@ object SquadDispatch : BehaviorTree() {
             Parallel.Policy.SEQUENCE,
             { Styx.squads.squads }
     ) { squadBoard ->
-        Parallel(Parallel.Policy.SEQUENCE,
+        Parallel(
                 LocalCombat(squadBoard),
                 SquadBackOff(squadBoard),
                 SeekCombatSquad(squadBoard),

@@ -8,7 +8,7 @@ import org.styx.Styx
 
 class EnsureDependenciesFor(private val type: UnitType) : BehaviorTree() {
     override fun getRoot(): TreeNode =
-            Parallel(Parallel.Policy.SEQUENCE,
+            Parallel(
                     *type.requiredUnits()
                             .filter { (type, _) -> type != UnitType.Zerg_Larva }
                             .map { (type, amount) ->

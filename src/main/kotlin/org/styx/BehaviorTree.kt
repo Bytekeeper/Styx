@@ -20,19 +20,9 @@ abstract class MemoLeaf : TreeNode() {
     abstract fun tick(): NodeStatus
 }
 
-object Wait : TreeNode() {
-    override fun init() {
-        running()
-    }
+val Wait = org.bk.ass.bt.Wait.INSTANCE
 
-    override fun reset() {
-
-    }
-
-    override fun exec() {
-    }
-}
 typealias NodeFactory = () -> TreeNode
 
 fun NodeFactory.repeat(times: Int) =
-    Parallel(Parallel.Policy.SEQUENCE, *(0..times).map { this() }.toTypedArray())
+    Parallel(*(0..times).map { this() }.toTypedArray())

@@ -2,6 +2,8 @@ package org.styx
 
 import bwapi.*
 import bwapi.Unit
+import org.bk.ass.grid.Rectangle
+import org.bk.ass.grid.SearchPredicate
 import org.bk.ass.info.BWMirrorUnitInfo
 import org.bk.ass.sim.Agent
 import org.bk.ass.sim.JBWAPIAgentFactory
@@ -12,6 +14,7 @@ import org.locationtech.jts.geom.GeometryFactory
 import org.locationtech.jts.math.Vector2D
 import org.styx.Styx.frame
 import org.styx.Styx.game
+import org.styx.Styx.geography
 import org.styx.Styx.self
 import org.styx.Styx.turnSize
 import kotlin.math.abs
@@ -67,6 +70,8 @@ class SUnit private constructor(val unit: Unit) {
         private set
     var flying = false
         private set
+    var burrowed = false
+        private set
     var carryingGas = false
         private set
     var carryingMinerals = false
@@ -120,6 +125,9 @@ class SUnit private constructor(val unit: Unit) {
         private set
     val threats by LazyOnFrame { Styx.units.enemy.inRadius(this, 400) { it.inAttackRange(this, 96) } }
     val engaged by LazyOnFrame { Styx.units.enemy.inRadius(this, 400) { it.target == this && it.inAttackRange(this, 64) } }
+    val walkRectangle by LazyOnFrame {
+        Rectangle(org.bk.ass.path.Position( left / 8, top / 8), org.bk.ass.path.Position((right + 15) / 8, (bottom + 15) / 8))
+    }
     val safe by LazyOnFrame {
         if (flying)
             Styx.units.enemy.nearest(x, y, 400) { it.inAttackRange(this, 96) } == null
@@ -177,6 +185,7 @@ class SUnit private constructor(val unit: Unit) {
         hatchery = unit.hatchery?.let { forUnit(it) }
         irridiated = unit.isIrradiated
         targetPosition = unit.targetPosition
+        burrowed = unit.isBurrowed
 
         if (frame - lastUnstickingCommandFrame > game.latencyFrames) {
             if (vx == 0.0 && vy == 0.0 && canMoveWithoutBreakingAttack && !gathering) {
@@ -191,6 +200,12 @@ class SUnit private constructor(val unit: Unit) {
             stuckFrames = 0
         }
     }
+
+    fun tracePath(end: WalkPosition) =
+            geography.walkRay.tracePath(walkPosition, end)
+
+    fun noObstacle(end: WalkPosition) =
+            tracePath(end) == end
 
     fun distanceTo(target: Position): Int {
         // compute x distance

@@ -6,7 +6,6 @@ import org.bk.ass.bt.TreeNode
 import org.bk.ass.manage.GMS
 import org.styx.*
 import org.styx.Styx.buildPlan
-import org.styx.Styx.resources
 import org.styx.Styx.units
 import org.styx.global.Unrealized
 import java.util.*
@@ -18,7 +17,7 @@ class Get(private val amountProvider: () -> Int,
           private val limitByAvailableBuilders: Boolean = false) : MemoLeaf() {
     private val children = ArrayDeque<TreeNode>()
 
-    constructor(amount: Int, type: UnitType, dynamic: Boolean = false) : this({ amount }, type, dynamic)
+    constructor(amount: Int, type: UnitType, limitByAvailableBuilders: Boolean = false) : this({ amount }, type, limitByAvailableBuilders)
 
     override fun tick(): NodeStatus {
         val amount = amountProvider()

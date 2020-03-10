@@ -37,7 +37,7 @@ class Attack(private val attacker: SUnit,
                 relativeMovement < -0.3 ||
                         attacker.inAttackRange(enemy) ||
                         enemy.distanceTo(attacker) < attacker.maxRangeVs(enemy) + 16 ||
-                        !attacker.flying && !geography.walkRay.noObstacle(attacker.walkPosition, enemy.walkPosition)
+                        !attacker.flying && !attacker.noObstacle(enemy.walkPosition)
             },
             NodeStatus.RUNNING.after {
                 if (attacker.flying && !attacker.inAttackRange(enemy, 8)) {
@@ -53,13 +53,18 @@ class Attack(private val attacker: SUnit,
             Condition { attacker.couldTurnAwayAndBackBeforeCooldownEnds(enemy) && enemy.engaged.isNotEmpty() },
             LambdaNode {
                 val evadeTo = (0..8).asSequence()
-                        .map {
-                            Vector2D(64.0, 0.0).rotate(it * PI2 / 8)
-                                    .toPosition()
-                                    .toWalkPosition() + attacker.walkPosition
+                        .flatMap { dir ->
+                            sequenceOf(
+                                    Vector2D(32.0, 0.0).rotate(dir * PI2 / 8),
+                                    Vector2D(64.0, 0.0).rotate(dir * PI2 / 8),
+                                    Vector2D(96.0, 0.0).rotate(dir * PI2 / 8)
+                            ).map {
+                                it.toPosition()
+                                        .toWalkPosition() + attacker.walkPosition
+                            }
                         }.filter {
                             enemy.distanceTo(it.toPosition(), attacker.unitType) <= attacker.maxRangeVs(enemy) &&
-                                    (attacker.flying || geography.walkRay.noObstacle(attacker.walkPosition, it))
+                                    (attacker.flying || attacker.noObstacle(it))
 
                         }.map { wp ->
                             val position = wp.middlePosition()
