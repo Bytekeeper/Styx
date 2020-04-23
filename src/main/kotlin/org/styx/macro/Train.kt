@@ -51,7 +51,7 @@ class PrepareTrain(private val board: TrainBoard) : BehaviorTree() {
                     LambdaNode(this::checkStarted),
                     Parallel(Parallel.Policy.SELECTOR,
                             Parallel(Parallel.Policy.SEQUENCE,
-                                    EnsureDependenciesFor(board.type),
+                                    GetStuffToTrainOrBuild(board.type),
                                     WaitForUnitLock(board.trainerLock),
                                     WaitForCostLock(board.costLock),
                                     Repeat(Repeat.Policy.SELECTOR, Condition { requiredUnitsAreCompleted() })

@@ -1,6 +1,7 @@
 plugins {
-    id "org.jetbrains.kotlin.jvm" version "1.3.70"
+    id "org.jetbrains.kotlin.jvm" version "1.3.71"
     id "com.github.ben-manes.versions" version "0.27.0"
+    id 'distribution'
 }
 
 group 'scait'
@@ -23,8 +24,7 @@ configurations.all {
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
     implementation("com.github.JavaBWAPI:JBWAPI:fail-early-SNAPSHOT").changing = true
-    //implementation('com.github.Bytekeeper:ass:develop-SNAPSHOT').changing = true
-    implementation(files('lib/ass-1.2.jar'))
+    implementation(files('lib/ass-1.3.jar'))
     implementation 'org.locationtech.jts:jts-core:1.16.1'
     implementation 'com.github.luben:zstd-jni:1.4.+'
     implementation 'com.jsoniter:jsoniter:0.9.+'
@@ -49,13 +49,13 @@ compileTestKotlin {
 task fatJar(type: Jar) {
     manifest {
         attributes 'Implementation-Title': 'Gradle Jar File Example',
-                'Implementation-Version': version,
+                'Implementation-Version': archiveVersion,
                 'Main-Class': 'org.styx.ListenerKt'
     }
-    baseName = project.name + '-all'
+    archiveBaseName.set(project.name + '-all')
     from { configurations.compileClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
     with jar
-    dependsOn(tasks.assemble)
+    dependsOn(tasks.jar)
 }
 
 task sourceJar(type: Jar) {
@@ -69,3 +69,13 @@ task sourceJar(type: Jar) {
     with jar
 }
 
+distributions {
+    main {
+        contents {
+            from 'build/libs/FFT_TER-all-1.0-SNAPSHOT.jar'
+            into '/'
+        }
+    }
+}
+
+distZip.dependsOn(tasks.fatJar)

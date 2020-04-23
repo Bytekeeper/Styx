@@ -54,6 +54,8 @@ class SUnit private constructor(val unit: Unit) {
         private set
     var detected = false
         private set
+    var cloaked = false
+        private set
     val initialTilePosition = unit.initialTilePosition
     lateinit var tilePosition: TilePosition
         private set
@@ -144,7 +146,7 @@ class SUnit private constructor(val unit: Unit) {
     fun update() {
         visible = unit.isVisible
         exists = unit.exists()
-        if (!unit.isVisible && frame > 0) return
+        if (!visible && frame > 0) return
         lastAgent = agentFactory.of(unit).setUserObject(this)
         lastSeenFrame = game.frameCount
         unitType = unit.type
@@ -161,6 +163,7 @@ class SUnit private constructor(val unit: Unit) {
         carryingMinerals = unit.isCarryingMinerals
         beingGathered = unit.isBeingGathered
         detected = unit.isDetected
+        cloaked = unit.isCloaked
         position = unit.position
         gatheringGas = unit.isGatheringGas
         gatheringMinerals = unit.isGatheringMinerals
@@ -425,8 +428,9 @@ class SUnit private constructor(val unit: Unit) {
     }
 
     val canMoveWithoutBreakingAttack
-        get() = (unitType.groundWeapon() == WeaponType.None || unitType.groundWeapon().damageCooldown() - unit.groundWeaponCooldown >= stopFrames)
-                && (unitType.airWeapon() == WeaponType.None || unitType.airWeapon().damageCooldown() - unit.airWeaponCooldown >= stopFrames)
+        get() = unitType == UnitType.Zerg_Mutalisk ||
+                ((unitType.groundWeapon() == WeaponType.None || unitType.groundWeapon().damageCooldown() - unit.groundWeaponCooldown >= stopFrames)
+                        && (unitType.airWeapon() == WeaponType.None || unitType.airWeapon().damageCooldown() - unit.airWeaponCooldown >= stopFrames))
 
     val isOnCoolDown
         get() = unit.groundWeaponCooldown > 0

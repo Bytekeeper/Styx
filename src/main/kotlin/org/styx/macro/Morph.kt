@@ -19,14 +19,17 @@ data class MorphBoard(
 class StartMorph(private val board: MorphBoard) : BehaviorTree() {
     override fun getRoot(): TreeNode =
             Selector(
-                    Sequence(
-                            AcquireLock(board.costLock),
-                            AcquireLock(board.morphLock),
-                            LambdaNode {
-                                board.unit = board.morphLock.item
-                                BasicActions.morph(board.morphLock.item, board.type)
-                                return@LambdaNode NodeStatus.RUNNING
-                            }
+                    Parallel(
+                            GetStuffToTrainOrBuild(board.type),
+                            Sequence(
+                                    AcquireLock(board.costLock),
+                                    AcquireLock(board.morphLock),
+                                    LambdaNode {
+                                        board.unit = board.morphLock.item
+                                        BasicActions.morph(board.morphLock.item, board.type)
+                                        return@LambdaNode NodeStatus.RUNNING
+                                    }
+                            )
                     ),
                     NodeStatus.RUNNING.after() {
                         board.unit = null

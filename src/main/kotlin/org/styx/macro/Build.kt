@@ -7,9 +7,11 @@ import org.bk.ass.manage.GMS
 import org.bk.ass.manage.Lock
 import org.styx.*
 import org.styx.Styx.buildPlan
+import org.styx.Styx.frame
 import org.styx.Styx.units
 import org.styx.action.BasicActions
 import org.styx.global.PlannedUnit
+import org.styx.micro.AvoidCombat
 
 
 data class BuildBoard(
@@ -23,7 +25,7 @@ data class BuildBoard(
         UnitReservation.availableItems.filter { it.unitType.isWorker }.minBy { eval(it) }
     }
     val costLock: Lock<GMS> = costLocks.unitCostLock(type)
-    val positionLock = TileLock({ workerLock.item?.canBuildHere(it, type) != false }, provideLocation)
+    val positionLock = TileLock({ workerLock.item?.canBuildHere(it, type) != false && (costLock.isSatisfiedLater || frame % 137 != 0) }, provideLocation)
 
     init {
         require(type.isBuilding)
@@ -51,7 +53,7 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
             Selector(
                     LambdaNode(this::checkForExistingBuilding),
                     Parallel(
-                            EnsureDependenciesFor(board.type),
+                            GetStuffToTrainOrBuild(board.type),
                             Sequence(
                                     Selector(
                                             SelectBuildLocation(board),
@@ -110,31 +112,36 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
 }
 
 class OrderBuild(private val board: BuildBoard) : TreeNode() {
+    private val avoidCombat = AvoidCombat { board.workerLock.item }
     override fun exec(executionContext: ExecutionContext) {
         if (board.building?.exists == true) {
             success()
             return
         }
         val worker = board.workerLock.item ?: error("Worker must be locked")
-        when {
-            board.costLock.isSatisfied -> {
-                if (!board.type.isResourceDepot && !board.type.isResourceContainer && units.my(board.type).isNotEmpty()) {
-                    println("Building a second ${board.type} for whatever reasons!")
+        avoidCombat.exec()
+        require(board.type.whatBuilds().first == worker.unitType) { "$worker cannot build a ${board.type}" }
+        if (avoidCombat.status == NodeStatus.SUCCESS) {
+            when {
+                board.costLock.isSatisfied -> {
+                    if (!board.type.isResourceDepot && !board.type.isResourceContainer && units.my(board.type).isNotEmpty()) {
+                        println("Building a second ${board.type} for whatever reasons!")
+                    }
+                    if (worker.unitType == UnitType.Zerg_Drone) {
+                        // Add one supply for the lost worker
+                        ResourceReservation.release(null, GMS(0, 0, UnitType.Zerg_Drone.supplyRequired()))
+                    }
+                    buildPlan.plannedUnits += PlannedUnit(board.type, 0, consumedUnit = Styx.self.race.worker)
+                    BasicActions.build(worker, board.type, board.positionLock.item)
                 }
-                if (worker.unitType == UnitType.Zerg_Drone) {
-                    // Add one supply for the lost worker
-                    ResourceReservation.release(null, GMS(0, 0, UnitType.Zerg_Drone.supplyRequired()))
+                board.costLock.isSatisfiedLater -> {
+                    buildPlan.plannedUnits += PlannedUnit(board.type, board.framesBeforeStartable, consumedUnit = Styx.self.race.worker)
+                    BasicActions.move(worker, board.positionLock.item.toPosition() + board.type.center)
                 }
-                buildPlan.plannedUnits += PlannedUnit(board.type, 0, consumedUnit = Styx.self.race.worker)
-                BasicActions.build(worker, board.type, board.positionLock.item)
-            }
-            board.costLock.isSatisfiedLater -> {
-                buildPlan.plannedUnits += PlannedUnit(board.type, board.framesBeforeStartable, consumedUnit = Styx.self.race.worker)
-                BasicActions.move(worker, board.positionLock.item.toPosition() + board.type.center)
-            }
-            else -> {
-                buildPlan.plannedUnits += PlannedUnit(board.type, board.framesBeforeStartable, consumedUnit = Styx.self.race.worker)
-                board.workerLock.release()
+                else -> {
+                    buildPlan.plannedUnits += PlannedUnit(board.type, board.framesBeforeStartable, consumedUnit = Styx.self.race.worker)
+                    board.workerLock.release()
+                }
             }
         }
         running()

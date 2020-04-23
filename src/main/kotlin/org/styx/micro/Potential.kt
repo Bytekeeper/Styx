@@ -57,6 +57,8 @@ object Potential {
         return (u.position - enemy.position).toVector2D().normalize()
     }
 
+    fun embraceDanger(u: SUnit, safety: Int) = avoidDanger(u, safety).negate()
+
     fun apply(u: SUnit, force: Vector2D, maxTravel: Double = 128.0) {
         if (u.sleeping)
             return

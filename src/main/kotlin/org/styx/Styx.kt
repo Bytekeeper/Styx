@@ -3,23 +3,17 @@ package org.styx
 import bwapi.*
 import bwem.BWEM
 import bwem.BWMap
-import org.bk.ass.bt.BehaviorTree
-import org.bk.ass.bt.LambdaNode
-import org.bk.ass.bt.NodeStatus
-import org.bk.ass.bt.Sequence
-import org.bk.ass.bt.TreeNode
+import org.bk.ass.bt.*
 import org.bk.ass.grid.Grid
 import org.bk.ass.grid.RayCaster
-import org.bk.ass.manage.GMS
 import org.bk.ass.query.PositionQueries
+import org.bk.ass.sim.Agent
 import org.bk.ass.sim.Evaluator
-import org.bk.ass.sim.JBWAPIAgentFactory
 import org.bk.ass.sim.RetreatBehavior
 import org.bk.ass.sim.Simulator
 import org.locationtech.jts.math.Vector2D
 import org.styx.Styx.game
 import org.styx.global.*
-import org.styx.global.Geography
 import java.awt.Color
 import java.awt.image.BufferedImage
 import java.nio.file.Files
@@ -191,10 +185,17 @@ data class RelevantGames(private val results: List<List<GameResult>>) {
 
 val UnitType.dimensions get() = Position(width(), height())
 val UnitType.center get() = tileSize().toPosition() / 2
+val UnitType.suicider
+    get() = when (this) {
+        UnitType.Terran_Vulture_Spider_Mine, UnitType.Protoss_Scarab, UnitType.Zerg_Scourge,
+        UnitType.Zerg_Infested_Terran -> true
+        else -> false
+    }
 
 operator fun Position.div(factor: Int) = divide(factor)
 operator fun Position.plus(other: Position) = add(other)
 operator fun Position.minus(other: Position) = subtract(other)
+fun Position.makeValid() = Position(clamp(x, 0, game.mapWidth() * 32 - 1), clamp(y, 0, game.mapHeight() * 32 - 1))
 
 fun Position.toVector2D() = Vector2D(x.toDouble(), y.toDouble())
 
@@ -247,3 +248,15 @@ fun Grid<Boolean>.toBufferedImage(): BufferedImage {
     }
     return image
 }
+
+val unitToAgentMapper = { it: SUnit, allAttackers: Collection<SUnit> ->
+    val agent = it.agent()
+    if (it.enemyUnit && (it.gathering ||
+                    it.unitType.isWorker && !it.visible) || (it.myUnit && !allAttackers.contains(it)) ||
+            !it.hasPower)
+        agent.setCooldown(Config.mediumSimHorizon)
+    if (!it.unitType.canAttack() && it.unitType != UnitType.Terran_Bunker)
+        agent.setAttackTargetPriority(Agent.TargetingPriority.MEDIUM)
+    agent
+}
+

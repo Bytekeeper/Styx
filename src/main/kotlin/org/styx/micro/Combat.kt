@@ -2,7 +2,6 @@ package org.styx.micro
 
 import bwapi.BulletType
 import bwapi.Position
-import bwapi.UnitType
 import org.bk.ass.bt.*
 import org.locationtech.jts.math.Vector2D
 import org.styx.*
@@ -23,19 +22,35 @@ class Attack(private val attacker: SUnit,
             Condition {
                 val enemyRangeVsUs = enemy.maxRangeVs(attacker)
                 val ourRangeVsEnemy = attacker.maxRangeVs(enemy)
-                attacker.couldTurnAwayAndBackBeforeCooldownEnds(enemy) &&
+                enemy.hasWeaponAgainst(attacker) &&
+                        attacker.couldTurnAwayAndBackBeforeCooldownEnds(enemy) &&
                         (ourRangeVsEnemy > enemyRangeVsUs || ourRangeVsEnemy == enemyRangeVsUs && attacker.topSpeed > enemy.topSpeed) &&
                         enemy.inAttackRange(attacker, 64) &&
-                        attacker.inAttackRange(enemy, -16)
+                        attacker.inAttackRange(enemy, -8)
             },
             EvadeEnemy(board)
+    )
+    private val airCircle = Sequence(
+            Condition {
+                attacker.flying && attacker.velocity.lengthSquared() < attacker.topSpeed * attacker.topSpeed * 0.7
+            },
+            NodeStatus.RUNNING.after {
+                val vel = (if (attacker.velocity.lengthSquared() < 0.01) Vector2D(1.0, 0.0) else attacker.velocity.normalize()) * 32.0
+                val x = -vel.y
+                val y = vel.x
+                val pos = Position(
+                        x.toInt(),
+                        y.toInt()
+                )
+                val repelFrom = (attacker.position + pos).makeValid()
+                val force = Potential.repelFrom(attacker, repelFrom)
+                Potential.apply(attacker, force)
+            }
     )
 
     private val attackEnemy = Sequence(
             Condition {
-                val relativeMovement = attacker.velocity.normalize().dot(enemy.velocity.normalize())
-                relativeMovement < -0.3 ||
-                        attacker.inAttackRange(enemy) ||
+                attacker.inAttackRange(enemy) ||
                         enemy.distanceTo(attacker) < attacker.maxRangeVs(enemy) + 16 ||
                         !attacker.flying && !attacker.noObstacle(enemy.walkPosition)
             },
@@ -59,8 +74,8 @@ class Attack(private val attacker: SUnit,
                                     Vector2D(64.0, 0.0).rotate(dir * PI2 / 8),
                                     Vector2D(96.0, 0.0).rotate(dir * PI2 / 8)
                             ).map {
-                                it.toPosition()
-                                        .toWalkPosition() + attacker.walkPosition
+                                (it.toPosition()
+                                        .toWalkPosition() + attacker.walkPosition).makeValid()
                             }
                         }.filter {
                             enemy.distanceTo(it.toPosition(), attacker.unitType) <= attacker.maxRangeVs(enemy) &&
@@ -80,9 +95,10 @@ class Attack(private val attacker: SUnit,
 
     private val homeInToEnemy = Sequence(
             Condition {
-                attacker.flying && enemy.weaponAgainst(attacker).minRange() > 0 ||
+                !attacker.flying && enemy.weaponAgainst(attacker).minRange() > 0 ||
                         attacker.irridiated ||
-                        enemy.unitType.canMove() && (enemy.maxRangeVs(attacker) > attacker.maxRangeVs(enemy) && attacker.maxRangeVs(enemy) - attacker.distanceTo(enemy) < 8)
+                        // Prevent going out of range
+                        enemy.hasWeaponAgainst(attacker) && enemy.unitType.canMove() && (enemy.maxRangeVs(attacker) > attacker.maxRangeVs(enemy) && attacker.maxRangeVs(enemy) - attacker.distanceTo(enemy) < 8)
 
             },
             Intercept(board)
@@ -97,7 +113,7 @@ class Attack(private val attacker: SUnit,
 
     override fun getRoot(): TreeNode = Selector(
             findEnemy,
-            EvadeScarabs(attacker),
+            EvadeSuicider(attacker),
             StormDodge(attacker),
             Sequence(
                     Condition { attacker.isOnCoolDown && attacker.canMoveWithoutBreakingAttack },
@@ -106,9 +122,11 @@ class Attack(private val attacker: SUnit,
                             homeInToEnemy,
                             evadeOtherEnemies,
                             kiteEnemy,
-                            BetterAltitude(board)
+                            BetterAltitude(board),
+                            airCircle
                     )
             ),
+            RetargetWall(board),
             attackEnemy,
             Intercept(board)
     )
@@ -126,18 +144,18 @@ class StormDodge(private val unit: SUnit) : BehaviorTree() {
 
 }
 
-class EvadeScarabs(private val unit: SUnit) : BehaviorTree() {
+class EvadeSuicider(private val unit: SUnit) : BehaviorTree() {
     private val board = WithTarget<SUnit>(unit)
 
     override fun getRoot(): TreeNode = Sequence(
             Condition { !unit.flying },
             SelectTarget(board) {
-                units.enemy.nearest(unit.x, unit.y, 128) { it.unitType == UnitType.Protoss_Scarab }
+                units.enemy.nearest(unit.x, unit.y, 128) { it.unitType.suicider }
             },
             Condition {
                 board.target!!.distanceTo(board.actor) < 64
             },
-            EvadeEnemy(board)
+            Drag(board)
     )
 
 }
@@ -145,15 +163,6 @@ class EvadeScarabs(private val unit: SUnit) : BehaviorTree() {
 class Stop(private val unit: SUnit) : TreeNode() {
     override fun exec() {
         unit.stop()
-        running()
-    }
-}
-
-class KeepDistance(private val unit: SUnit) : TreeNode() {
-    override fun exec() {
-        val force = Potential.avoidDanger(unit, 96) +
-                Potential.collisionRepulsion(unit) * 0.2
-        Potential.apply(unit, force)
         running()
     }
 }
@@ -172,6 +181,27 @@ class EvadeEnemy(private val board: WithTarget<SUnit>) : TreeNode() {
         running()
     }
 }
+
+class Drag(private val board: WithTarget<SUnit>) : TreeNode() {
+    override fun exec() {
+        val unit = board.actor
+        val other = board.target ?: run {
+            failed()
+            return
+        }
+        val repelFactor = if (board.target == unit) 0.55 else 0.8
+        val avoidAllies = 1.0 - repelFactor
+
+        var force = Potential.repelFrom(unit, other) * repelFactor
+        force += Potential.embraceDanger(unit, 64) * 0.5
+        if (!board.actor.flying)
+            force += Potential.collisionRepulsion(unit) * avoidAllies
+        Potential.apply(unit, force)
+        running()
+    }
+
+}
+
 
 class EvadePosition(private val board: WithTarget<Position>) : TreeNode() {
     override fun exec() {
@@ -200,17 +230,44 @@ class SelectTarget<T>(private val board: WithTarget<T>, private val selector: ()
     }
 }
 
+class RetargetWall(private val board: WithTarget<SUnit>) : TreeNode() {
+    override fun exec() {
+        val target = board.target ?: run {
+            failed()
+            return
+        }
+        val actor = board.actor
+        if (!actor.flying && target.distanceTo(actor) < 224) {
+            val path = geography.jps.findPath(org.bk.ass.path.Position.of(actor.walkPosition), org.bk.ass.path.Position.of(target.walkPosition), 256f)
+            if (path.path.isEmpty()) {
+                val hit = geography.walkRay.trace(actor.walkPosition.x, actor.walkPosition.y, target.walkPosition.x, target.walkPosition.y, geography.walkRay.findFirst)
+                if (hit != null) {
+                    val potentialTarget = units.enemy.nearest(hit.x, hit.y) { !it.flying }
+                    if (potentialTarget.enemyUnit)
+                        board.target = potentialTarget
+                }
+            }
+        }
+        failed()
+    }
+}
+
 class Intercept(private val board: WithTarget<SUnit>) : TreeNode() {
     override fun exec() {
         val target = board.target ?: run {
             failed()
             return
         }
-        var force = Potential.intercept(board.actor, target)
-        if (!board.actor.flying)
-            force += Potential.collisionRepulsion(board.actor) * 0.2
+        val actor = board.actor
+        if (target.distanceTo(actor) < 64) {
+            var force = Potential.intercept(actor, target)
+            if (!actor.flying)
+                force += Potential.collisionRepulsion(actor) * 0.2
 
-        Potential.apply(board.actor, force)
+            Potential.apply(actor, force)
+        } else {
+            actor.attack(target)
+        }
         running()
     }
 }
@@ -218,8 +275,9 @@ class Intercept(private val board: WithTarget<SUnit>) : TreeNode() {
 class SpreadOut(private val unit: SUnit) : TreeNode() {
     override fun exec() {
         if (unit.threats.any { it.weaponAgainst(unit).isSplash }) {
-            val force = Potential.collisionRepulsion(unit)
+            var force = Potential.collisionRepulsion(unit)
             if (force.lengthSquared() > 0) {
+                force += Potential.embraceDanger(unit, 32) * 0.3
                 Potential.apply(unit, force)
                 running()
             } else {

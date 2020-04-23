@@ -30,6 +30,14 @@ object Scouting : TreeNode() {
                     Potential.apply(ovi, force)
                 }
 
+        remaining.removeIf { ovi ->
+            val enemy = ovi.engaged.firstOrNull() ?: return@removeIf false
+            val bestAlly = units.mine.nearest(ovi.x, ovi.y, 600) { it.hasWeaponAgainst(enemy) } ?: return@removeIf false
+            val force = Potential.intercept(ovi, bestAlly)
+            Potential.apply(ovi, force)
+            true
+        }
+
         for (base in bases.bases.filter { !game.isVisible(it.centerTile) }.sortedBy { it.lastSeenFrame ?: 0 }) {
             val ovi = remaining.minBy { it.distanceTo(base.center) } ?: return
             val force = Potential.attract(ovi, base.center) * 0.3 + Potential.avoidDanger(ovi, 300)

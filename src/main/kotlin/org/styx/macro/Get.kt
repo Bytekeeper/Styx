@@ -53,7 +53,12 @@ class Get(private val amountProvider: () -> Int,
             it.status != NodeStatus.RUNNING
         }
         repeat(expectedChildCount - children.size) {
-            val newNode = if (type.isBuilding) StartBuild(type) else StartTrain(type)
+            val newNode = when {
+                type.isBuilding && type.whatBuilds().first.isWorker -> StartBuild(type)
+                type.isBuilding -> Morph(type)
+                type.whatBuilds().first.isBuilding -> StartTrain(type)
+                else -> Morph(type)
+            }
             children += newNode
             newNode.init()
             newNode.exec()

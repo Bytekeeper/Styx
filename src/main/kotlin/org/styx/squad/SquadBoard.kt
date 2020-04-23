@@ -39,16 +39,4 @@ class SquadBoard {
                 mine.filter { it.remainingBuildTime < 48 }.map { it.agent() },
                 enemies.filter { it.remainingBuildTime < 48 }.map { it.agent() })
     }
-
-    private val unitToAgentMapper = { it: SUnit, available: Boolean ->
-        val agent = it.agent()
-        if (it.enemyUnit && (it.gathering ||
-                        it.unitType.isWorker && !it.visible) || (it.myUnit && available) ||
-                !it.hasPower)
-            agent.setCooldown(Config.mediumSimHorizon)
-        if (!it.unitType.canAttack() && it.unitType != UnitType.Terran_Bunker)
-            agent.setAttackTargetPriority(Agent.TargetingPriority.MEDIUM)
-        agent
-    }
-
 }

@@ -5,9 +5,12 @@ import bwapi.UnitType
 import bwapi.WeaponType
 import org.bk.ass.sim.Agent
 import org.locationtech.jts.math.DD.EPS
+import org.styx.Config.TargetEval.combatRelevancyFactor
+import org.styx.Config.TargetEval.enemySpeedFactor
+import org.styx.Config.TargetEval.evalFramesToKillFactor
+import org.styx.Config.TargetEval.evalFramesToReach
+import org.styx.Config.TargetEval.pylonFactor
 import org.styx.Config.dpfThreatValueFactor
-import org.styx.Config.evalFramesToKillFactor
-import org.styx.Config.evalFramesToReach
 import org.styx.Config.waitForReinforcementsTargetingFactor
 import java.util.function.ToIntFunction
 import kotlin.math.max
@@ -26,12 +29,12 @@ data class StayBack(override val unit: SUnit) : CombatMove
 object TargetEvaluator {
     private val byEnemyType: TargetScorer = { _, e, _ ->
         when (e.unitType) {
-            UnitType.Zerg_Egg, UnitType.Zerg_Lurker_Egg, UnitType.Zerg_Larva, UnitType.Protoss_Interceptor -> -10.0
-            UnitType.Zerg_Extractor, UnitType.Terran_Refinery, UnitType.Protoss_Assimilator -> -2.0
-            UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 0.3
-            UnitType.Terran_Medic, UnitType.Protoss_High_Templar -> 0.5
-            UnitType.Protoss_Carrier -> 1.0
-            else -> 0.0
+            UnitType.Zerg_Egg, UnitType.Zerg_Lurker_Egg, UnitType.Zerg_Larva, UnitType.Protoss_Interceptor -> 0.0
+            UnitType.Zerg_Extractor, UnitType.Terran_Refinery, UnitType.Protoss_Assimilator -> 0.01
+            UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 0.05
+            UnitType.Terran_Medic, UnitType.Protoss_High_Templar -> 0.05
+            UnitType.Protoss_Carrier -> 0.08
+            else -> 0.03
         }
     }
 
@@ -39,54 +42,47 @@ object TargetEvaluator {
         if (!a.hasPower) 0.0
         else {
             val framesToTurnTo = a.framesToTurnTo(e)
-            -(max(0, a.distanceTo(e) - a.maxRangeVs(e)) / max(1.0, a.topSpeed) +
-                    framesToTurnTo) * evalFramesToReach / aggressiveness
+            1.0 - fastSig((max(0, a.distanceTo(e) - a.maxRangeVs(e)) / max(1.0, a.topSpeed) +
+                    framesToTurnTo) * evalFramesToReach / aggressiveness)
         }
-    }
-
-    private val byEnemyTimeToAttack: TargetScorer = { a, e, _ ->
-        byTimeToAttack(e, a, 1.0)
     }
 
     private val byTimeToKillEnemy: TargetScorer = { a, e, _ ->
         val damageAmount = a.weaponAgainst(e).damageAmount()
-        -(e.hitPoints / (a.damagePerFrameVs(e) + EPS) - e.shields / (damageAmount + EPS)) * evalFramesToKillFactor
+        1.0 - fastSig((e.hitPoints / (a.damagePerFrameVs(e) + EPS) - e.shields / (damageAmount + EPS)) * evalFramesToKillFactor)
     }
 
     private val byEnemySpeed: TargetScorer = { a, e, _ ->
-        -e.topSpeed / 60
+        1.0 - fastSig(e.topSpeed * enemySpeedFactor)
     }
 
-    private val defaultScorers = listOf(byEnemyType, byTimeToAttack, byTimeToKillEnemy, byEnemySpeed, byEnemyTimeToAttack)
+    private val defaultScorers = listOf(byEnemyType, byTimeToAttack, byTimeToKillEnemy, byEnemySpeed)
 
     fun bestCombatMoves(attackers: Collection<SUnit>, targets: Collection<SUnit>, aggressiveness: Double): List<CombatMove> {
         val relevantTargets = targets
                 .filter { it.detected && it.unitType != UnitType.Zerg_Larva }
         if (relevantTargets.isEmpty() || attackers.isEmpty())
             return emptyList()
+        val myAgents = attackers.map { unitToAgentMapper(it, attackers) }
+        val enemyCombatRelevancy = relevantTargets.map { it to Styx.evaluator.evaluate(listOf(unitToAgentMapper(it, targets)), myAgents).value }.toMap()
 
         val alreadyEngaged = relevantTargets.any { e -> attackers.any { e.inAttackRange(it, 48) || it.inAttackRange(e, 48) } } || relevantTargets.none { it.unitType.canAttack() }
         val averageMinimumDistanceToEnemy = if (alreadyEngaged) 0.0 else attackers.map { a -> relevantTargets.map { a.distanceTo(it) }.min()!! }.average()
         val healthFactor: (SUnit) -> Double = { it.hitPoints.toDouble() / it.unitType.maxHitPoints() + (it.shields / it.unitType.maxShields().toDouble()).orZero() / 4 }
         val averageHealth = attackers.map(healthFactor).average()
-        val pylonFactor = 0.9 * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
-        val defensiveBuildings = targets.count {
-            it.remainingBuildTime < 48 &&
-                    (it.unitType == UnitType.Protoss_Photon_Cannon || it.unitType == UnitType.Protoss_Shield_Battery)
-        }
+        val pylonFactor = pylonFactor * (1 - fastSig(targets.count { it.unitType == UnitType.Protoss_Pylon }.toDouble()))
 
-        val pylonScorer: TargetScorer = { _, e, _ -> if (e.unitType == UnitType.Protoss_Pylon)
-            defensiveBuildings * pylonFactor
-        else 0.0 }
-        val scorers = defaultScorers.asSequence() + pylonScorer
         val attackerCount = mutableMapOf<SUnit, Int>()
+        val pylonScorer: TargetScorer = { _, e, _ -> if (e.unitType == UnitType.Protoss_Pylon) pylonFactor else 0.0 }
+        val overloadAvoidance: TargetScorer = { _, e, _ -> 1.0 - fastSig(attackerCount.getOrDefault(e, 0) * 0.03) }
+        val combatRelevancy: TargetScorer = { _, e, _ -> enemyCombatRelevancy[e]!! * combatRelevancyFactor }
+        val scorers = defaultScorers.asSequence() + pylonScorer + overloadAvoidance + combatRelevancy
 
         return attackers.map { a ->
             val target = relevantTargets.asSequence()
                     .filter { a.hasWeaponAgainst(it) }
                     .maxBy { e ->
-                        val overloadAvoidance = -attackerCount.getOrDefault(e, 0) * 0.05
-                        val result = scorers.sumByDouble { it(a, e, aggressiveness) } + overloadAvoidance
+                        val result = scorers.sumByDouble { it(a, e, aggressiveness) }
 //                        diag.log("combatmove scoring : $a to $e: ${scorers.map { it(a, e, aggressiveness) }.toList()}, $overloadAvoidance = $result", Level.WARNING)
                         require(!result.isNaN())
                         result
@@ -147,13 +143,14 @@ fun unitThreatValueToEnemy(unitType: UnitType): Int {
 }
 
 fun agentHealthAndShieldValue(agent: SUnit): Int =
-        (agent.hitPoints + agent.shields / 2) / 10
+        (agent.hitPoints + agent.shields / 2) / 15
 
 fun unitTypeValue(unitType: UnitType) = when (unitType) {
     UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 27
     UnitType.Terran_Medic, UnitType.Protoss_High_Templar, UnitType.Terran_Science_Vessel -> 15
     UnitType.Terran_Vulture_Spider_Mine -> 0
-    else -> 6
+    UnitType.Terran_Bunker -> 120
+    else -> 8
 }
 
 // Simplified, but should take more stuff into account:

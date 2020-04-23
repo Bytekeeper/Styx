@@ -51,6 +51,7 @@ open class Strat(
 }
 
 object TenHatch : Strat("10Hatch",
+        Reactions,
         Get(9, UnitType.Zerg_Drone),
         ExtractorTrick(),
         Expand(),
@@ -149,6 +150,7 @@ object TwoHatchHydra : Strat("2HatchHydra",
 )
 
 object ThirteenPoolMuta : Strat("13PoolMuta",
+        Reactions,
         Get(9, UnitType.Zerg_Drone),
         Get(2, UnitType.Zerg_Overlord),
         Get(12, UnitType.Zerg_Drone),
@@ -213,13 +215,28 @@ object NinePoolCheese : Strat("9 Pool Cheese",
         ninePoolBasic,
         Train(UnitType.Zerg_Overlord),
         ensureSupply(),
-        { Train(UnitType.Zerg_Zergling) }.repeat(3),
         haveBasicZerglingSquad(),
         Repeat(Get(7, UnitType.Zerg_Drone)),
         pumpLings(),
         Get(2, UnitType.Zerg_Hatchery),
         Build(UnitType.Zerg_Extractor),
         upgradeLingSpeed
+)
+
+object NinePoolCheese2 : Strat("9 Pool Cheese 2",
+        ninePoolBasic,
+        Get(9, UnitType.Zerg_Drone),
+        Get(2, UnitType.Zerg_Hatchery),
+        Train(UnitType.Zerg_Zergling),
+        Get(1, UnitType.Zerg_Extractor),
+        Train(UnitType.Zerg_Zergling),
+        haveBasicZerglingSquad(),
+        Train(UnitType.Zerg_Overlord),
+        ensureSupply(),
+        Train(UnitType.Zerg_Zergling),
+        Repeat(Get(7, UnitType.Zerg_Drone)),
+        upgradeLingSpeed,
+        pumpLings()
 )
 
 object FourPool : Strat("4pool",
@@ -232,11 +249,13 @@ object FourPool : Strat("4pool",
 )
 
 val ninePoolBasic = Parallel(
+        Reactions,
         Get(9, UnitType.Zerg_Drone),
         Build(UnitType.Zerg_Spawning_Pool)
 )
 
 val overPoolBasic = Parallel(
+        Reactions,
         Get(9, UnitType.Zerg_Drone),
         Train(UnitType.Zerg_Overlord),
         Build(UnitType.Zerg_Spawning_Pool),
@@ -245,6 +264,7 @@ val overPoolBasic = Parallel(
 )
 
 val twelveHatchBasic = Parallel(
+        Reactions,
         Get(9, UnitType.Zerg_Drone),
         Train(UnitType.Zerg_Overlord),
         Get(12, UnitType.Zerg_Drone),

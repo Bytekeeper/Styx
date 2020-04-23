@@ -20,10 +20,6 @@ class Listener : DefaultBWListener() {
             Styx,
             Manners,
             SquadDispatch,
-            ReactByUpgradingOverlordSpeed,
-            ReactWithLings,
-            ReactByCancellingDyingBuildings,
-            ReactWithMutasForTerranFlyingBuildings,
             Best(
                     Nine734,
                     NinePoolCheese,
@@ -76,7 +72,11 @@ class Listener : DefaultBWListener() {
     }
 
     fun start() {
-        client.startGame()
+        try {
+            client.startGame()
+        } catch (e: Throwable) {
+            throw e
+        }
     }
 
     override fun onEnd(isWinner: Boolean) {
