@@ -80,5 +80,7 @@ play Randomhammer
 play PurpleDestiny
 play 'Marian Devecka'
 play MadMixP
+play MadMixT
+play 'Chris Coxe'
 
 sleep 4

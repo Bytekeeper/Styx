@@ -1,14 +1,13 @@
 package org.styx
 
-import bwapi.BWClient
-import bwapi.DefaultBWListener
-import bwapi.Game
+import bwapi.*
 import bwapi.Unit
 import org.bk.ass.bt.Best
 import org.bk.ass.bt.ExecutionContext
 import org.bk.ass.bt.Parallel
 import org.styx.Styx.diag
 import org.styx.task.*
+import java.util.logging.Level
 
 class Listener : DefaultBWListener() {
     private var lastFrame: Int = 0
@@ -20,16 +19,20 @@ class Listener : DefaultBWListener() {
             Styx,
             Manners,
             SquadDispatch,
-            Best(
+            object : Best(
                     Nine734,
                     NinePoolCheese,
                     TwoHatchHydra,
                     TwoHatchMuta,
                     ThreeHatchMuta,
+                    TwelveHatchCheese,
                     TenHatch,
                     FourPool,
                     ThirteenPoolMuta
-            ).withName("Strategy"),
+            ) {
+                override fun getUtility(): Double = 0.0
+            }.withName("Strategy"),
+//            FreeForm,
             WorkerAvoidDamage,
             Gathering(),
             Scouting
@@ -39,6 +42,8 @@ class Listener : DefaultBWListener() {
         game = client.game
         Styx.game = game
         aiTree.init()
+        game.sendText("2020-05-13")
+        game.setLatCom(false)
     }
 
     override fun onFrame() {
@@ -48,16 +53,25 @@ class Listener : DefaultBWListener() {
 
             val executionContext = ExecutionContext()
             aiTree.exec(executionContext)
+            if (UnitReservation.availableItems.any { it.unitType.isWorker }) {
+//                System.err.println("!NO")
+            }
+
+//            val w = Styx.units.myWorkers.maxBy {it.id}!!
+//            if (Styx.units.myWorkers.size == 12 && !w.moving && !w.gathering && w.buildType == UnitType.None && w.unit.order != Order.ZergBirth) {
+//                System.err.println("WCTF")
+//            }
+
 //            diag.log("PLAN: " + buildPlan.plannedUnits.joinToString())
             val frameTime = timed.ms()
-            if (frameTime > 42 && game.frameCount > 0) {
-                diag.log("frame ${game.frameCount} - frame time: ${frameTime}ms")
+            if (frameTime > 30 && game.frameCount > 0) {
+                diag.log("frame timeout ${game.frameCount} - frame time: ${frameTime}ms", Level.WARNING)
                 executionContext.executionTime.toList()
                         .sortedByDescending { (_, time) ->
                             time
                         }.forEach { (node, time) ->
-                            diag.log("${node.name} : ${time}ms")
-                }
+                            diag.log("${node.name} : ${time}ms", Level.WARNING)
+                        }
                 maxFrameTime = frameTime
             }
         } catch (e: Throwable) {

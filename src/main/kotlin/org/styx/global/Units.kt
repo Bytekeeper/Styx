@@ -73,11 +73,9 @@ class Units : TreeNode() {
 
     fun my(type: UnitType) = mine.filter { it.unitType == type }
 
-    fun myCompleted(type: UnitType) = mine.filter {
-        it.unitType == type && it.isCompleted ||
-                type == UnitType.Zerg_Hatchery && (it.unitType == UnitType.Zerg_Lair || it.unitType == UnitType.Zerg_Hive) ||
-                type == UnitType.Zerg_Lair && it.unitType == UnitType.Zerg_Hive
-    }
+    fun myCompleted(type: UnitType) = mine.filter { it.isA(type) }
+
+    fun myProjectedNew(type: UnitType) = myPending.count { it.unitType == type } + Styx.buildPlan.plannedUnits.count { it.type == type }
 
     fun onUnitDestroy(unit: Unit) {
         val u = SUnit.forUnit(unit)

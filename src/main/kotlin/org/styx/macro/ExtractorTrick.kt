@@ -15,7 +15,7 @@ class ExtractorTrick(unitToTrain: UnitType = UnitType.Zerg_Drone) : BehaviorTree
                                     PrepareBuild(extractorBoard),
                                     PrepareTrain(trainWorkerBoard)
                             ),
-                            Parallel(
+                            Sequence(
                                     OrderBuild(extractorBoard),
                                     OrderTrain(trainWorkerBoard)
                             )

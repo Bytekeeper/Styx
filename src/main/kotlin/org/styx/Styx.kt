@@ -7,10 +7,7 @@ import org.bk.ass.bt.*
 import org.bk.ass.grid.Grid
 import org.bk.ass.grid.RayCaster
 import org.bk.ass.query.PositionQueries
-import org.bk.ass.sim.Agent
-import org.bk.ass.sim.Evaluator
-import org.bk.ass.sim.RetreatBehavior
-import org.bk.ass.sim.Simulator
+import org.bk.ass.sim.*
 import org.locationtech.jts.math.Vector2D
 import org.styx.Styx.game
 import org.styx.global.*
@@ -41,7 +38,6 @@ object Styx : BehaviorTree() {
     var frame = 0
         private set
     private var minRemainingLatencyFrames = 42
-        private set
     var units = Units()
         private set
     var resources = Resources()
@@ -71,6 +67,11 @@ object Styx : BehaviorTree() {
             .withPlayerABehavior(RetreatBehavior())
             .withFrameSkip(7)
             .build()
+    val fastSim = Simulator.Builder()
+            .withPlayerABehavior(ApproxAttackBehavior())
+            .withPlayerBBehavior(ApproxAttackBehavior())
+            .withFrameSkip(137)
+            .build()
     val evaluator = Evaluator()
     val diag = Diagnose()
     val storage = Storage()
@@ -86,6 +87,8 @@ object Styx : BehaviorTree() {
             buildPlan,
             geography
     ).withName("Update")
+
+    override fun getUtility(): Double = 2.0
 
     private fun update(): NodeStatus {
         minRemainingLatencyFrames = min(minRemainingLatencyFrames, game.remainingLatencyFrames)

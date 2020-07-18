@@ -3,7 +3,6 @@ package org.styx
 import bwapi.*
 import bwapi.Unit
 import org.bk.ass.grid.Rectangle
-import org.bk.ass.grid.SearchPredicate
 import org.bk.ass.info.BWMirrorUnitInfo
 import org.bk.ass.sim.Agent
 import org.bk.ass.sim.JBWAPIAgentFactory
@@ -190,7 +189,7 @@ class SUnit private constructor(val unit: Unit) {
         targetPosition = unit.targetPosition
         burrowed = unit.isBurrowed
 
-        if (frame - lastUnstickingCommandFrame > game.latencyFrames) {
+        if (unitType.canMove() && frame - lastUnstickingCommandFrame > game.latencyFrames) {
             if (vx == 0.0 && vy == 0.0 && canMoveWithoutBreakingAttack && !gathering) {
                 stuckFrames++
                 if (stuckFrames > game.latencyFrames * 3) {
@@ -260,7 +259,7 @@ class SUnit private constructor(val unit: Unit) {
     fun framesToTravelTo(pos: Position) =
             framesToTurnTo(pos) +
                     (if (flying) (distanceTo(pos) / topSpeed).toInt()
-                    else (Styx.map.getPathLength(position, pos) / topSpeed).toInt()) * 3 / 2 + 24
+                    else (Styx.map.getPathLength(position, pos) / topSpeed).toInt()) + 24
 
     fun distanceTo(target: SUnit): Int {
         // If target is the same as the source
@@ -437,6 +436,10 @@ class SUnit private constructor(val unit: Unit) {
                 || unit.airWeaponCooldown > 0
 
     val cooldownRemaining get() = max(unit.groundWeaponCooldown, unit.airWeaponCooldown)
+    val framesToLive get() = hitPoints / (engaged.sumByDouble { it.damagePerFrameVs(this) } + 0.001)
+    val framesToFinish get() = if (remainingTrainTime > 0) remainingTrainTime else remainingBuildTime
+    val aboutToDieUnfinished
+        get() = framesToFinish > 0 && (framesToFinish < 24 && framesToLive < 24 * 10 || framesToLive < 24)
 
     fun couldTurnAwayAndBackBeforeCooldownEnds(target: SUnit) =
             cooldownRemaining >= unitType.revolutionFrames - framesToTurnTo(target) + turnSize
@@ -460,6 +463,11 @@ class SUnit private constructor(val unit: Unit) {
     fun framesToTurnTo(other: SUnit) = (abs((radiansTo(other) - angle).normalizedRadians) * 256.0 / PI2 / unitType.turnRadius()).toInt()
     fun framesToTurnTo(pos: Position) = (abs((radiansTo(pos) - angle).normalizedRadians) * 256.0 / PI2 / unitType.turnRadius()).toInt()
     fun vectorTo(other: SUnit) = position.toVector2D() - other.position.toVector2D()
+
+    fun isA(type: UnitType) = unitType == type && isCompleted ||
+            type == UnitType.Zerg_Hatchery && (unitType == UnitType.Zerg_Lair || unitType == UnitType.Zerg_Hive) ||
+            type == UnitType.Zerg_Lair && unitType == UnitType.Zerg_Hive ||
+            type == UnitType.Zerg_Spire && unitType == UnitType.Zerg_Greater_Spire
 
     companion object {
         private val units = mutableMapOf<Unit, SUnit>()

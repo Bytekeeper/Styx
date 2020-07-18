@@ -19,35 +19,36 @@ object ConstructionPosition {
     private val resourceBlockedGeometry = mutableMapOf<Base, Geometry>()
     private val geometryFactory = GeometryFactory()
 
-    fun findPositionFor(unitType: UnitType, near: Position? = null): TilePosition? {
+    fun findPositionFor(unitType: UnitType, near: Position? = null, scorer: ((TilePosition) -> Double)? = null): TilePosition? {
         if (unitType.isRefinery) {
             return findPositionForGas();
         }
         val defensiveBuilding = unitType == UnitType.Zerg_Creep_Colony || unitType.canAttack() || unitType == UnitType.Terran_Bunker
 
-        val target = near?.toTilePosition()
+        val basePosition = near?.toTilePosition()
                 ?: (if (defensiveBuilding) bestPositionForStaticDefense() else null)
                 ?: bases.myBases.mapNotNull { it.mainResourceDepot }
                         .maxBy { units.myWorkers.inRadius(it.x, it.y, 300).size }?.tilePosition ?: return null
         var bestBuildPosition: TilePosition? = null
-        var bestDistance: Int = Int.MAX_VALUE
+        var bestScore = Double.NEGATIVE_INFINITY
+        val scorer = scorer ?: { -it.getDistance(basePosition) }
         for (i in -15..15) {
             for (j in -15..15) {
-                val dist = i * i + j * j
-                val pos = target + TilePosition(i, j)
-                if (!pos.isValid(Styx.game))
+                val pos = basePosition + TilePosition(i, j)
+                if (!pos.isValid(game))
                     continue
                 // Simple way to leave gaps
                 if ((i != 0 || j != 0) && (pos.x % 3 == 0 || pos.y % 5 == 0))
                     continue
-                if (dist < bestDistance
+                val score = scorer(pos)
+                if (score > bestScore
                         && game.canBuildHere(pos, unitType)
                         && outsideOfResourceLines(pos, unitType)
                         && hasNoAddonOrEnoughSpace(unitType, pos)
                         && willNotBlockOtherAddon(unitType, pos)
                         && TileReservation.isAvailable(pos)
                 ) {
-                    bestDistance = dist
+                    bestScore = score
                     bestBuildPosition = pos
                 }
             }

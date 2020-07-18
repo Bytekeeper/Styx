@@ -12,22 +12,21 @@ data class MorphBoard(
         val type: UnitType,
         var unit: SUnit? = null
 ) {
-    val morphLock = UnitLock() { UnitReservation.availableItems.firstOrNull { it.unitType == type.whatBuilds().first && it.isCompleted } }
+    val morphLock = UnitLock({ it.unitType == type.whatBuilds().first }) { UnitReservation.availableItems.firstOrNull { it.unitType == type.whatBuilds().first && it.isCompleted && it.framesToLive > type.buildTime() } }
     val costLock: Lock<GMS> = costLocks.unitCostLock(type)
 }
 
 class StartMorph(private val board: MorphBoard) : BehaviorTree() {
     override fun getRoot(): TreeNode =
-            Selector(
+            Parallel(Parallel.Policy.SELECTOR,
                     Parallel(
                             GetStuffToTrainOrBuild(board.type),
                             Sequence(
                                     AcquireLock(board.costLock),
                                     AcquireLock(board.morphLock),
-                                    LambdaNode {
+                                    NodeStatus.RUNNING.after {
                                         board.unit = board.morphLock.item
                                         BasicActions.morph(board.morphLock.item, board.type)
-                                        return@LambdaNode NodeStatus.RUNNING
                                     }
                             )
                     ),

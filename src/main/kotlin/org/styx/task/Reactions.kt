@@ -4,7 +4,6 @@ import bwapi.Race
 import bwapi.UnitType
 import bwapi.WeaponType
 import org.bk.ass.bt.*
-import org.styx.ResourceReservation
 import org.styx.Styx
 import org.styx.Styx.game
 import org.styx.Styx.self
@@ -21,7 +20,7 @@ object Reactions : Parallel(
         ReactWithSpores,
         ReactWithSunkens,
         ReactWithLings,
-        ReactByCancellingDyingBuildings,
+        ReactByCancellingDyingThings,
         ReactWithMutasForTerranFlyingBuildings
 )
 
@@ -44,8 +43,8 @@ object ReactWithSpores : BehaviorTree() {
                     Get({
                         ceil(
                                 (units.enemy.count { it.flying && (it.unitType.groundWeapon() != WeaponType.None || it.unitType.airWeapon() != WeaponType.None) }
-                                        - units.mine.count { it.unitType.airWeapon() != WeaponType.None })
-                                        / 5.0).toInt()
+                                        - units.mine.count { it.unitType.isBuilding && it.unitType.airWeapon() != WeaponType.None })
+                                        / 3.0).toInt()
                     }, UnitType.Zerg_Spore_Colony)
             )
 
@@ -55,7 +54,7 @@ object ReactWithSunkens : BehaviorTree() {
     override fun getRoot(): TreeNode =
             Repeat(Repeat.Policy.SEQUENCE,
                     Get({
-                        ceil(7.0 - Styx.balance.globalVsGroundEval.value * 18.0).toInt()
+                        ceil(7.0 - Styx.balance.evalMyCombatVsMobileGroundEnemy.value * 16.0).toInt()
                     }, UnitType.Zerg_Sunken_Colony)
             )
 }
@@ -77,12 +76,10 @@ object ReactWithLings : BehaviorTree() {
             )
 }
 
-object ReactByCancellingDyingBuildings : TreeNode() {
+object ReactByCancellingDyingThings : TreeNode() {
     override fun exec() {
         units.mine.filter { u ->
-            u.unitType.isBuilding
-                    && u.hitPoints < u.unitType.maxHitPoints() / 4
-                    && (u.remainingBuildTime + 96) > u.hitPoints / (u.engaged.sumByDouble { it.damagePerFrameVs(u) } + 0.001)
+            u.aboutToDieUnfinished
         }.forEach {
             it.cancelBuild()
         }
@@ -100,6 +97,8 @@ object Manners : TreeNode() {
         game.sendText("GG")
         super.close()
     }
+
+    override fun getUtility(): Double = 1.0
 
     override fun exec() {
         if (self.supplyUsed() == 0

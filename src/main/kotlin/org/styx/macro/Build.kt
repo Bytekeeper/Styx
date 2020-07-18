@@ -26,9 +26,12 @@ data class BuildBoard(
     }
     val costLock: Lock<GMS> = costLocks.unitCostLock(type)
     val positionLock = TileLock({ workerLock.item?.canBuildHere(it, type) != false && (costLock.isSatisfiedLater || frame % 137 != 0) }, provideLocation)
+    var initalEstimatedTravelFrames: Int? = null
+    var moveWorkerFrame: Int? = null
 
     init {
         require(type.isBuilding)
+        costLock.setHysteresisFrames(Config.productionHysteresisFrames)
     }
 }
 
@@ -42,13 +45,23 @@ class CancelBuild(private val board: BuildBoard) : BehaviorTree() {
             )
 }
 
-class SelectBuildLocation(private val board: BuildBoard) : BehaviorTree() {
-    override fun getRoot(): TreeNode = AcquireLock(board.positionLock)
+class MarkUnitPlanned(private val board: BuildBoard) : TreeNode() {
+    override fun init() {
+        running()
+    }
+
+    override fun reset() {
+        running()
+    }
+
+    override fun exec() {
+        buildPlan.plannedUnits += PlannedUnit(board.type, framesToStart = board.framesBeforeStartable, consumedUnit = Styx.self.race.worker)
+        running()
+    }
+
 }
 
 class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
-    private var hysteresisFrames = 0
-
     override fun getRoot(): TreeNode =
             Selector(
                     LambdaNode(this::checkForExistingBuilding),
@@ -56,35 +69,31 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
                             GetStuffToTrainOrBuild(board.type),
                             Sequence(
                                     Selector(
-                                            SelectBuildLocation(board),
-                                            LambdaNode {
-                                                buildPlan.plannedUnits += PlannedUnit(board.type, consumedUnit = Styx.self.race.worker)
-                                                NodeStatus.RUNNING
-                                            }
+                                            AcquireLock(board.positionLock),
+                                            MarkUnitPlanned(board)
                                     ),
                                     Succeeder(AcquireLock(board.workerLock)),
-                                    LambdaNode {
-                                        val buildPosition = board.positionLock.item.toPosition() + board.type.center
-                                        val worker = board.workerLock.item
-                                        board.framesBeforeStartable = worker?.framesToTravelTo(buildPosition)
-                                        board.costLock.setFutureFrames(
-                                                board.framesBeforeStartable ?: 0
-                                                + hysteresisFrames)
-                                        board.costLock.acquire()
-                                        if (worker != null && board.costLock.isSatisfiedLater) {
-                                            if (worker.unitType == UnitType.Zerg_Drone) {
-                                                // Add one supply for the lost worker
-                                                ResourceReservation.release(null, GMS(0, 0, UnitType.Zerg_Drone.supplyRequired()))
-                                            }
-                                            hysteresisFrames = Config.productionHysteresisFrames
-                                            NodeStatus.SUCCESS
-                                        } else {
-                                            hysteresisFrames = 0
-                                            buildPlan.plannedUnits += PlannedUnit(board.type, consumedUnit = Styx.self.race.worker)
-                                            board.workerLock.release()
-                                            NodeStatus.RUNNING
-                                        }
-                                    }
+                                    Selector(
+                                            LambdaNode {
+                                                val buildPosition = board.positionLock.item.toPosition() + board.type.center
+                                                val worker = board.workerLock.item
+                                                board.framesBeforeStartable = worker?.framesToTravelTo(buildPosition)
+                                                board.initalEstimatedTravelFrames = board.initalEstimatedTravelFrames
+                                                        ?: board.framesBeforeStartable
+                                                board.costLock.setFutureFrames(board.framesBeforeStartable ?: 0)
+                                                board.costLock.acquire()
+                                                if (worker != null && board.costLock.isSatisfiedLater) {
+                                                    if (worker.unitType == UnitType.Zerg_Drone) {
+                                                        // Add one supply for the lost worker
+                                                        ResourceReservation.release(null, GMS(0, 0, UnitType.Zerg_Drone.supplyRequired()))
+                                                    }
+                                                    NodeStatus.SUCCESS
+                                                } else {
+                                                    NodeStatus.FAILURE
+                                                }
+                                            },
+                                            Sequence(ReleaseLock(board.workerLock), MarkUnitPlanned(board))
+                                    )
                             )
                     )
             )
@@ -106,13 +115,13 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
     override fun reset() {
         super.reset()
         board.building = null
-        hysteresisFrames = 0
     }
 
 }
 
 class OrderBuild(private val board: BuildBoard) : TreeNode() {
     private val avoidCombat = AvoidCombat { board.workerLock.item }
+    private val markUnitPlanned = MarkUnitPlanned(board)
     override fun exec(executionContext: ExecutionContext) {
         if (board.building?.exists == true) {
             success()
@@ -120,26 +129,25 @@ class OrderBuild(private val board: BuildBoard) : TreeNode() {
         }
         val worker = board.workerLock.item ?: error("Worker must be locked")
         avoidCombat.exec()
+        markUnitPlanned.exec()
         require(board.type.whatBuilds().first == worker.unitType) { "$worker cannot build a ${board.type}" }
         if (avoidCombat.status == NodeStatus.SUCCESS) {
             when {
                 board.costLock.isSatisfied -> {
                     if (!board.type.isResourceDepot && !board.type.isResourceContainer && units.my(board.type).isNotEmpty()) {
-                        println("Building a second ${board.type} for whatever reasons!")
+//                        println("Building a second ${board.type} for whatever reasons!")
                     }
                     if (worker.unitType == UnitType.Zerg_Drone) {
                         // Add one supply for the lost worker
                         ResourceReservation.release(null, GMS(0, 0, UnitType.Zerg_Drone.supplyRequired()))
                     }
-                    buildPlan.plannedUnits += PlannedUnit(board.type, 0, consumedUnit = Styx.self.race.worker)
                     BasicActions.build(worker, board.type, board.positionLock.item)
                 }
                 board.costLock.isSatisfiedLater -> {
-                    buildPlan.plannedUnits += PlannedUnit(board.type, board.framesBeforeStartable, consumedUnit = Styx.self.race.worker)
+                    board.moveWorkerFrame = board.moveWorkerFrame ?: Styx.frame
                     BasicActions.move(worker, board.positionLock.item.toPosition() + board.type.center)
                 }
                 else -> {
-                    buildPlan.plannedUnits += PlannedUnit(board.type, board.framesBeforeStartable, consumedUnit = Styx.self.race.worker)
                     board.workerLock.release()
                 }
             }

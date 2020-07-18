@@ -18,25 +18,19 @@ class SeekCombatSquad(private val squad: SquadBoard) : TreeNode() {
         if (attackerLock.item.isEmpty())
             return
         val attackers = attackerLock.item
-        val candidates = squads.squads.mapNotNull { c ->
+        val targetSquad = squads.squads.maxBy { c ->
             if (c.enemies.isEmpty())
-                null
+                0.0
             else {
-                val myAgents = (c.mine + attackers).distinct().filter { it.isCombatRelevant && it.unitType.canMove() }.map { it.agent() }
-                val enemies = (squad.enemies + c.enemies).distinct().map { it.agent() }
-                val evaluationResult = Styx.evaluator.evaluate(myAgents, enemies)
-                if (evaluationResult != Evaluator.EVAL_NO_COMBAT)
-                    c to evaluationResult.value
-                else
-                    null
+                val myAdditionals = attackers.filter { it.unitType.canMove() }
+                val enemyAdditionals = squad.enemies.filter { it.unitType.canMove() }
+                c.stockUpUtility(myAdditionals, enemyAdditionals)
             }
         }
-        val targetCandidate = bestSquadToSupport(squad, candidates)
-                ?: desperateAttemptToWinSquad(candidates)
-        if (targetCandidate != null && targetCandidate.first != squad) {
+
+        if (targetSquad != null && targetSquad != squad) {
 //            Styx.diag.log("Squad seeking $squad - $targetCandidate")
             squad.task = "Attack"
-            val targetSquad = targetCandidate.first
             val targetGroundPosition = targetSquad.mine.filter { !it.flying }.minBy { it.distanceTo(targetSquad.myCenter) }?.position
                     ?: targetSquad.enemies.filter { !it.flying }.minBy { it.distanceTo(targetSquad.center) }?.position
             val targetAirPosition = targetSquad.all.minBy { it.distanceTo(targetSquad.center) }!!.position
@@ -56,19 +50,4 @@ class SeekCombatSquad(private val squad: SquadBoard) : TreeNode() {
         }
         return
     }
-
-    private fun desperateAttemptToWinSquad(candidates: List<Pair<SquadBoard, Double>>) =
-            if (Styx.balance.direSituation)
-                candidates.maxBy { it.second }?.let { if (it.second > 0.3) it.first to 0.5 else null }
-            else
-                null
-
-    private fun bestSquadToSupport(squad: SquadBoard, candidates: List<Pair<SquadBoard, Double>>) =
-            candidates.minBy { (s, eval) ->
-                bases.enemyBases.map { it.center.getDistance(s.center) }.min(0.0) +
-                        s.center.getDistance(squad.center) +
-                        (s.fastEval.value - eval) * Config.seekSquadEvalFactor
-//                        (eval - 0.7) * s.enemies.sumBy { valueOfUnit(it) } +
-//                        (eval - 0.6) * s.mine.sumBy { valueOfUnit(it) } * 5
-            }
 }

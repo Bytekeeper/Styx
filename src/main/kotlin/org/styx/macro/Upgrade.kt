@@ -4,7 +4,7 @@ import bwapi.UpgradeType
 import org.bk.ass.bt.NodeStatus
 import org.styx.*
 
-class Upgrade(private val upgrade: UpgradeType, private val level: Int) : MemoLeaf() {
+open class Upgrade(private val upgrade: UpgradeType, private val level: Int) : MemoLeaf() {
     private val costLock = costLocks.upgradeCostLock(upgrade, level)
     private val researcherLock = UnitLock() { UnitReservation.availableItems.firstOrNull { it.unitType == upgrade.whatUpgrades() } }
 

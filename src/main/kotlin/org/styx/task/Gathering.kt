@@ -5,6 +5,7 @@ import org.bk.ass.bt.TreeNode
 import org.bk.ass.manage.GMS
 import org.styx.*
 import org.styx.Styx.buildPlan
+import org.styx.Styx.economy
 import org.styx.Styx.resources
 import org.styx.Styx.units
 import org.styx.action.BasicActions
@@ -22,17 +23,12 @@ class Gathering : TreeNode() {
         }
 
         val availableGMS = ResourceReservation.gms - buildPlan.unrealized.fold(GMS.ZERO) { acc, item -> acc + GMS.unitCost(item.type) * item.amount }
-        val gatherGas = availableGMS.gas < 0 && units.myWorkers.count() > 6
+        val gatherGas = availableGMS.gas < 0 && units.myWorkers.count() > 6 || economy.currentResources.minerals > 450
         val workers = workersLock.item
 
         val extractors = units.myCompleted(UnitType.Zerg_Extractor)
         val gasWorkers = workers.count { it.gatheringGas }
-        val missingGasWorkers = min((if (gatherGas) extractors.size * 3 else 0) - gasWorkers,
-                if (availableGMS.gas < 0)
-                    workers.size
-                else
-                    -gasWorkers
-        )
+        val missingGasWorkers = (if (gatherGas) extractors.size * 4 else 0) - gasWorkers
         if (missingGasWorkers > 0) {
             workers.sortedBy { it.carrying || it.gatheringGas }
                     .take(missingGasWorkers)
@@ -66,7 +62,8 @@ class Gathering : TreeNode() {
                 } ?: return@forEach
                 assignment[worker] = target
             }
-            val assigned = assignment[worker] ?: return@forEach
+            val assigned = assignment[worker]
+                    ?: return@forEach
             if (assigned != worker.orderTarget) {
                 BasicActions.gather(worker, assigned)
             }

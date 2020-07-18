@@ -23,7 +23,7 @@ configurations.all {
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
-    implementation("com.github.JavaBWAPI:JBWAPI:fail-early-SNAPSHOT").changing = true
+    implementation("com.github.JavaBWAPI:JBWAPI:develop-SNAPSHOT").changing = true
     implementation(files('lib/ass-1.3.jar'))
     implementation 'org.locationtech.jts:jts-core:1.16.1'
     implementation 'com.github.luben:zstd-jni:1.4.+'

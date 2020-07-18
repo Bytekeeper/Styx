@@ -13,6 +13,7 @@ class Base(val centerTile: TilePosition,
            var mainResourceDepot: SUnit? = null,
            var lastSeenFrame: Int? = null,
            var hasGas: Boolean,
+           var geysers: List<SUnit>,
            var populated: Boolean = false)
 
 class Bases : TreeNode() {
@@ -28,7 +29,7 @@ class Bases : TreeNode() {
     override fun init() {
         super.init()
         bases = Styx.map.bases.map {
-            Base(it.location, it.center, it.isStartingLocation, hasGas = it.geysers.isNotEmpty())
+            Base(it.location, it.center, it.isStartingLocation, hasGas = it.geysers.isNotEmpty(), geysers = it.geysers.map { SUnit.forUnit(it.unit) })
         }
         success()
     }

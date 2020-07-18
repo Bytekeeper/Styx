@@ -1,12 +1,10 @@
 package org.styx.global
 
-import bwapi.UnitType
 import org.bk.ass.bt.TreeNode
 import org.bk.ass.grid.BooleanGrid
 import org.bk.ass.grid.Grids
 import org.bk.ass.grid.RayCaster
 import org.bk.ass.path.Jps
-import org.bk.ass.path.PPJps
 import org.styx.Styx
 import org.styx.Styx.game
 import org.styx.Timed
@@ -21,10 +19,8 @@ class Geography : TreeNode() {
         unitObstacles.updateVersion()
         Styx.units.allunits.filter {
             !it.flying && (
-                    it.unitType.isBuilding
-                            || it.unitType == UnitType.Zerg_Egg
-                            || it.unitType == UnitType.Zerg_Lurker_Egg
-                            || it.unitType == UnitType.Terran_Siege_Tank_Siege_Mode
+                    !it.unitType.canMove()
+                            || !it.moving && it.enemyUnit
                     )
         }
                 .map {

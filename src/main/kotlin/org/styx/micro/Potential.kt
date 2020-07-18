@@ -4,9 +4,6 @@ import bwapi.Position
 import bwapi.UnitType
 import org.locationtech.jts.math.Vector2D
 import org.styx.*
-import org.styx.Styx.game
-import org.styx.Styx.geography
-import org.styx.Styx.map
 import org.styx.Styx.units
 import kotlin.math.max
 import kotlin.math.min
@@ -75,7 +72,7 @@ object Potential {
             u.moveTo(dest)
         } else {
             val requestedTargetWalkPosition = dest.toWalkPosition().makeValid()
-            val requestedTargetLimitedByCollision = u.tracePath(requestedTargetWalkPosition)!!
+            val requestedTargetLimitedByCollision = u.tracePath(requestedTargetWalkPosition)
             if (requestedTargetLimitedByCollision == requestedTargetWalkPosition) {
                 u.moveTo(requestedTargetLimitedByCollision.middlePosition())
             } else {
@@ -87,17 +84,7 @@ object Potential {
                             val end = (u.walkPosition + v).makeValid()
                             u.tracePath(end)
                         }
-                val endPoints = dir8Candidates.filter {
-                    it.getDistance(u.walkPosition) > 3
-                }
-                val wpToMoveTo =
-                        endPoints.firstOrNull {
-                            geography.walkRay.noObstacle(it, requestedTargetWalkPosition)
-                        } ?: endPoints.maxBy {
-                            u.walkPosition.getDistance(it)
-                        } ?: dir8Candidates.minBy {
-                            requestedTargetWalkPosition.getDistance(it)
-                        }!!
+                val wpToMoveTo = dir8Candidates.maxWith(compareBy({ it.getDistance(u.walkPosition) }, { -it.getDistance(requestedTargetWalkPosition) }))!!
                 u.moveTo(wpToMoveTo.middlePosition())
             }
         }

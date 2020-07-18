@@ -105,7 +105,7 @@ class Attack(private val attacker: SUnit,
     )
 
     private val findEnemy = Sequence(
-            Condition { !enemy.visible },
+            Condition { !enemy.visible && !enemy.cloaked },
             NodeStatus.RUNNING.after {
                 BasicActions.move(attacker, enemy.position)
             }
@@ -126,7 +126,7 @@ class Attack(private val attacker: SUnit,
                             airCircle
                     )
             ),
-            RetargetWall(board),
+            BreakWall(board),
             attackEnemy,
             Intercept(board)
     )
@@ -230,25 +230,22 @@ class SelectTarget<T>(private val board: WithTarget<T>, private val selector: ()
     }
 }
 
-class RetargetWall(private val board: WithTarget<SUnit>) : TreeNode() {
+class BreakWall(private val board: WithTarget<SUnit>) : TreeNode() {
     override fun exec() {
-        val target = board.target ?: run {
-            failed()
-            return
-        }
+        failed()
+        val target = board.target ?: return
         val actor = board.actor
         if (!actor.flying && target.distanceTo(actor) < 224) {
             val path = geography.jps.findPath(org.bk.ass.path.Position.of(actor.walkPosition), org.bk.ass.path.Position.of(target.walkPosition), 256f)
             if (path.path.isEmpty()) {
                 val hit = geography.walkRay.trace(actor.walkPosition.x, actor.walkPosition.y, target.walkPosition.x, target.walkPosition.y, geography.walkRay.findFirst)
                 if (hit != null) {
-                    val potentialTarget = units.enemy.nearest(hit.x, hit.y) { !it.flying }
+                    val potentialTarget = units.enemy.nearest(hit.x, hit.y) { !it.flying } ?: return
                     if (potentialTarget.enemyUnit)
                         board.target = potentialTarget
                 }
             }
         }
-        failed()
     }
 }
 

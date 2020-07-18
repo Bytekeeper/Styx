@@ -6,6 +6,7 @@ import org.styx.*
 import org.styx.Styx.bases
 import org.styx.Styx.game
 import org.styx.Styx.units
+import org.styx.global.Base
 import org.styx.micro.Potential
 
 object Scouting : TreeNode() {
@@ -18,10 +19,9 @@ object Scouting : TreeNode() {
             return
         val remaining = ovis.item.toMutableList()
 
-        units.enemy.any { !it.visible }
         Styx.squads.squads.filter {
-            it.mine.none { it.unitType.isDetector }
-                    && it.enemies.any { it.unitType.isCloakable || it.unitType.hasPermanentCloak() }
+            it.mine.count { it.unitType.isDetector } < 3
+                    && it.enemies.any { it.cloaked }
         }.take(remaining.size)
                 .forEach { squad ->
                     val ovi = remaining.minBy { it.distanceTo(squad.center) }!!
@@ -31,14 +31,18 @@ object Scouting : TreeNode() {
                 }
 
         remaining.removeIf { ovi ->
-            val enemy = ovi.engaged.firstOrNull() ?: return@removeIf false
+            val enemy = units.enemy.nearest(ovi.x, ovi.y, 800) { it.hasWeaponAgainst(ovi) && it.flying }
+                    ?: return@removeIf false
             val bestAlly = units.mine.nearest(ovi.x, ovi.y, 600) { it.hasWeaponAgainst(enemy) } ?: return@removeIf false
             val force = Potential.intercept(ovi, bestAlly)
             Potential.apply(ovi, force)
             true
         }
 
-        for (base in bases.bases.filter { !game.isVisible(it.centerTile) }.sortedBy { it.lastSeenFrame ?: 0 }) {
+        val comp = compareBy<Base> { it.lastSeenFrame ?: 0 }
+                .thenBy { other -> !other.isStartingLocation }
+                .thenBy { other -> bases.myBases.map { other.center.getApproxDistance(it.center) }.min() }
+        for (base in bases.bases.filter { !game.isVisible(it.centerTile) }.sortedWith(comp)) {
             val ovi = remaining.minBy { it.distanceTo(base.center) } ?: return
             val force = Potential.attract(ovi, base.center) * 0.3 + Potential.avoidDanger(ovi, 300)
             Potential.apply(ovi, force)

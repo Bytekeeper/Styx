@@ -19,7 +19,7 @@ class ClusterTogether(private val squad: SquadBoard) : TreeNode() {
         val targetPosition = squad.mine.filter { !it.flying }.minBy { it.distanceTo(squad.myCenter) }?.position
                 ?: return
         attackers.forEach { attacker ->
-            if (attacker.threats.isEmpty() && attacker.distanceTo(targetPosition) > 64) {
+            if (attacker.safe) {
                 val force = Potential.reach(attacker, targetPosition) +
                         Potential.collisionRepulsion(attacker) * 0.3 +
                         Potential.keepGroundCompany(attacker, 32) * 0.2

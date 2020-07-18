@@ -29,8 +29,7 @@ class Get(private val amountProvider: () -> Int,
             return NodeStatus.SUCCESS
         }
         val pendingUnitsFactor = if (type.isTwoUnitsInOneEgg) 2 else 1
-        val pendingUnits = units.myPending.count { it.unitType == type }
-        val remaining = max(0, missingOrIncomplete - (pendingUnits + buildPlan.plannedUnits.count { it.type == type }) * pendingUnitsFactor)
+        val remaining = max(0, missingOrIncomplete - units.myProjectedNew(type) * pendingUnitsFactor)
         if (remaining == 0) {
             return NodeStatus.RUNNING
         }

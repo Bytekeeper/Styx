@@ -18,4 +18,6 @@ object SquadDispatch : BehaviorTree() {
                 SquadScout(squadBoard),
                 ClusterTogether(squadBoard))
     }
+
+    override fun getUtility(): Double = 1.0
 }

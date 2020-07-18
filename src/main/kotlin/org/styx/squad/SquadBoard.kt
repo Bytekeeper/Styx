@@ -6,6 +6,7 @@ import org.bk.ass.sim.Agent
 import org.bk.ass.sim.Evaluator
 import org.styx.*
 import org.styx.Styx.evaluator
+import org.styx.Styx.map
 import kotlin.math.max
 
 val adjectives = listOf("stinging", "red", "running", "weak", "blazing", "awful", "spiteful", "loving", "hesitant", "raving", "hunting")
@@ -38,5 +39,17 @@ class SquadBoard {
         fastEval = evaluator.evaluate(
                 mine.filter { it.remainingBuildTime < 48 }.map { it.agent() },
                 enemies.filter { it.remainingBuildTime < 48 }.map { it.agent() })
+    }
+
+    fun stockUpUtility(myAdditionalUnits: List<SUnit>, enemyAdditionalUnits: List<SUnit>): Double {
+        val distanceToEnemyBase = 1 - fastSig(Styx.bases.enemyBases.map { it.center.getDistance(center) }.min(0.0))
+        val distanceToSquad = 1 - fastSig(myAdditionalUnits.map {
+            if (it.flying) it.distanceTo(myCenter) else map.getPathLength(it.position, myCenter)
+        }.average())
+        val mergedEval = evaluator.evaluate((mine + myAdditionalUnits).distinct().map { it.agent() },
+                (enemies + enemyAdditionalUnits).distinct().map { it.agent() })
+        val evalDelta = fastSig((mergedEval.value - fastEval.value + 1.0) * Config.seekSquadEvalFactor)
+        val enemyValue = fastSig(enemies.sumBy { valueOfUnit(it) }.toDouble() * Config.seekSquadEvalFactor / 10.0)
+        return (distanceToEnemyBase + distanceToSquad + evalDelta + enemyValue) / 4
     }
 }

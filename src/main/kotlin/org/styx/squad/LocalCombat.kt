@@ -6,10 +6,12 @@ import org.bk.ass.bt.Distributor
 import org.bk.ass.bt.Parallel
 import org.bk.ass.bt.TreeNode
 import org.bk.ass.sim.Agent
+import org.bk.ass.sim.AgentUtil
 import org.bk.ass.sim.IntEvaluation
 import org.styx.*
 import org.styx.Styx.diag
 import org.styx.Styx.evaluator
+import org.styx.Styx.fastSim
 import org.styx.Styx.fleeSim
 import org.styx.Styx.sim
 import org.styx.Styx.simFS3
@@ -17,6 +19,7 @@ import org.styx.Styx.units
 import org.styx.micro.Attack
 import org.styx.micro.AvoidCombat
 import org.styx.micro.Stop
+import kotlin.math.min
 
 data class SimResult(val lostUnits: List<SUnit>, val eval: IntEvaluation)
 
@@ -69,6 +72,14 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
             diag.log("Dismissing $toDismiss to improve eval from ${squad.fastEval} to ${bestEval.eval}")
             attackerLock.releasePartially(toDismiss)
         }
+        fastSim.reset()
+        sim.agentsA.forEach { if (it.isMovable) fastSim.addAgentA(Agent(it)) }
+        sim.agentsB.forEach { if (it.isMovable) fastSim.addAgentB(Agent(it)) }
+        AgentUtil.randomizePositions(fastSim.agentsA, 100, 100, 200, 300)
+        AgentUtil.randomizePositions(fastSim.agentsB, 300, 100, 500, 300)
+        val fastSimBefore = fastSim.evalToInt(agentValueForPlayer).delta()
+        fastSim.simulate(Config.veryLongSimHorizon)
+        val fastSimAfter = fastSim.evalToInt(agentValueForPlayer).delta()
         val beforeCombat = sim.evalToInt(agentValueForPlayer)
         val valuesBeforeCombat = agentsBeforeCombat.map { it to agentValueForPlayer.applyAsInt(it) }.toMap()
         val sims = (1..1).map { simulateCombat(agentsBeforeCombat, Config.mediumSimHorizon) }
@@ -77,7 +88,7 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
 
         val scoreAfterCombat = afterCombat.eval.delta()
         val scoreAfterFleeing = afterFlee.eval.delta()
-        val shouldFlee = scoreAfterFleeing > scoreAfterCombat + attackHysteresis + maxUseableWorkers * 3
+        val shouldFlee = scoreAfterFleeing > scoreAfterCombat + attackHysteresis + maxUseableWorkers * 3 + min(0, fastSimAfter - fastSimBefore) / 2
                 && !shouldSnipePylon(enemies)
 
         diag.log("COMBAT SCORE ${squad.name} after combat: $scoreAfterCombat; after fleeing: $scoreAfterFleeing; attackHysteresis $attackHysteresis")
@@ -115,20 +126,32 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
 
             val potentialAttackers = attackers.map(unitMapper).toMutableList()
             val enemyAgents = enemies.map(unitMapper)
-            while (workersToUse < maxUseableWorkers && evaluator.evaluate(potentialAttackers, enemyAgents).value < 0.5) {
-                potentialAttackers += squad.myWorkers.random().agent()
-                workersToUse++
-            }
-            if (evaluator.evaluate(potentialAttackers, enemyAgents).value < 0.3) {
-                workersToUse = 0
-            }
-            while (workersToUse > 0 && evaluator.evaluate(potentialAttackers, enemyAgents).value > 0.6) {
-                workersToUse--
-                val indexOfFirstWorker = potentialAttackers.indexOfFirst {
-                    val maybeWorker = it.userObject as SUnit
-                    maybeWorker.unitType.isWorker
+            if (buildingsAreSave) workersToUse = 0
+            else {
+                while (workersToUse < maxUseableWorkers && evaluator.evaluate(potentialAttackers, enemyAgents).value <= 0.5) {
+                    potentialAttackers += squad.myWorkers.random().agent()
+                    workersToUse++
                 }
-                if (indexOfFirstWorker >= 0) potentialAttackers.removeAt(indexOfFirstWorker)
+                if (evaluator.evaluate(potentialAttackers, enemyAgents).value <= 0.3) {
+                    workersToUse = 0
+                }
+                while (workersToUse > 0) {
+                    val indexOfFirstWorker = potentialAttackers.indexOfFirst {
+                        val maybeWorker = it.userObject as SUnit
+                        maybeWorker.unitType.isWorker
+                    }
+                    if (indexOfFirstWorker >= 0) {
+                        if (evaluator.evaluate(potentialAttackers - potentialAttackers[indexOfFirstWorker], enemyAgents).value > 0.5) {
+                            workersToUse--
+                            potentialAttackers.removeAt(indexOfFirstWorker)
+                        } else {
+                            break
+                        }
+                    } else {
+                        break
+                    }
+
+                }
             }
 
             lastAttackHysteresis = (beforeCombat.evalA * Config.attackerHysteresisFactor).toInt()

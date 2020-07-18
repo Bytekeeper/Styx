@@ -13,6 +13,7 @@ class GetStuffToTrainOrBuild(private val type: UnitType) : BehaviorTree() {
                     NodeStatus.SUCCESS
                 } else
                 Parallel(
+                        HaveSupply(type.supplyRequired()),
                         HaveResearched(type.requiredTech()),
                         *type.requiredUnits()
                                 .filter { (type, _) -> type != UnitType.Zerg_Larva }
@@ -21,6 +22,15 @@ class GetStuffToTrainOrBuild(private val type: UnitType) : BehaviorTree() {
                                 }.toTypedArray(),
                         HaveGas(type.gasPrice())
                 ).withName("Ensuring dependencies for $type")
+}
+
+class HaveSupply(private val amount: Int) : BehaviorTree() {
+    override fun getRoot(): TreeNode =
+            if (amount == 0) LambdaNode { NodeStatus.SUCCESS } else
+                Selector(
+                        Condition { Styx.units.myPending.sumBy { it.unitType.supplyProvided() } + Styx.buildPlan.plannedUnits.sumBy { it.type.supplyProvided() } + ResourceReservation.gms.supply + amount >= 0 },
+                        Train(UnitType.Zerg_Overlord)
+                )
 }
 
 class HaveGas(private val amount: Int) : BehaviorTree() {
