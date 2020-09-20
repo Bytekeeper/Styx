@@ -1,2 +1,1 @@
-cd bwapi-data\AI
-java -XX:MaxGCPauseMillis=20 -jar FFT_TER-all-1.0-SNAPSHOT.jar
+java -XX:MaxGCPauseMillis=20 -jar bwapi-data\AI\FFT_TER-all-1.0-SNAPSHOT.jar

@@ -3,6 +3,7 @@ package org.styx
 import org.bk.ass.bt.NodeStatus
 import org.bk.ass.bt.Parallel
 import org.bk.ass.bt.TreeNode
+import java.lang.AssertionError
 
 abstract class MemoLeaf : TreeNode() {
     override fun exec() {
@@ -21,6 +22,11 @@ abstract class MemoLeaf : TreeNode() {
 }
 
 val Wait = org.bk.ass.bt.Wait.INSTANCE
+fun nodeAssert(condition: () -> Boolean) = NodeStatus.SUCCESS.after {
+//    if (!condition())
+//        println("WTF")
+//        throw AssertionError()
+}
 
 typealias NodeFactory = () -> TreeNode
 

@@ -65,7 +65,7 @@ object ReactWithLings : BehaviorTree() {
                     Succeeder(
                             Sequence(
                                     Condition {
-                                        units.enemy.sumBy { if (it.unitType == UnitType.Zerg_Zergling) 1 else if (it.unitType == UnitType.Protoss_Zealot) 2 else 0 } <
+                                        units.enemy.sumBy { if (it.unitType == UnitType.Zerg_Zergling) 1 else if (it.unitType == UnitType.Protoss_Zealot) 2 else 0 } >
                                                 units.mine.sumBy { if (it.unitType == UnitType.Zerg_Zergling) 1 else if (it.unitType == UnitType.Protoss_Zealot) 2 else 0 }
                                     },
                                     ensureSupply(),

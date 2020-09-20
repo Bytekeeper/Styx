@@ -43,8 +43,8 @@ class Attack(private val attacker: SUnit,
                         y.toInt()
                 )
                 val repelFrom = (attacker.position + pos).makeValid()
-                val force = Potential.repelFrom(attacker, repelFrom)
-                Potential.apply(attacker, force)
+                val force = Force().repelFrom(attacker, repelFrom)
+                force.apply(attacker)
             }
     )
 
@@ -55,9 +55,9 @@ class Attack(private val attacker: SUnit,
                         !attacker.flying && !attacker.noObstacle(enemy.walkPosition)
             },
             NodeStatus.RUNNING.after {
-                if (attacker.flying && !attacker.inAttackRange(enemy, 8)) {
-                    val force = Potential.intercept(attacker, enemy)
-                    Potential.apply(attacker, force)
+                if (attacker.flying && !attacker.inAttackRange(enemy, 4)) {
+                    val force = Force().collisionRepulsion(attacker, 0.4).pursuit(attacker, enemy, 0.6)
+                    force.apply(attacker)
                 } else {
                     BasicActions.attack(attacker, enemy)
                 }
@@ -174,10 +174,10 @@ class EvadeEnemy(private val board: WithTarget<SUnit>) : TreeNode() {
             failed()
             return
         }
-        var force = Potential.repelFrom(unit, other)
+        val force = Force().repelFrom(unit, other)
         if (!board.actor.flying)
-            force += Potential.collisionRepulsion(unit) * 0.3
-        Potential.apply(unit, force)
+            force.collisionRepulsion(unit, 0.3)
+        force.apply(unit)
         running()
     }
 }
@@ -192,11 +192,11 @@ class Drag(private val board: WithTarget<SUnit>) : TreeNode() {
         val repelFactor = if (board.target == unit) 0.55 else 0.8
         val avoidAllies = 1.0 - repelFactor
 
-        var force = Potential.repelFrom(unit, other) * repelFactor
-        force += Potential.embraceDanger(unit, 64) * 0.5
+        var force = Force().repelFrom(unit, other, repelFactor)
+        force.embraceDanger(unit, 64, 0.5)
         if (!board.actor.flying)
-            force += Potential.collisionRepulsion(unit) * avoidAllies
-        Potential.apply(unit, force)
+            force.collisionRepulsion(unit, avoidAllies)
+        force.apply(unit)
         running()
     }
 
@@ -210,10 +210,10 @@ class EvadePosition(private val board: WithTarget<Position>) : TreeNode() {
             failed()
             return
         }
-        var force = Potential.repelFrom(unit, position)
+        val force = Force().repelFrom(unit, position)
         if (!board.actor.flying)
-            force += Potential.collisionRepulsion(unit) * 0.3
-        Potential.apply(unit, force)
+            force.collisionRepulsion(unit, 0.3)
+        force.apply(unit)
         running()
     }
 
@@ -256,12 +256,12 @@ class Intercept(private val board: WithTarget<SUnit>) : TreeNode() {
             return
         }
         val actor = board.actor
-        if (target.distanceTo(actor) < 64) {
-            var force = Potential.intercept(actor, target)
+        if (target.distanceTo(actor) < 128) {
+            val force = Force().pursuit(actor, target)
             if (!actor.flying)
-                force += Potential.collisionRepulsion(actor) * 0.2
+                force.collisionRepulsion(actor, 0.2)
 
-            Potential.apply(actor, force)
+            force.apply(actor)
         } else {
             actor.attack(target)
         }
@@ -272,10 +272,10 @@ class Intercept(private val board: WithTarget<SUnit>) : TreeNode() {
 class SpreadOut(private val unit: SUnit) : TreeNode() {
     override fun exec() {
         if (unit.threats.any { it.weaponAgainst(unit).isSplash }) {
-            var force = Potential.collisionRepulsion(unit)
-            if (force.lengthSquared() > 0) {
-                force += Potential.embraceDanger(unit, 32) * 0.3
-                Potential.apply(unit, force)
+            val force = Force().collisionRepulsion(unit)
+            if (force.hasForces) {
+                force.embraceDanger(unit, 32, 0.3)
+                force.apply(unit)
                 running()
             } else {
                 failed()
@@ -304,9 +304,9 @@ class BetterAltitude(private val board: WithTarget<SUnit>) : TreeNode() {
                 failed()
                 return
             }
-            val force = Potential.collisionRepulsion(board.actor) +
-                    Potential.reach(board.actor, bestTile.closestTo(board.actor.position))
-            Potential.apply(board.actor, force)
+            val force = Force().collisionRepulsion(board.actor)
+                    .reach(board.actor, bestTile.closestTo(board.actor.position))
+            force.apply(board.actor)
             running()
         }
     }

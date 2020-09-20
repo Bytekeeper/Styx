@@ -1,6 +1,6 @@
 plugins {
     id "org.jetbrains.kotlin.jvm" version "1.3.71"
-    id "com.github.ben-manes.versions" version "0.27.0"
+    id "com.github.ben-manes.versions" version "0.29.0"
     id 'distribution'
 }
 
@@ -23,13 +23,13 @@ configurations.all {
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8"
-    implementation("com.github.JavaBWAPI:JBWAPI:develop-SNAPSHOT").changing = true
+    implementation("com.github.JavaBWAPI:JBWAPI:1.5.1")
     implementation(files('lib/ass-1.3.jar'))
-    implementation 'org.locationtech.jts:jts-core:1.16.1'
+    implementation 'org.locationtech.jts:jts-core:1.17.1'
     implementation 'com.github.luben:zstd-jni:1.4.+'
     implementation 'com.jsoniter:jsoniter:0.9.+'
-    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.5.2'
-    testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.5.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.6.2'
+    testImplementation 'org.junit.jupiter:junit-jupiter-engine:5.6.2'
     testImplementation 'org.assertj:assertj-core:3.+'
     testImplementation("org.mockito:mockito-core:3.+")
     test.useJUnitPlatform()
@@ -44,6 +44,10 @@ compileKotlin {
 }
 compileTestKotlin {
     kotlinOptions.jvmTarget = "1.8"
+}
+
+test {
+    useJUnitPlatform()
 }
 
 task fatJar(type: Jar) {
@@ -78,4 +82,7 @@ distributions {
     }
 }
 
-distZip.dependsOn(tasks.fatJar)
+distZip {
+    dependsOn(tasks.fatJar)
+    archiveFileName = "StyxZ.zip"
+}

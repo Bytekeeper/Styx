@@ -33,7 +33,7 @@ object TargetEvaluator {
             UnitType.Zerg_Extractor, UnitType.Terran_Refinery, UnitType.Protoss_Assimilator -> 0.01
             UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 0.02
             UnitType.Terran_Medic, UnitType.Protoss_High_Templar -> 0.05
-            UnitType.Protoss_Carrier -> 0.08
+            UnitType.Protoss_Carrier -> 0.10
             else -> 0.03
         }
     }
@@ -74,7 +74,7 @@ object TargetEvaluator {
 
         val attackerCount = mutableMapOf<SUnit, Int>()
         val pylonScorer: TargetScorer = { _, e, _ -> if (e.unitType == UnitType.Protoss_Pylon) pylonFactor else 0.0 }
-        val overloadAvoidance: TargetScorer = { _, e, _ -> 1.0 - fastSig(attackerCount.getOrDefault(e, 0) * 0.04) }
+        val overloadAvoidance: TargetScorer = { _, e, _ -> 1.0 - fastSig(attackerCount.getOrDefault(e, 0) * 0.01) }
         val combatRelevancy: TargetScorer = { _, e, _ -> fastSig(enemyCombatRelevancy[e]!! * combatRelevancyFactor) }
         val scorers = defaultScorers.asSequence() + pylonScorer + overloadAvoidance + combatRelevancy
 
@@ -146,7 +146,7 @@ fun agentHealthAndShieldValue(agent: SUnit): Int =
         (agent.hitPoints + agent.shields / 2) / 15
 
 fun unitTypeValue(unitType: UnitType) = when (unitType) {
-    UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 27
+    UnitType.Protoss_Carrier, UnitType.Zerg_Drone, UnitType.Terran_SCV, UnitType.Protoss_Probe -> 27
     UnitType.Terran_Medic, UnitType.Protoss_High_Templar, UnitType.Terran_Science_Vessel -> 15
     UnitType.Terran_Vulture_Spider_Mine -> 0
     UnitType.Terran_Bunker -> 90

@@ -4,7 +4,7 @@ import org.bk.ass.bt.TreeNode
 import org.bk.ass.sim.Evaluator
 import org.styx.*
 import org.styx.action.BasicActions
-import org.styx.micro.Potential
+import org.styx.micro.Force
 
 class SquadBackOff(private val squad: SquadBoard) : TreeNode() {
     private val attackerLock = UnitLocks {
@@ -44,9 +44,9 @@ class SquadBackOff(private val squad: SquadBoard) : TreeNode() {
                     when {
                         a.safe -> attackerLock.releaseItem(a)
                         a.flying || a.threats.any { it.inAttackRange(a, 32) } -> {
-                            val force = Potential.reach(a, targetSquad.myCenter) * 0.3 +
-                                    Potential.avoidDanger(a, 64)
-                            Potential.apply(a, force)
+                            val force = Force().reach(a, targetSquad.myCenter, 0.3)
+                                    .avoidDanger(a, 64)
+                            force.apply(a)
                         }
                         else -> {
                             BasicActions.follow(a, bestUnit)

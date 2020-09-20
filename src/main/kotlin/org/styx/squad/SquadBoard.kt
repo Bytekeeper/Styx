@@ -49,7 +49,8 @@ class SquadBoard {
         val mergedEval = evaluator.evaluate((mine + myAdditionalUnits).distinct().map { it.agent() },
                 (enemies + enemyAdditionalUnits).distinct().map { it.agent() })
         val evalDelta = fastSig((mergedEval.value - fastEval.value + 1.0) * Config.seekSquadEvalFactor)
+        val mergedEvalFactor = fastSig(mergedEval.value * Config.seekSquadEvalFactor)
         val enemyValue = fastSig(enemies.sumBy { valueOfUnit(it) }.toDouble() * Config.seekSquadEvalFactor / 10.0)
-        return (distanceToEnemyBase + distanceToSquad + evalDelta + enemyValue) / 4
+        return (distanceToEnemyBase + distanceToSquad + evalDelta + mergedEvalFactor + enemyValue) / 4
     }
 }

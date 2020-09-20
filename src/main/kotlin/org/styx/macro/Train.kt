@@ -5,6 +5,8 @@ import org.bk.ass.bt.*
 import org.bk.ass.manage.GMS
 import org.bk.ass.manage.Lock
 import org.styx.*
+import org.styx.Styx.economy
+import org.styx.Styx.resources
 import org.styx.Styx.units
 import org.styx.action.BasicActions
 import org.styx.global.PlannedUnit
@@ -70,6 +72,9 @@ class PrepareTrain(private val board: TrainBoard) : BehaviorTree() {
 
 
     private fun checkStarted(): NodeStatus {
+        if (economy.currentResources.minerals > 500) {
+//            System.err.println("SAY WAT")
+        }
         val trainer = board.trainerLock.item ?: return NodeStatus.FAILURE
         return if (trainer.buildType == board.type || trainer.unitType == board.type) {
             board.trainee = trainer

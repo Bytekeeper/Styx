@@ -1,17 +1,14 @@
 package org.styx.squad
 
 import bwapi.UnitType
-import bwapi.WeaponType
 import org.bk.ass.bt.Distributor
 import org.bk.ass.bt.Parallel
 import org.bk.ass.bt.TreeNode
 import org.bk.ass.sim.Agent
-import org.bk.ass.sim.AgentUtil
 import org.bk.ass.sim.IntEvaluation
 import org.styx.*
 import org.styx.Styx.diag
 import org.styx.Styx.evaluator
-import org.styx.Styx.fastSim
 import org.styx.Styx.fleeSim
 import org.styx.Styx.sim
 import org.styx.Styx.simFS3
@@ -19,7 +16,6 @@ import org.styx.Styx.units
 import org.styx.micro.Attack
 import org.styx.micro.AvoidCombat
 import org.styx.micro.Stop
-import kotlin.math.min
 
 data class SimResult(val lostUnits: List<SUnit>, val eval: IntEvaluation)
 
@@ -51,8 +47,8 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
         val attackHysteresis = lastAttackHysteresis
         lastAttackHysteresis = 0
         val buildingsAreSave = squad.mine.none { b ->
-            b.unitType.isBuilding && b.unitType.groundWeapon() == WeaponType.None
-                    && b.unitType.airWeapon() == WeaponType.None && squad.enemies.any { it.inAttackRange(b, 64) }
+            b.unitType.isBuilding && !b.unitType.canAttack()
+                    && squad.enemies.any { it.inAttackRange(b, 64) && (it.target == b || it.orderTarget == b) }
         }
         if (enemies.isEmpty() && buildingsAreSave) {
             return
@@ -72,23 +68,20 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
             diag.log("Dismissing $toDismiss to improve eval from ${squad.fastEval} to ${bestEval.eval}")
             attackerLock.releasePartially(toDismiss)
         }
-        fastSim.reset()
-        sim.agentsA.forEach { if (it.isMovable) fastSim.addAgentA(Agent(it)) }
-        sim.agentsB.forEach { if (it.isMovable) fastSim.addAgentB(Agent(it)) }
-        AgentUtil.randomizePositions(fastSim.agentsA, 100, 100, 200, 300)
-        AgentUtil.randomizePositions(fastSim.agentsB, 300, 100, 500, 300)
-        val fastSimBefore = fastSim.evalToInt(agentValueForPlayer).delta()
-        fastSim.simulate(Config.veryLongSimHorizon)
-        val fastSimAfter = fastSim.evalToInt(agentValueForPlayer).delta()
         val beforeCombat = sim.evalToInt(agentValueForPlayer)
-        val valuesBeforeCombat = agentsBeforeCombat.map { it to agentValueForPlayer.applyAsInt(it) }.toMap()
-        val sims = (1..1).map { simulateCombat(agentsBeforeCombat, Config.mediumSimHorizon) }
-        val afterCombat = sims.last()
+//        val valuesBeforeCombat = agentsBeforeCombat.map { it to agentValueForPlayer.applyAsInt(it) }.toMap()
+        var afterCombat = simulateCombat(agentsBeforeCombat, Config.shortSimHorizon)
+        var scoreAfterCombat = afterCombat.eval.delta() * 4
+        afterCombat = simulateCombat(emptyList(), Config.shortSimHorizon)
+        scoreAfterCombat += afterCombat.eval.delta() * 2
+        afterCombat = simulateCombat(emptyList(), Config.shortSimHorizon)
+        scoreAfterCombat += afterCombat.eval.delta()
+        scoreAfterCombat /= (4 + 2 + 1)
+
         val afterFlee = simulateFleeing()
 
-        val scoreAfterCombat = afterCombat.eval.delta()
         val scoreAfterFleeing = afterFlee.eval.delta()
-        val shouldFlee = scoreAfterFleeing > scoreAfterCombat + attackHysteresis + maxUseableWorkers * 3 + min(0, fastSimAfter - fastSimBefore) / 2
+        val shouldFlee = scoreAfterFleeing > scoreAfterCombat + attackHysteresis + maxUseableWorkers * 4
                 && !shouldSnipePylon(enemies)
 
         diag.log("COMBAT SCORE ${squad.name} after combat: $scoreAfterCombat; after fleeing: $scoreAfterFleeing; attackHysteresis $attackHysteresis")
@@ -125,6 +118,7 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
             squad.task = "Fight"
 
             val potentialAttackers = attackers.map(unitMapper).toMutableList()
+            workersToUse = attackers.count { it.unitType.isWorker }
             val enemyAgents = enemies.map(unitMapper)
             if (buildingsAreSave) workersToUse = 0
             else {
@@ -220,9 +214,6 @@ class LocalCombat(private val squad: SquadBoard) : TreeNode() {
                 .forEach { sim.addAgentA(it) }
         squad.enemies
                 .forEach {
-                    if (it.unitType == UnitType.Terran_Vulture_Spider_Mine) {
-                        println("!")
-                    }
                     sim.addAgentB(unitMapper(it))
                 }
         val allAgents = sim.agentsA + sim.agentsB

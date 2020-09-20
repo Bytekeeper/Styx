@@ -47,16 +47,16 @@ class CancelBuild(private val board: BuildBoard) : BehaviorTree() {
 
 class MarkUnitPlanned(private val board: BuildBoard) : TreeNode() {
     override fun init() {
-        running()
+        success()
     }
 
     override fun reset() {
-        running()
+        success()
     }
 
     override fun exec() {
         buildPlan.plannedUnits += PlannedUnit(board.type, framesToStart = board.framesBeforeStartable, consumedUnit = Styx.self.race.worker)
-        running()
+        success()
     }
 
 }
@@ -67,32 +67,37 @@ class PrepareBuild(private val board: BuildBoard) : BehaviorTree() {
                     LambdaNode(this::checkForExistingBuilding),
                     Parallel(
                             GetStuffToTrainOrBuild(board.type),
-                            Sequence(
-                                    Selector(
+                            Selector(
+                                    Sequence(
                                             AcquireLock(board.positionLock),
-                                            MarkUnitPlanned(board)
-                                    ),
-                                    Succeeder(AcquireLock(board.workerLock)),
-                                    Selector(
+                                            AcquireLock(board.workerLock),
                                             LambdaNode {
                                                 val buildPosition = board.positionLock.item.toPosition() + board.type.center
-                                                val worker = board.workerLock.item
-                                                board.framesBeforeStartable = worker?.framesToTravelTo(buildPosition)
+                                                val worker = board.workerLock.item!!
+                                                board.framesBeforeStartable = worker.framesToTravelTo(buildPosition)
                                                 board.initalEstimatedTravelFrames = board.initalEstimatedTravelFrames
                                                         ?: board.framesBeforeStartable
                                                 board.costLock.setFutureFrames(board.framesBeforeStartable ?: 0)
                                                 board.costLock.acquire()
-                                                if (worker != null && board.costLock.isSatisfiedLater) {
+                                                if (board.costLock.isSatisfiedLater) {
                                                     if (worker.unitType == UnitType.Zerg_Drone) {
                                                         // Add one supply for the lost worker
                                                         ResourceReservation.release(null, GMS(0, 0, UnitType.Zerg_Drone.supplyRequired()))
                                                     }
                                                     NodeStatus.SUCCESS
                                                 } else {
+                                                    board.costLock.release()
                                                     NodeStatus.FAILURE
                                                 }
-                                            },
-                                            Sequence(ReleaseLock(board.workerLock), MarkUnitPlanned(board))
+                                            }
+                                    ),
+                                    Sequence(
+                                            MarkUnitPlanned(board),
+                                            ReleaseLock(board.workerLock),
+                                            NodeStatus.RUNNING.after {
+                                                board.costLock.setFutureFrames(0)
+                                                board.costLock.acquire()
+                                            }
                                     )
                             )
                     )

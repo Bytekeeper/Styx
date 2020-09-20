@@ -28,9 +28,9 @@ class Diagnose : Closeable {
 
     fun init() {
         if (Config.logEnabled) {
-            val trace = ZstdOutputStream(Files.newOutputStream(Styx.writePath.resolve("trace.json")))
+            val trace = ZstdOutputStream(Files.newOutputStream(writePath.resolve("trace.json")))
             jsonOut = JsonStream(trace, 4096)
-            logOut = PrintWriter(Files.newBufferedWriter(Styx.writePath.resolve("log.log")), true)
+            logOut = PrintWriter(Files.newBufferedWriter(writePath.resolve("log.log")), true)
             jsonOut.writeObjectStart()
             jsonOut.writeObjectField("_version")
             jsonOut.writeVal(0)
@@ -75,6 +75,7 @@ class Diagnose : Closeable {
         if (!Config.logEnabled || logLevel.intValue() < Config.minLevel.intValue())
             return
         logOut.println("${logLevel.name} - ${Styx.frame}: $message")
+        logOut.flush()
     }
 
     fun dump(name: String, image: RenderedImage) {

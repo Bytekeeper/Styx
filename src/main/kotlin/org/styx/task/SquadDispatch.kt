@@ -17,6 +17,7 @@ object SquadDispatch : BehaviorTree() {
                 SeekCombatSquad(squadBoard),
                 SquadScout(squadBoard),
                 ClusterTogether(squadBoard))
+                .withName("Squad Dispatching")
     }
 
     override fun getUtility(): Double = 1.0

@@ -28,13 +28,13 @@ class Gathering : TreeNode() {
 
         val extractors = units.myCompleted(UnitType.Zerg_Extractor)
         val gasWorkers = workers.count { it.gatheringGas }
-        val missingGasWorkers = (if (gatherGas) extractors.size * 4 else 0) - gasWorkers
+        val missingGasWorkers = (if (gatherGas) extractors.size * 3 else 0) - gasWorkers
         if (missingGasWorkers > 0) {
             workers.sortedBy { it.carrying || it.gatheringGas }
                     .take(missingGasWorkers)
                     .forEach { worker ->
                         val target = extractors.nearest(worker.x, worker.y) { ex ->
-                            assignment.values.count { it == ex } < 4
+                            assignment.values.count { it == ex } < 3
                         } ?: return@forEach
                         if (worker.target != target) {
                             assignment[worker] = target

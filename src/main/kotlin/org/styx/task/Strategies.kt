@@ -79,7 +79,7 @@ object TwoHatchMuta : Strat("2HatchMuta",
         Build(UnitType.Zerg_Extractor),
         Repeat(Get(8, UnitType.Zerg_Zergling)),
         Repeat(Get(12, UnitType.Zerg_Drone)),
-        Morph(UnitType.Zerg_Lair),
+        Get(1, UnitType.Zerg_Lair),
         Get(3, UnitType.Zerg_Overlord),
         upgradeLingSpeed,
         Get(20, UnitType.Zerg_Drone),
@@ -107,7 +107,7 @@ object ThreeHatchMuta : Strat("3HatchMuta",
         Get(2, UnitType.Zerg_Zergling),
         Get(15, UnitType.Zerg_Drone),
         Get(3, UnitType.Zerg_Overlord),
-        Morph(UnitType.Zerg_Lair),
+        Get(1, UnitType.Zerg_Lair),
         Get(20, UnitType.Zerg_Drone),
         Build(UnitType.Zerg_Extractor),
         upgradeLingSpeed,
@@ -160,7 +160,7 @@ object ThirteenPoolMuta : Strat("13PoolMuta",
         Build(UnitType.Zerg_Extractor),
         Get(12, UnitType.Zerg_Drone),
         Expand(),
-        Morph(UnitType.Zerg_Lair),
+        Get(1, UnitType.Zerg_Lair),
         Repeat(Get(4, UnitType.Zerg_Zergling)),
         Get(14, UnitType.Zerg_Drone),
         Get(3, UnitType.Zerg_Overlord),
@@ -280,8 +280,11 @@ fun ensureSupply() =
         Repeat(Repeat.Policy.SELECTOR,
                 Sequence(
                         Condition {
-                            economy.supplyWithPlanned < 4 ||
+                            economy.supplyWithPlanned < 4 && ResourceReservation.gms.minerals > 150 ||
                                     economy.supplyWithPlanned < 16 && ResourceReservation.gms.minerals > 400
+                        },
+                        NodeStatus.SUCCESS.after {
+//                            println("SO")
                         },
                         Train(UnitType.Zerg_Overlord)
                 )
@@ -296,11 +299,11 @@ object FreeForm : Best(
 //        },
         object : Repeat(Train(UnitType.Zerg_Drone)) {
             override fun getUtility(): Double =
-                    fastSig(balance.evalMyCombatVsMobileGroundEnemy.value / (balance.evalMyMobileVsAllEnemy.value + 1.000) * 3.2 - units.my(UnitType.Zerg_Drone).size * 0.005)
+                    fastSig(balance.evalMyCombatVsMobileGroundEnemy.value / (balance.evalMyMobileVsAllEnemy.value + 1.000) * 3.2 - units.my(UnitType.Zerg_Drone).size * 0.007)
         },
         object : Repeat(Build(UnitType.Zerg_Hatchery)) {
             override fun getUtility(): Double =
-                    fastSig((ResourceReservation.gms + economy.estimatedAdditionalGMSIn(200)).minerals / (units.my(UnitType.Zerg_Hatchery).size + 1.0 + units.myProjectedNew(UnitType.Zerg_Hatchery)) * 0.003)
+                    fastSig((ResourceReservation.gms + economy.estimatedAdditionalGMSIn(200)).minerals / (units.my(UnitType.Zerg_Hatchery).size + 2.0 + units.myProjectedNew(UnitType.Zerg_Hatchery)) * 0.003)
         },
         object : Repeat(
                 Selector(
@@ -361,7 +364,7 @@ class UTrain(private val unitType: UnitType) : Repeat(StartTrain(unitType)) {
         val costPerUnit = GMS.unitCost(unitType)
         val haveAfterPre = have - price + costPerUnit
         val potentialCount = haveAfterPre.div(GMS(costPerUnit.gas, costPerUnit.minerals, 0)) * (if (unitType.isTwoUnitsInOneEgg) 2 else 1)
-        val items = (fastSig(potentialCount.toDouble() * 0.05) * 30).toInt()
+        val items = (fastSig(potentialCount.toDouble() * 0.08) * 40).toInt()
 
         val myAgents = units.mine.map { it.agent() } + (1..items).map { agentFactory.of(unitType) }
         val enemyAgents = units.enemy.map { it.agent() }

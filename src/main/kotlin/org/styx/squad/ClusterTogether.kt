@@ -3,7 +3,7 @@ package org.styx.squad
 import org.bk.ass.bt.TreeNode
 import org.bk.ass.sim.Evaluator
 import org.styx.*
-import org.styx.micro.Potential
+import org.styx.micro.Force
 
 class ClusterTogether(private val squad: SquadBoard) : TreeNode() {
     private val attackerLock = UnitLocks { UnitReservation.availableItems.filter { squad.mine.contains(it) && !it.unitType.isWorker && !it.unitType.isBuilding && it.unitType.canAttack() } }
@@ -20,10 +20,10 @@ class ClusterTogether(private val squad: SquadBoard) : TreeNode() {
                 ?: return
         attackers.forEach { attacker ->
             if (attacker.safe) {
-                val force = Potential.reach(attacker, targetPosition) +
-                        Potential.collisionRepulsion(attacker) * 0.3 +
-                        Potential.keepGroundCompany(attacker, 32) * 0.2
-                Potential.apply(attacker, force)
+                val force = Force().reach(attacker, targetPosition)
+                        .collisionRepulsion(attacker, 0.3)
+                        .keepGroundCompany(attacker, 32, 0.2)
+                force.apply(attacker)
             } else {
                 UnitReservation.release(this, attacker)
             }
